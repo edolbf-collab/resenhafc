@@ -9,8 +9,8 @@
  * Secret key ou a antiga service_role key neste arquivo.
  */
 window.RESENHA_CONFIG = {
-  supabaseUrl: "",
-  supabasePublishableKey: "",
+  supabaseUrl: "https://resenhafc.edolbf.workers.dev/",
+  supabasePublishableKey: "sb_publishable_d0sXTfLf9ZNhDNbDfVhRYg_ZfNjQscs",
   authRedirectUrl: window.location.origin,
   appName: "Resenha FC"
 };
