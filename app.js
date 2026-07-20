@@ -3,15 +3,30 @@
 
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
-  const uid = () => crypto.randomUUID?.() || "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => { const r = Math.random() * 16 | 0; return (c === "x" ? r : (r & 0x3 | 0x8)).toString(16); });
+  const uid = () => crypto.randomUUID?.() || "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
+    const r = Math.random() * 16 | 0;
+    return (c === "x" ? r : (r & 0x3 | 0x8)).toString(16);
+  });
   const nowIso = () => new Date().toISOString();
-  const money = (value) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(value || 0));
-  const shortDate = (iso) => new Intl.DateTimeFormat("pt-BR", { weekday: "short", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(iso));
-  const monthLabel = (iso) => new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric" }).format(new Date(iso));
-  const escapeHtml = (value = "") => String(value).replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[char]));
-  const initials = (name = "") => name.split(/\s+/).filter(Boolean).slice(0, 2).map(p => p[0]).join("").toUpperCase() || "?";
-  const clamp = (n, min, max) => Math.min(max, Math.max(min, Number(n)));
-  const safeImageUrl = (value = "") => { try { const url = new URL(value, window.location.href); return ["http:", "https:"].includes(url.protocol) ? url.href : ""; } catch { return ""; } };
+  const money = value => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(value || 0));
+  const shortDate = iso => new Intl.DateTimeFormat("pt-BR", { weekday: "short", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(iso));
+  const escapeHtml = (value = "") => String(value).replace(/[&<>'"]/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[char]));
+  const initials = (name = "") => name.split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join("").toUpperCase() || "?";
+  const safeImageUrl = (value = "") => {
+    try {
+      const url = new URL(value, window.location.href);
+      return ["http:", "https:"].includes(url.protocol) ? url.href : "";
+    } catch {
+      return "";
+    }
+  };
+  const appBaseUrl = () => new URL("./", document.baseURI).href;
+  const assetUrl = path => new URL(path, document.baseURI).href;
+  const avatarKey = value => /^badge-(0[1-9]|1[0-9]|20)$/.test(String(value || "")) ? String(value) : "badge-01";
+  const groupAvatarUrl = key => assetUrl(`assets/group-avatars/${avatarKey(key)}.svg`);
+  const positionOptions = ["Goleiro", "Zagueiro", "Lateral", "Volante", "Meia", "Atacante", "Coringa"];
+  const roleLabels = { owner: "Proprietário", admin: "Administrador", organizer: "Organizador", treasurer: "Tesoureiro", member: "Membro" };
+  const roleClass = role => `role-${role || "member"}`;
   const oauthErrorFromLocation = () => {
     const sources = [new URLSearchParams(location.search), new URLSearchParams(location.hash.replace(/^#/, ""))];
     for (const params of sources) {
@@ -20,12 +35,13 @@
     }
     return "";
   };
-  const appBaseUrl = () => new URL("./", document.baseURI).href;
-  const assetUrl = path => new URL(path, document.baseURI).href;
   const loadScriptOnce = (id, src) => new Promise((resolve, reject) => {
-    if (document.getElementById(id)) {
+    const existing = document.getElementById(id);
+    if (existing) {
       if (id === "google-identity-script" && window.google?.accounts?.id) return resolve();
-      return document.getElementById(id).addEventListener("load", resolve, { once:true });
+      existing.addEventListener("load", resolve, { once: true });
+      existing.addEventListener("error", reject, { once: true });
+      return;
     }
     const script = document.createElement("script");
     script.id = id;
@@ -33,7 +49,7 @@
     script.async = true;
     script.defer = true;
     script.onload = resolve;
-    script.onerror = () => reject(new Error("Não foi possível carregar o serviço de login."));
+    script.onerror = () => reject(new Error("Não foi possível carregar o serviço de login do Google."));
     document.head.appendChild(script);
   });
   const randomNonce = () => {
@@ -47,51 +63,41 @@
     return [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, "0")).join("");
   };
 
-
   class SupabaseRepository {
     constructor(config) {
       this.config = config;
       this.client = window.supabase.createClient(config.supabaseUrl, config.supabasePublishableKey, {
         auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
       });
-      this.state = { profile:null, groups:[], currentGroupId:null, players:[], matches:[], attendance:[], assignments:[], charges:[], payments:[], expenses:[], ratings:[], match_events:[], announcements:[] };
+      this.state = {
+        profile: null,
+        groups: [],
+        currentGroupId: null,
+        members: [],
+        players: [],
+        matches: [],
+        attendance: [],
+        assignments: [],
+        charges: [],
+        payments: [],
+        expenses: [],
+        member_ratings: [],
+        match_events: [],
+        announcements: []
+      };
       this.channel = null;
       this.subscribedGroupId = null;
       this.reloadTimer = null;
     }
-    async session() { return (await this.client.auth.getSession()).data.session; }
-    async signIn(email, password) { return this.client.auth.signInWithPassword({ email, password }); }
+
+    async session() {
+      return (await this.client.auth.getSession()).data.session;
+    }
+
     async signInWithGoogleIdToken(token, nonce) {
-      return this.client.auth.signInWithIdToken({ provider:"google", token, nonce });
+      return this.client.auth.signInWithIdToken({ provider: "google", token, nonce });
     }
-    async signInWithGoogleOAuth() {
-      const redirectTo = this.config.authRedirectUrl || appBaseUrl();
-      const result = await this.client.auth.signInWithOAuth({
-        provider:"google",
-        options:{
-          redirectTo,
-          skipBrowserRedirect:true,
-          queryParams:{ prompt:"select_account" }
-        }
-      });
-      if (result.error) return result;
-      const authorizeUrl = result.data?.url;
-      if (!authorizeUrl || !/^https:\/\//i.test(authorizeUrl)) {
-        return { data:null, error:new Error("O Supabase não retornou uma URL válida para o Google.") };
-      }
-      window.location.assign(authorizeUrl);
-      return result;
-    }
-    async signUp(email, password, name) {
-      return this.client.auth.signUp({
-        email,
-        password,
-        options:{
-          data:{ name },
-          emailRedirectTo:this.config.authRedirectUrl || window.location.origin
-        }
-      });
-    }
+
     async signOut() {
       clearTimeout(this.reloadTimer);
       if (this.channel) {
@@ -99,127 +105,179 @@
         this.channel = null;
         this.subscribedGroupId = null;
       }
-      const { error } = await this.client.auth.signOut({ scope:"local" });
+      const { error } = await this.client.auth.signOut({ scope: "local" });
       if (error) throw error;
     }
-    async init() {
+
+    async init(preferredGroupId = null) {
       const session = await this.session();
       if (!session) return null;
       const user = session.user;
       const meta = user.user_metadata || {};
-      const fallbackEmail = user.email || "";
-      const displayName = meta.name || meta.full_name || [meta.given_name, meta.family_name].filter(Boolean).join(" ") || fallbackEmail.split("@")[0] || "Usuário";
-      this.state.profile = {
-        id:user.id,
-        email:fallbackEmail,
-        name:displayName,
-        avatar_url:meta.avatar_url || meta.picture || ""
-      };
-      const { data: memberships, error } = await this.client.from("group_members").select("role, player_id, groups(id,name,invite_code,default_players_per_team,monthly_fee)").eq("user_id", user.id);
+      const email = user.email || "";
+      const name = meta.name || meta.full_name || [meta.given_name, meta.family_name].filter(Boolean).join(" ") || email.split("@")[0] || "Usuário";
+      this.state.profile = { id: user.id, email, name, avatar_url: meta.avatar_url || meta.picture || "" };
+
+      const { data: memberships, error } = await this.client
+        .from("group_members")
+        .select("role,player_id,groups(id,name,invite_code,avatar_key,created_by,created_at,default_players_per_team,monthly_fee)")
+        .eq("user_id", user.id);
       if (error) throw error;
-      this.state.groups = (memberships || []).map(m => ({ ...m.groups, role:m.role, player_id:m.player_id }));
-      this.state.currentGroupId = this.state.groups[0]?.id || null;
+
+      this.state.groups = (memberships || []).filter(item => item.groups).map(item => ({ ...item.groups, role: item.role, player_id: item.player_id }));
+      const preferred = this.state.groups.find(group => group.id === preferredGroupId)?.id;
+      this.state.currentGroupId = preferred || this.state.groups[0]?.id || null;
       if (this.state.currentGroupId) await this.loadGroup(this.state.currentGroupId);
       return this.state;
     }
+
     async loadGroup(groupId, options = {}) {
       const { subscribe = true } = options;
       this.state.currentGroupId = groupId;
-      const tables = ["players","matches","charges","payments","expenses","announcements"];
-      const results = await Promise.all(tables.map(table => this.client.from(table).select("*").eq("group_id", groupId)));
-      results.forEach((res,i) => { if (res.error) throw res.error; this.state[tables[i]] = res.data || []; });
-      const [attendance, assignments, ratings, events] = await Promise.all([
+      const tableNames = ["players", "matches", "charges", "payments", "expenses", "announcements", "group_members", "member_ratings"];
+      const results = await Promise.all(tableNames.map(table => this.client.from(table).select("*").eq("group_id", groupId)));
+      results.forEach((result, index) => {
+        if (result.error) throw result.error;
+        const stateKey = tableNames[index] === "group_members" ? "members" : tableNames[index];
+        this.state[stateKey] = result.data || [];
+      });
+
+      const [attendance, assignments, events] = await Promise.all([
         this.client.from("match_attendance").select("*").eq("group_id", groupId),
         this.client.from("team_assignments").select("*").eq("group_id", groupId),
-        this.client.from("player_ratings").select("*").eq("group_id", groupId),
         this.client.from("match_events").select("*").eq("group_id", groupId)
       ]);
-      [["attendance",attendance],["assignments",assignments],["ratings",ratings],["match_events",events]].forEach(([key,res]) => {
-        if(res.error) throw res.error;
-        this.state[key]=res.data||[];
+      [["attendance", attendance], ["assignments", assignments], ["match_events", events]].forEach(([key, result]) => {
+        if (result.error) throw result.error;
+        this.state[key] = result.data || [];
       });
+
       if (subscribe) this.subscribe(groupId);
       return this.state;
     }
+
     queueReload(groupId) {
       clearTimeout(this.reloadTimer);
       this.reloadTimer = setTimeout(async () => {
         if (this.state.currentGroupId !== groupId) return;
         try {
-          await this.loadGroup(groupId, { subscribe:false });
+          await this.loadGroup(groupId, { subscribe: false });
+          App.state = this.state;
           App.render();
         } catch (error) {
           console.error("Falha ao sincronizar alteração em tempo real.", error);
         }
       }, 180);
     }
+
     subscribe(groupId) {
       if (this.channel && this.subscribedGroupId === groupId) return;
       if (this.channel) this.client.removeChannel(this.channel);
       const onChange = () => this.queueReload(groupId);
       let channel = this.client.channel(`group-${groupId}`);
-      channel = channel.on("postgres_changes", { event:"*", schema:"public", table:"groups", filter:`id=eq.${groupId}` }, onChange);
-      ["group_members","players","matches","match_attendance","team_assignments","player_ratings","match_events","charges","payments","expenses","announcements"].forEach(table => {
-        channel = channel.on("postgres_changes", { event:"*", schema:"public", table, filter:`group_id=eq.${groupId}` }, onChange);
+      channel = channel.on("postgres_changes", { event: "*", schema: "public", table: "groups", filter: `id=eq.${groupId}` }, onChange);
+      ["group_members", "players", "matches", "match_attendance", "team_assignments", "member_ratings", "match_events", "charges", "payments", "expenses", "announcements"].forEach(table => {
+        channel = channel.on("postgres_changes", { event: "*", schema: "public", table, filter: `group_id=eq.${groupId}` }, onChange);
       });
       this.channel = channel.subscribe();
       this.subscribedGroupId = groupId;
     }
+
     async mutate(collection, record, mode = "upsert") {
-      const tableMap = { attendance:"match_attendance", assignments:"team_assignments", ratings:"player_ratings" };
+      const tableMap = { attendance: "match_attendance", assignments: "team_assignments" };
       const table = tableMap[collection] || collection;
       if (mode === "delete") {
-        const { error } = await this.client.from(table).delete().eq("id",record.id);
-        if(error) throw error;
+        const { error } = await this.client.from(table).delete().eq("id", record.id);
+        if (error) throw error;
       } else {
-        const options = collection === "ratings" ? { onConflict:"match_id,rated_player_id,rater_user_id" } : undefined;
-        const { error } = await this.client.from(table).upsert(record, options);
-        if(error) throw error;
+        const { error } = await this.client.from(table).upsert(record);
+        if (error) throw error;
       }
-      return this.loadGroup(this.state.currentGroupId, { subscribe:false });
+      return this.loadGroup(this.state.currentGroupId, { subscribe: false });
     }
-    async replaceAssignments(matchId, records) {
-      const { error } = await this.client.rpc("replace_match_assignments", {
-        p_match_id:matchId,
-        p_assignments:records
-      });
+
+    async setProfile(name) {
+      const { data, error } = await this.client.rpc("update_my_profile", { p_name: String(name || "").trim() });
       if (error) throw error;
-      return this.loadGroup(this.state.currentGroupId, { subscribe:false });
-    }
-    async recordPayment(record, charge = null) {
-      const { error } = await this.client.rpc("record_payment", {
-        p_group_id:record.group_id,
-        p_player_id:record.player_id,
-        p_charge_id:charge?.id || null,
-        p_description:record.description,
-        p_amount:record.amount,
-        p_method:record.method || "manual",
-        p_paid_at:record.paid_at || new Date().toISOString()
-      });
-      if (error) throw error;
-      return this.loadGroup(this.state.currentGroupId, { subscribe:false });
-    }
-    async setProfile(profile) {
-      const name = String(profile.name || "").trim();
-      const { data, error } = await this.client.rpc("update_my_profile", { p_name:name });
-      if (error) throw error;
-      const userUpdate = await this.client.auth.updateUser({ data:{ name:data || name } });
-      if (userUpdate.error) console.warn("Perfil salvo no banco, mas os metadados da sessão não foram atualizados.", userUpdate.error);
-      this.state.profile = { ...this.state.profile, name:data || name };
-      if (this.state.currentGroupId) await this.loadGroup(this.state.currentGroupId, { subscribe:false });
+      const userUpdate = await this.client.auth.updateUser({ data: { name: data || name } });
+      if (userUpdate.error) console.warn(userUpdate.error);
+      this.state.profile = { ...this.state.profile, name: data || name };
       return this.state.profile;
     }
-    async createGroup(name) {
-      const { data, error } = await this.client.rpc("create_group", { p_name:name }); if(error) throw error;
-      await this.init();
-      if (data) await this.loadGroup(data);
+
+    async updateMyPlayer(groupId, payload) {
+      const { error } = await this.client.rpc("update_my_player_profile", {
+        p_group_id: groupId,
+        p_nickname: payload.nickname || "",
+        p_primary_position: payload.primaryPosition,
+        p_secondary_position: payload.secondaryPosition || "",
+        p_goalkeeper: Boolean(payload.goalkeeper)
+      });
+      if (error) throw error;
+      return this.loadGroup(groupId, { subscribe: false });
+    }
+
+    async createGroup(name, avatar) {
+      const { data, error } = await this.client.rpc("create_group", { p_name: name, p_avatar_key: avatarKey(avatar) });
+      if (error) throw error;
+      await this.init(data);
       return data;
     }
+
     async joinGroup(code) {
-      const { data, error } = await this.client.rpc("join_group_by_code", { p_code:code.toUpperCase() }); if(error) throw error;
-      await this.init();
-      if (data) await this.loadGroup(data);
+      const { data, error } = await this.client.rpc("join_group_by_code", { p_code: String(code || "").toUpperCase() });
+      if (error) throw error;
+      await this.init(data);
       return data;
+    }
+
+    async updateGroup(groupId, name, avatar) {
+      const { error } = await this.client.rpc("update_group_settings", { p_group_id: groupId, p_name: name, p_avatar_key: avatarKey(avatar) });
+      if (error) throw error;
+      await this.init(groupId);
+    }
+
+    async setMemberRole(groupId, userId, role) {
+      const { error } = await this.client.rpc("set_member_role", { p_group_id: groupId, p_user_id: userId, p_role: role });
+      if (error) throw error;
+      return this.loadGroup(groupId, { subscribe: false });
+    }
+
+    async transferOwnership(groupId, userId) {
+      const { error } = await this.client.rpc("transfer_group_ownership", { p_group_id: groupId, p_new_owner_user_id: userId });
+      if (error) throw error;
+      await this.init(groupId);
+    }
+
+    async rateMember(groupId, playerId, score) {
+      const { error } = await this.client.rpc("upsert_member_rating", { p_group_id: groupId, p_rated_player_id: playerId, p_score: Number(score) });
+      if (error) throw error;
+    }
+
+    async deleteMatch(matchId) {
+      const { error } = await this.client.rpc("delete_scheduled_match", { p_match_id: matchId });
+      if (error) throw error;
+      return this.loadGroup(this.state.currentGroupId, { subscribe: false });
+    }
+
+    async balanceTeams(matchId) {
+      const { error } = await this.client.rpc("balance_match_teams", { p_match_id: matchId });
+      if (error) throw error;
+      return this.loadGroup(this.state.currentGroupId, { subscribe: false });
+    }
+
+    async recordPayment(record, charge = null) {
+      const { error } = await this.client.rpc("record_payment", {
+        p_group_id: record.group_id,
+        p_player_id: record.player_id,
+        p_charge_id: charge?.id || null,
+        p_description: record.description,
+        p_amount: record.amount,
+        p_method: record.method || "manual",
+        p_paid_at: record.paid_at || new Date().toISOString()
+      });
+      if (error) throw error;
+      return this.loadGroup(this.state.currentGroupId, { subscribe: false });
     }
   }
 
@@ -227,40 +285,48 @@
     route: "home",
     repo: null,
     state: null,
-    selectedMatchId: null,
+    pendingInvite: "",
+    launchAction: "",
 
     async init() {
       this.bindGlobal();
-      this.clearLegacyDemoData();
+      this.captureInviteIntent();
       const config = window.RESENHA_CONFIG || {};
-      const cloudConfigured = Boolean(config.supabaseUrl && config.supabasePublishableKey);
-      if (!cloudConfigured) return this.renderConfigurationError();
-      if (!window.supabase) {
-        return this.renderBackendError(window.RESENHA_CLOUD_LOAD_ERROR || new Error("Não foi possível carregar o cliente Supabase."));
-      }
+      if (!(config.supabaseUrl && config.supabasePublishableKey && config.googleClientId)) return this.renderConfigurationError();
+      if (!window.supabase) return this.renderBackendError(window.RESENHA_CLOUD_LOAD_ERROR || new Error("Não foi possível carregar o cliente Supabase."));
+
       this.repo = new SupabaseRepository(config);
       try {
-        this.state = await this.repo.init();
+        this.state = await this.repo.init(localStorage.getItem("resenha-current-group") || null);
         if (!this.state) return this.renderAuth();
-        const launchAction = this.prepareLaunchIntent();
         this.render();
-        if (launchAction === "rsvp") setTimeout(() => this.openRsvp(this.nextMatch()?.id), 0);
         this.registerServiceWorker();
+        if (this.pendingInvite) setTimeout(() => this.openGroupModal(this.pendingInvite), 80);
+        else if (this.launchAction === "rsvp") setTimeout(() => this.openRsvp(this.nextMatch()?.id), 80);
       } catch (error) {
         console.error(error);
-        return this.renderBackendError(error);
+        this.renderBackendError(error);
       }
     },
 
-    clearLegacyDemoData() {
-      try { localStorage.removeItem("resenha-fc-state-v1"); } catch { /* armazenamento indisponível */ }
-      try { sessionStorage.removeItem("resenha-demo"); } catch { /* armazenamento indisponível */ }
+    captureInviteIntent() {
+      const params = new URLSearchParams(location.search);
+      const invite = String(params.get("invite") || "").trim().toUpperCase();
+      if (invite) localStorage.setItem("resenha-pending-invite", invite);
+      this.pendingInvite = localStorage.getItem("resenha-pending-invite") || "";
+      const page = params.get("page");
+      if (["home", "matches", "teams", "members", "finance", "more"].includes(page)) this.route = page;
+      this.launchAction = params.get("action") || "";
     },
 
     bindGlobal() {
-      document.addEventListener("click", (event) => {
+      document.addEventListener("click", event => {
         const nav = event.target.closest("[data-route]");
-        if (nav) { this.route = nav.dataset.route; this.render(); window.scrollTo({top:0,behavior:"smooth"}); }
+        if (nav) {
+          this.route = nav.dataset.route;
+          this.render();
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        }
         const action = event.target.closest("[data-action]");
         if (action) this.handleAction(action.dataset.action, action.dataset);
       });
@@ -269,382 +335,677 @@
     },
 
     registerServiceWorker() {
-      if ("serviceWorker" in navigator && location.protocol.startsWith("http")) navigator.serviceWorker.register("service-worker.js").catch(console.warn);
+      if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
+        navigator.serviceWorker.register("service-worker.js").catch(console.warn);
+      }
     },
 
-    prepareLaunchIntent() {
-      const params = new URLSearchParams(location.search);
-      const page = params.get("page");
-      if (["home","matches","teams","finance","ranking","more"].includes(page)) this.route = page;
-      const action = params.get("action");
-      if ((page || action) && history.replaceState) history.replaceState({}, document.title, `${location.pathname}${location.hash}`);
-      return action;
+    currentGroup() {
+      return this.state?.groups.find(group => group.id === this.state.currentGroupId) || this.state?.groups[0] || null;
     },
-
-    currentGroup() { return this.state.groups.find(g => g.id === this.state.currentGroupId) || this.state.groups[0]; },
     currentRole() { return this.currentGroup()?.role || "member"; },
-    canManageGroup() { return ["owner","admin"].includes(this.currentRole()); },
-    canManageMatches() { return ["owner","admin","organizer"].includes(this.currentRole()); },
-    canManageFinance() { return ["owner","admin","treasurer"].includes(this.currentRole()); },
-    activePlayers() { return this.state.players.filter(p => p.group_id === this.state.currentGroupId && p.active !== false); },
-    upcomingMatches() { return this.state.matches.filter(m => m.group_id === this.state.currentGroupId && new Date(m.starts_at) >= new Date() && m.status !== "cancelled").sort((a,b) => new Date(a.starts_at)-new Date(b.starts_at)); },
-    pastMatches() { return this.state.matches.filter(m => m.group_id === this.state.currentGroupId && (new Date(m.starts_at) < new Date() || m.status === "finished")).sort((a,b) => new Date(b.starts_at)-new Date(a.starts_at)); },
-    nextMatch() { return this.upcomingMatches()[0] || null; },
+    canManageGroup() { return ["owner", "admin"].includes(this.currentRole()); },
+    canManageMatches() { return ["owner", "admin", "organizer"].includes(this.currentRole()); },
+    canManageFinance() { return ["owner", "admin", "treasurer"].includes(this.currentRole()); },
+    canSeeRatings() { return ["owner", "admin"].includes(this.currentRole()); },
+    activePlayers() { return (this.state?.players || []).filter(player => player.active !== false); },
+    player(id) { return this.state?.players.find(player => player.id === id); },
+    memberPlayer(member) { return this.player(member?.player_id) || this.state?.players.find(player => player.user_id === member?.user_id); },
     myPlayer() {
       const group = this.currentGroup();
-      return this.state.players.find(p => p.id === group?.player_id) || this.state.players.find(p => p.user_id === this.state.profile?.id) || this.state.players[0];
+      return this.player(group?.player_id) || this.state?.players.find(player => player.user_id === this.state?.profile?.id) || null;
     },
-    attendanceFor(matchId) { return this.state.attendance.filter(a => a.match_id === matchId); },
-    confirmedFor(matchId) { return this.attendanceFor(matchId).filter(a => a.status === "confirmed"); },
-    player(id) { return this.state.players.find(p => p.id === id); },
-    effectiveSkill(player) {
-      const ratings = this.state.ratings.filter(r => r.rated_player_id === player.id);
-      if (!ratings.length) return Number(player.skill || 0);
-      return ratings.reduce((sum,r) => sum + Number(r.technical || 0), 0) / ratings.length;
+    ownerMember() { return this.state?.members.find(member => member.role === "owner") || null; },
+    attendanceFor(matchId) { return this.state?.attendance.filter(item => item.match_id === matchId) || []; },
+    confirmedFor(matchId) { return this.attendanceFor(matchId).filter(item => item.status === "confirmed"); },
+    upcomingMatches() {
+      return (this.state?.matches || []).filter(match => new Date(match.starts_at) > new Date() && match.status !== "cancelled").sort((a, b) => new Date(a.starts_at) - new Date(b.starts_at));
+    },
+    pastMatches() {
+      return (this.state?.matches || []).filter(match => new Date(match.starts_at) <= new Date() || match.status === "finished").sort((a, b) => new Date(b.starts_at) - new Date(a.starts_at));
+    },
+    nextMatch() { return this.upcomingMatches()[0] || null; },
+    ratingSummary(playerId) {
+      if (!this.canSeeRatings()) return null;
+      const ratings = this.state.member_ratings.filter(item => item.rated_player_id === playerId);
+      if (!ratings.length) return { average: null, count: 0 };
+      return { average: ratings.reduce((sum, item) => sum + Number(item.score), 0) / ratings.length, count: ratings.length };
+    },
+    myRating(playerId) {
+      return this.state.member_ratings.find(item => item.rated_player_id === playerId && item.rater_user_id === this.state.profile.id) || null;
+    },
+
+    groupAvatar(group, className = "group-avatar") {
+      return `<img class="${className}" src="${groupAvatarUrl(group?.avatar_key)}" alt="Escudo de ${escapeHtml(group?.name || "grupo")}">`;
+    },
+
+    personAvatar(player, className = "player-avatar") {
+      const url = safeImageUrl(player?.avatar_url || "");
+      return url
+        ? `<img class="${className} avatar-photo" src="${escapeHtml(url)}" alt="" referrerpolicy="no-referrer">`
+        : `<div class="${className}">${initials(player?.name || "Jogador")}</div>`;
     },
 
     render() {
       if (!this.state) return;
       const group = this.currentGroup();
+      const groupImg = $("#groupAvatar");
+      if (groupImg) {
+        groupImg.src = groupAvatarUrl(group?.avatar_key);
+        groupImg.alt = group ? `Escudo de ${group.name}` : "Resenha FC";
+      }
       $("#groupName").textContent = group?.name || "Crie ou entre em um grupo";
-      $("#syncLabel").textContent = "Sincronizado na nuvem";
-      $("#profileButton").textContent = initials(this.state.profile?.name || "Usuário");
-      $$(".nav-item").forEach(btn => btn.classList.toggle("active", btn.dataset.route === this.route));
+      $("#syncLabel").textContent = group ? `${roleLabels[this.currentRole()]} · nuvem ativa` : "Conta conectada";
+      const profileButton = $("#profileButton");
+      const profilePhoto = safeImageUrl(this.state.profile?.avatar_url);
+      profileButton.innerHTML = profilePhoto ? `<img src="${escapeHtml(profilePhoto)}" alt="Meu perfil" referrerpolicy="no-referrer">` : initials(this.state.profile?.name || "Usuário");
+      $$(".nav-item").forEach(button => button.classList.toggle("active", button.dataset.route === this.route));
+
       if (!group) {
-        $("#mainContent").innerHTML = `<div class="page-head"><div><h1>Seu grupo</h1><p>Comece criando uma pelada ou entrando pelo código de convite.</p></div></div><section class="card empty"><strong>Nenhum grupo vinculado</strong>O grupo reúne jogadores, jogos, confirmações, times, caixa e estatísticas.<div class="actions" style="justify-content:center"><button class="btn btn-primary" data-action="group">Criar ou entrar</button></div></section>`;
+        $("#mainContent").innerHTML = this.emptyGroupPage();
         return;
       }
-      const pages = { home:()=>this.homePage(), matches:()=>this.matchesPage(), teams:()=>this.teamsPage(), finance:()=>this.financePage(), ranking:()=>this.rankingPage(), more:()=>this.morePage() };
+      const pages = {
+        home: () => this.homePage(),
+        matches: () => this.matchesPage(),
+        teams: () => this.teamsPage(),
+        members: () => this.membersPage(),
+        finance: () => this.financePage(),
+        more: () => this.morePage()
+      };
       $("#mainContent").innerHTML = (pages[this.route] || pages.home)();
     },
 
+    emptyGroupPage() {
+      return `<section class="welcome-field"><div class="welcome-overlay"><img src="brand/brand-mark.png" alt="" class="welcome-mark"><span class="eyebrow">CONTA GOOGLE CONECTADA</span><h1>Monte sua resenha</h1><p>Crie um grupo com escudo próprio ou use um código de convite.</p><button class="btn btn-primary" data-action="group">Criar ou entrar em grupo</button></div></section>`;
+    },
+
     homePage() {
+      const group = this.currentGroup();
       const match = this.nextMatch();
       const attendance = match ? this.attendanceFor(match.id) : [];
-      const confirmed = attendance.filter(a=>a.status==="confirmed");
-      const bbq = attendance.filter(a=>a.bbq).reduce((sum,a)=>sum+1+Number(a.bbq_guests||0),0);
-      const openCharges = this.state.charges.filter(c=>c.group_id===this.state.currentGroupId && c.status!=="paid");
-      const incoming = this.state.payments.filter(p=>p.group_id===this.state.currentGroupId).reduce((s,p)=>s+Number(p.amount),0);
-      const outgoing = this.state.expenses.filter(e=>e.group_id===this.state.currentGroupId).reduce((s,e)=>s+Number(e.amount),0);
-      const notice = this.state.announcements.filter(n=>n.group_id===this.state.currentGroupId).sort((a,b)=>new Date(b.created_at)-new Date(a.created_at))[0];
+      const confirmed = attendance.filter(item => item.status === "confirmed");
+      const bbq = attendance.filter(item => item.bbq).reduce((sum, item) => sum + 1 + Number(item.bbq_guests || 0), 0);
+      const payments = this.state.payments.reduce((sum, item) => sum + Number(item.amount), 0);
+      const expenses = this.state.expenses.reduce((sum, item) => sum + Number(item.amount), 0);
+      const notice = [...this.state.announcements].sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0];
+      const owner = this.memberPlayer(this.ownerMember());
       return `
-        <div class="page-head"><div><h1>Próxima resenha</h1><p>Organização do grupo em um só lugar.</p></div>${this.canManageMatches()?'<button class="btn btn-primary btn-small" data-action="new-match">+ Jogo</button>':''}</div>
-        ${match ? `
-        <section class="card hero-card">
-          <span class="eyebrow">● ${escapeHtml(shortDate(match.starts_at))}</span>
-          <h2>${escapeHtml(match.title)}</h2><p>${escapeHtml(match.location)}</p>
-          <div class="hero-grid">
-            <div class="hero-stat"><strong>${confirmed.length}/${match.max_players}</strong><small>confirmados</small></div>
-            <div class="hero-stat"><strong>${bbq}</strong><small>no churrasco</small></div>
-          </div>
-          <div class="actions"><button class="btn btn-ghost" data-action="rsvp" data-id="${match.id}">Confirmar presença</button><button class="btn btn-secondary" data-action="open-match" data-id="${match.id}">Ver detalhes</button></div>
-        </section>` : `<section class="card empty"><strong>Nenhum jogo agendado</strong>Crie a próxima partida e envie o código do grupo aos amigos.${this.canManageMatches()?'<div class="actions" style="justify-content:center"><button class="btn btn-primary" data-action="new-match">Criar jogo</button></div>':''}</section>`}
-        ${notice ? `<div class="section-title"><h2>Aviso do grupo</h2></div><div class="notice"><strong>${escapeHtml(notice.title)}</strong><br>${escapeHtml(notice.body)}</div>`:""}
-        <div class="section-title"><h2>Acesso rápido</h2></div>
+        <section class="stadium-hero">
+          <div class="stadium-lights"></div>
+          <div class="group-identity">${this.groupAvatar(group, "hero-group-avatar")}<div><span class="eyebrow">${escapeHtml(roleLabels[this.currentRole()])}</span><h1>${escapeHtml(group.name)}</h1><p>Proprietário: ${escapeHtml(owner?.name || "Não identificado")}</p></div></div>
+          ${match ? `<div class="next-match-panel"><span class="match-kicker">PRÓXIMA PELADA</span><h2>${escapeHtml(match.title)}</h2><p>${escapeHtml(shortDate(match.starts_at))} · ${escapeHtml(match.location)}</p><div class="hero-numbers"><div><strong>${confirmed.length}</strong><small>confirmados</small></div><div><strong>${match.max_players}</strong><small>vagas</small></div><div><strong>${bbq}</strong><small>churrasco</small></div></div><div class="actions"><button class="btn btn-primary" data-action="rsvp" data-id="${match.id}">Confirmar presença</button><button class="btn btn-glass" data-action="open-match" data-id="${match.id}">Detalhes</button></div></div>` : `<div class="next-match-panel"><span class="match-kicker">AGENDA LIVRE</span><h2>Nenhuma pelada marcada</h2><p>Organizadores podem criar o próximo jogo.</p>${this.canManageMatches() ? '<button class="btn btn-primary" data-action="new-match">Agendar pelada</button>' : ""}</div>`}
+        </section>
+        ${notice ? `<section class="notice notice-highlight"><strong>📣 ${escapeHtml(notice.title)}</strong><p>${escapeHtml(notice.body)}</p></section>` : ""}
+        <div class="section-title"><h2>Atalhos do vestiário</h2></div>
         <div class="quick-grid">
-          <button class="quick-card" data-action="rsvp" data-id="${match?.id||""}"><span>✓</span><strong>Presença</strong><small>Confirme jogo e churrasco.</small></button>
-          <button class="quick-card" data-route="teams"><span>⇄</span><strong>Sortear times</strong><small>Equilíbrio técnico e por posição.</small></button>
-          <button class="quick-card" data-route="finance"><span>R$</span><strong>Mensalidades</strong><small>${openCharges.length} pendência(s) no grupo.</small></button>
-          <button class="quick-card" data-action="rate-player"><span>★</span><strong>Avaliar</strong><small>Notas do último jogo.</small></button>
+          <button class="quick-card" data-action="rsvp" data-id="${match?.id || ""}"><span class="quick-icon">✓</span><strong>Presença</strong><small>Jogo e churrasco</small></button>
+          <button class="quick-card" data-route="teams"><span class="quick-icon">⇄</span><strong>Times</strong><small>Posição e equilíbrio</small></button>
+          <button class="quick-card" data-route="members"><span class="quick-icon">★</span><strong>Avaliar</strong><small>Notas confidenciais</small></button>
+          <button class="quick-card" data-action="invite"><span class="quick-icon">↗</span><strong>Convidar</strong><small>WhatsApp e código</small></button>
         </div>
-        <div class="section-title"><h2>Resumo do grupo</h2></div>
-        <div class="metrics">
-          <div class="card metric"><strong>${this.activePlayers().length}</strong><small>jogadores</small></div>
-          <div class="card metric"><strong>${this.pastMatches().length}</strong><small>jogos</small></div>
-          <div class="card metric"><strong class="money">${money(incoming-outgoing)}</strong><small>saldo</small></div>
-        </div>
-      `;
+        <div class="section-title"><h2>Placar do grupo</h2></div>
+        <div class="metrics"><div class="card metric"><strong>${this.state.members.length}</strong><small>membros</small></div><div class="card metric"><strong>${this.pastMatches().length}</strong><small>jogos</small></div><div class="card metric"><strong class="money">${money(payments - expenses)}</strong><small>caixa</small></div></div>`;
     },
 
     matchesPage() {
-      const upcoming = this.upcomingMatches(); const past = this.pastMatches();
-      const cards = (list) => list.length ? list.map(m=>this.matchCard(m)).join("") : `<div class="card empty"><strong>Nenhum registro</strong>Os jogos aparecerão aqui.</div>`;
-      return `<div class="page-head"><div><h1>Jogos</h1><p>Agenda, confirmações e resenha.</p></div>${this.canManageMatches()?'<button class="btn btn-primary btn-small" data-action="new-match">+ Novo</button>':''}</div>
-        <div class="section-title"><h2>Próximos</h2></div><div class="list">${cards(upcoming)}</div>
-        <div class="section-title"><h2>Histórico</h2></div><div class="list">${cards(past)}</div>`;
+      const upcoming = this.upcomingMatches();
+      const past = this.pastMatches();
+      const cards = list => list.length ? list.map(match => this.matchCard(match)).join("") : `<div class="card empty"><strong>Nenhum jogo</strong><span>Os registros aparecerão aqui.</span></div>`;
+      return `<div class="page-head"><div><span class="page-kicker">CALENDÁRIO</span><h1>Jogos</h1><p>Próximas peladas e histórico permanente.</p></div>${this.canManageMatches() ? '<button class="btn btn-primary btn-small" data-action="new-match">+ Agendar</button>' : ""}</div><div class="section-title"><h2>Próximos</h2></div><div class="list">${cards(upcoming)}</div><div class="section-title"><h2>Histórico</h2><small>Jogos realizados não podem ser apagados.</small></div><div class="list">${cards(past)}</div>`;
     },
 
     matchCard(match) {
-      const date = new Date(match.starts_at); const att = this.attendanceFor(match.id); const conf = att.filter(a=>a.status==="confirmed");
-      return `<article class="card match-card">
-        <div class="match-top"><div class="match-date"><small>${date.toLocaleDateString("pt-BR",{month:"short"}).replace(".","")}</small><strong>${String(date.getDate()).padStart(2,"0")}</strong></div>
-        <div class="match-info"><h3>${escapeHtml(match.title)}</h3><p>${escapeHtml(shortDate(match.starts_at))}<br>${escapeHtml(match.location)}</p></div>
-        <span class="status-pill ${match.status==="finished"?"status-confirmed":"status-maybe"}">${match.status==="finished"?"Finalizado":"Agendado"}</span></div>
-        <div class="match-footer"><div class="avatar-stack">${conf.slice(0,5).map(a=>`<span>${initials(this.player(a.player_id)?.name)}</span>`).join("")}${conf.length>5?`<span>+${conf.length-5}</span>`:""}</div><button class="btn btn-ghost btn-small" data-action="open-match" data-id="${match.id}">${conf.length}/${match.max_players} jogadores</button></div>
-      </article>`;
+      const date = new Date(match.starts_at);
+      const confirmed = this.confirmedFor(match.id);
+      const future = date > new Date();
+      return `<article class="card match-card"><div class="match-top"><div class="match-date"><small>${date.toLocaleDateString("pt-BR", { month: "short" }).replace(".", "").toUpperCase()}</small><strong>${String(date.getDate()).padStart(2, "0")}</strong></div><div class="match-info"><h3>${escapeHtml(match.title)}</h3><p>${escapeHtml(shortDate(match.starts_at))}<br>${escapeHtml(match.location)}</p></div><span class="status-pill ${future ? "status-maybe" : "status-confirmed"}">${future ? "Agendado" : "Histórico"}</span></div><div class="match-footer"><div class="avatar-stack">${confirmed.slice(0, 5).map(item => `<span>${initials(this.player(item.player_id)?.name)}</span>`).join("")}${confirmed.length > 5 ? `<span>+${confirmed.length - 5}</span>` : ""}</div><button class="btn btn-ghost btn-small" data-action="open-match" data-id="${match.id}">${confirmed.length}/${match.max_players} jogadores</button></div></article>`;
     },
 
     teamsPage() {
       const match = this.nextMatch() || this.pastMatches()[0];
-      if (!match) return `<div class="page-head"><div><h1>Times</h1><p>Sorteio equilibrado dos confirmados.</p></div></div><div class="card empty"><strong>Sem jogo disponível</strong>Crie um jogo antes de formar os times.</div>`;
-      const confirmed = this.confirmedFor(match.id).map(a=>this.player(a.player_id)).filter(Boolean);
-      const assignments = this.state.assignments.filter(a=>a.match_id===match.id);
-      const teams = [...new Set(assignments.map(a=>a.team_name))];
-      return `<div class="page-head"><div><h1>Times</h1><p>${escapeHtml(match.title)} · ${confirmed.length} confirmados</p></div>${this.canManageMatches()?`<button class="btn btn-primary btn-small" data-action="draw-teams" data-id="${match.id}">Sortear</button>`:''}</div>
-        <div class="notice">O sorteio considera nota técnica, goleiros e posições. Depois do sorteio, o administrador pode refazer ou ajustar manualmente em uma versão futura.</div>
-        <div class="section-title"><h2>Escalação</h2>${this.canManageMatches()?`<button data-action="draw-teams" data-id="${match.id}">${assignments.length?"Refazer":"Gerar times"}</button>`:''}</div>
-        ${teams.length ? `<div class="team-grid">${teams.map(name=>this.teamCard(name,assignments,match)).join("")}</div>` : `<div class="card empty"><strong>Times ainda não sorteados</strong>${confirmed.length<2?"Aguarde mais confirmações.":"Toque em “Sortear” para criar equipes equilibradas."}</div>`}
-        <div class="section-title"><h2>Confirmados</h2></div><div class="list">${confirmed.map(p=>this.playerRow(p)).join("") || `<div class="card empty">Nenhum confirmado.</div>`}</div>`;
+      if (!match) return `<div class="page-head"><div><span class="page-kicker">ESCALAÇÃO</span><h1>Times</h1><p>Separação por posição e avaliação.</p></div></div><div class="card empty"><strong>Sem jogo disponível</strong><span>Agende uma pelada antes de montar os times.</span></div>`;
+      const confirmed = this.confirmedFor(match.id).map(item => this.player(item.player_id)).filter(Boolean);
+      const assignments = this.state.assignments.filter(item => item.match_id === match.id);
+      const teams = [...new Set(assignments.map(item => item.team_name))];
+      return `<div class="page-head"><div><span class="page-kicker">ESCALAÇÃO</span><h1>Times</h1><p>${escapeHtml(match.title)} · ${confirmed.length} confirmados</p></div>${this.canManageMatches() ? `<button class="btn btn-primary btn-small" data-action="draw-teams" data-id="${match.id}">${assignments.length ? "Rebalancear" : "Separar"}</button>` : ""}</div><div class="notice"><strong>Equilíbrio confidencial</strong><br>O servidor considera posição, goleiros e média das avaliações. Organizadores conseguem formar os times sem visualizar as notas.</div>${teams.length ? `<div class="team-grid">${teams.map(name => this.teamCard(name, assignments)).join("")}</div>` : `<div class="card empty"><strong>Times ainda não formados</strong><span>${confirmed.length < 2 ? "Aguarde mais confirmações." : "Use o botão Separar para gerar equipes equilibradas."}</span></div>`}<div class="section-title"><h2>Confirmados</h2></div><div class="list">${confirmed.map(player => this.playerRow(player, { showRating: this.canSeeRatings() })).join("") || '<div class="card empty">Nenhum confirmado.</div>'}</div>`;
     },
 
-    teamCard(name, assignments, match) {
-      const members = assignments.filter(a=>a.team_name===name).sort((a,b)=>a.slot-b.slot).map(a=>this.player(a.player_id)).filter(Boolean);
-      const strength = members.reduce((s,p)=>s+this.effectiveSkill(p),0);
-      return `<section class="card team-card"><div class="team-head"><strong>${escapeHtml(name)}</strong><small>força ${strength.toFixed(1)}</small></div>${members.map(p=>`<div class="team-player"><div class="player-avatar">${initials(p.name)}</div><div class="list-main"><strong>${escapeHtml(p.nickname||p.name)}</strong><small>${escapeHtml(p.primary_position)} · nota ${this.effectiveSkill(p).toFixed(1)}</small></div>${p.goalkeeper?'<span class="score-pill">GOL</span>':''}</div>`).join("")}</section>`;
+    teamCard(name, assignments) {
+      const members = assignments.filter(item => item.team_name === name).sort((a, b) => a.slot - b.slot).map(item => this.player(item.player_id)).filter(Boolean);
+      return `<section class="card team-card"><div class="team-head"><div class="team-shirt">${name.includes("Verde") ? "🟢" : name.includes("Azul") ? "🔵" : name.includes("Laranja") ? "🟠" : "⚪"}</div><strong>${escapeHtml(name)}</strong><small>${members.length} jogadores</small></div>${members.map(player => { const summary = this.ratingSummary(player.id); return `<div class="team-player">${this.personAvatar(player)}<div class="list-main"><strong>${escapeHtml(player.nickname || player.name)}</strong><small>${escapeHtml(player.primary_position || "Sem posição")}${summary?.average ? ` · nota ${summary.average.toFixed(1)}` : ""}</small></div>${player.goalkeeper ? '<span class="score-pill">GOL</span>' : ""}</div>`; }).join("")}</section>`;
     },
 
-    playerRow(p, trailing="") { return `<div class="card list-row"><div class="player-avatar">${initials(p.name)}</div><div class="list-main"><strong>${escapeHtml(p.name)}</strong><small>${escapeHtml(p.primary_position||"Sem posição")} · ${p.games||0} jogos</small></div>${trailing||`<span class="score-pill">${this.effectiveSkill(p).toFixed(1)}</span>`}</div>`; },
+    membersPage() {
+      const group = this.currentGroup();
+      const ownerMember = this.ownerMember();
+      const ownerPlayer = this.memberPlayer(ownerMember);
+      const admins = this.state.members.filter(member => member.role === "admin").map(member => this.memberPlayer(member)?.name).filter(Boolean);
+      const sortedMembers = [...this.state.members].sort((a, b) => {
+        const weight = { owner: 0, admin: 1, organizer: 2, treasurer: 3, member: 4 };
+        return (weight[a.role] - weight[b.role]) || String(this.memberPlayer(a)?.name).localeCompare(String(this.memberPlayer(b)?.name));
+      });
+      return `<div class="page-head"><div><span class="page-kicker">ELENCO</span><h1>Membros do grupo</h1><p>Funções, posições e avaliações internas.</p></div><button class="btn btn-primary btn-small" data-action="invite">Convidar</button></div><section class="card group-summary-card"><div class="group-summary-main">${this.groupAvatar(group, "summary-group-avatar")}<div><h2>${escapeHtml(group.name)}</h2><p>Código ${escapeHtml(group.invite_code)}</p></div></div><div class="admin-summary"><div><small>Proprietário</small><strong>${escapeHtml(ownerPlayer?.name || "Não identificado")}</strong></div><div><small>Administradores</small><strong>${escapeHtml(admins.join(", ") || "Somente o proprietário")}</strong></div></div>${this.canManageGroup() ? '<button class="btn btn-secondary btn-block" data-action="manage-roles">Gerenciar funções</button>' : ""}</section><div class="members-actions"><button class="btn btn-primary" data-action="rate-members">Avaliar membros</button><button class="btn btn-secondary" data-action="profile">Minha posição</button></div><div class="section-title"><h2>Elenco (${sortedMembers.length})</h2>${this.canSeeRatings() ? '<small>As notas abaixo são visíveis somente à administração.</small>' : '<small>Suas avaliações são confidenciais.</small>'}</div><div class="list">${sortedMembers.map(member => this.memberRow(member)).join("")}</div>${this.canSeeRatings() ? this.privateRatingsPanel() : ""}`;
+    },
+
+    memberRow(member) {
+      const player = this.memberPlayer(member) || { name: "Membro", primary_position: "Sem posição" };
+      const summary = this.ratingSummary(player.id);
+      const isMe = member.user_id === this.state.profile.id;
+      return `<article class="card member-row">${this.personAvatar(player)}<div class="list-main"><strong>${escapeHtml(player.name)}${isMe ? ' <span class="you-label">você</span>' : ""}</strong><small>${escapeHtml(player.primary_position || "Sem posição")}${player.nickname ? ` · ${escapeHtml(player.nickname)}` : ""}</small></div><div class="member-trailing"><span class="role-pill ${roleClass(member.role)}">${escapeHtml(roleLabels[member.role] || "Membro")}</span>${this.canSeeRatings() ? `<small class="private-score">${summary?.average ? `★ ${summary.average.toFixed(1)} (${summary.count})` : "Sem notas"}</small>` : ""}</div></article>`;
+    },
+
+    privateRatingsPanel() {
+      const rated = this.activePlayers().map(player => ({ player, summary: this.ratingSummary(player.id) })).filter(item => item.summary?.count).sort((a, b) => b.summary.average - a.summary.average);
+      return `<div class="section-title"><h2>Painel privado de notas</h2><span class="private-badge">🔒 Administração</span></div><section class="card private-panel">${rated.length ? rated.map((item, index) => `<div class="rating-summary-row"><span class="rank-pos">${index + 1}</span>${this.personAvatar(item.player)}<div class="list-main"><strong>${escapeHtml(item.player.name)}</strong><small>${escapeHtml(item.player.primary_position)} · ${item.summary.count} avaliação(ões)</small></div><strong>${item.summary.average.toFixed(2)}</strong></div>`).join("") : '<div class="empty"><strong>Nenhuma média disponível</strong><span>As notas aparecerão após os membros avaliarem o elenco.</span></div>'}</section>`;
+    },
+
+    playerRow(player, options = {}) {
+      const summary = options.showRating ? this.ratingSummary(player.id) : null;
+      return `<div class="card list-row">${this.personAvatar(player)}<div class="list-main"><strong>${escapeHtml(player.name)}</strong><small>${escapeHtml(player.primary_position || "Sem posição")} · ${player.games || 0} jogos</small></div>${summary?.average ? `<span class="score-pill">★ ${summary.average.toFixed(1)}</span>` : ""}</div>`;
+    },
 
     financePage() {
-      const groupId=this.state.currentGroupId;
-      const payments=this.state.payments.filter(p=>p.group_id===groupId); const expenses=this.state.expenses.filter(e=>e.group_id===groupId);
-      const income=payments.reduce((s,p)=>s+Number(p.amount),0); const out=expenses.reduce((s,e)=>s+Number(e.amount),0); const balance=income-out;
-      const charges=this.state.charges.filter(c=>c.group_id===groupId); const paid=charges.filter(c=>c.status==="paid").length; const pct=charges.length?Math.round(paid/charges.length*100):0;
-      const movements=[...payments.map(p=>({...p,type:"income",description:`Pagamento · ${this.player(p.player_id)?.nickname||"Jogador"}`,date:p.paid_at})),...expenses.map(e=>({...e,type:"expense",date:e.occurred_at}))].sort((a,b)=>new Date(b.date)-new Date(a.date));
-      return `<div class="page-head"><div><h1>Caixa</h1><p>Mensalidades, churrasco e despesas.</p></div>${this.canManageFinance()?'<button class="btn btn-primary btn-small" data-action="new-finance">+ Lançar</button>':''}</div>
-        <section class="card balance-card"><small>Saldo atual</small><h2 class="money">${money(balance)}</h2><div class="balance-track"><span style="width:${pct}%"></span></div><p style="margin:9px 0 0;color:var(--muted);font-size:12px">${paid} de ${charges.length} mensalidades pagas · ${pct}%</p></section>
-        <div class="metrics" style="margin-top:10px"><div class="card metric"><strong class="money">${money(income)}</strong><small>entradas</small></div><div class="card metric"><strong class="money">${money(out)}</strong><small>saídas</small></div><div class="card metric"><strong>${charges.filter(c=>c.status!=="paid").length}</strong><small>pendentes</small></div></div>
-        <div class="section-title"><h2>Movimentações</h2></div><div class="list">${movements.map(m=>`<div class="card finance-row"><div class="finance-icon ${m.type==="income"?"finance-income":"finance-expense"}">${m.type==="income"?"+":"−"}</div><div class="list-main"><strong>${escapeHtml(m.description)}</strong><small>${escapeHtml(shortDate(m.date))}</small></div><strong class="money" style="color:${m.type==="income"?'var(--primary)':'var(--danger)'}">${m.type==="income"?"+":"−"}${money(m.amount)}</strong></div>`).join("") || '<div class="card empty">Sem movimentações.</div>'}</div>
-        <div class="section-title"><h2>Mensalidades</h2></div><div class="list">${charges.map(c=>this.playerRow(this.player(c.player_id)||{name:"Jogador",skill:0},`<span class="status-pill ${c.status==='paid'?'status-confirmed':'status-out'}">${c.status==='paid'?'Pago':'Pendente'}</span>`)).join("")}</div>`;
-    },
-
-    rankingPage() {
-      const players=this.activePlayers().map(p=>{
-        const ratings=this.state.ratings.filter(r=>r.rated_player_id===p.id); const avg=ratings.length?ratings.reduce((s,r)=>s+Number(r.technical),0)/ratings.length:Number(p.skill||0);
-        return {...p,avg,points:(p.wins||0)*3+(p.games-(p.wins||0)||0)*.4};
-      }).sort((a,b)=>b.avg-a.avg || b.points-a.points);
-      return `<div class="page-head"><div><h1>Ranking</h1><p>Desempenho, notas e estatísticas.</p></div><button class="btn btn-primary btn-small" data-action="rate-player">Avaliar</button></div>
-        <div class="segmented"><button class="active">Geral</button><button>Artilharia</button><button>Assistências</button><button>Fair play</button></div>
-        <div class="section-title"><h2>Melhores avaliados</h2></div><div class="card">${players.map((p,i)=>`<div class="rank-row"><div class="rank-pos">${i+1}</div><div class="player-avatar">${initials(p.name)}</div><div class="list-main"><strong>${escapeHtml(p.name)}</strong><small>${p.goals||0} gols · ${p.assists||0} assistências · ${p.games||0} jogos</small></div><span class="score-pill">★ ${p.avg.toFixed(1)}</span></div>`).join("")}</div>`;
+      const payments = this.state.payments;
+      const expenses = this.state.expenses;
+      const income = payments.reduce((sum, item) => sum + Number(item.amount), 0);
+      const out = expenses.reduce((sum, item) => sum + Number(item.amount), 0);
+      const charges = this.state.charges;
+      const paid = charges.filter(item => item.status === "paid").length;
+      const pct = charges.length ? Math.round(paid / charges.length * 100) : 0;
+      const movements = [
+        ...payments.map(item => ({ ...item, type: "income", description: item.description || `Pagamento · ${this.player(item.player_id)?.nickname || "Jogador"}`, date: item.paid_at })),
+        ...expenses.map(item => ({ ...item, type: "expense", date: item.occurred_at }))
+      ].sort((a, b) => new Date(b.date) - new Date(a.date));
+      return `<div class="page-head"><div><span class="page-kicker">FINANCEIRO</span><h1>Caixa</h1><p>Mensalidades, quadra, materiais e churrasco.</p></div>${this.canManageFinance() ? '<button class="btn btn-primary btn-small" data-action="new-finance">+ Lançar</button>' : ""}</div>${!this.canManageFinance() ? '<div class="notice"><strong>Acesso de consulta</strong><br>Somente proprietário, administrador e tesoureiro podem alterar lançamentos.</div>' : '<div class="notice notice-success"><strong>Acesso autorizado</strong><br>Você pode registrar cobranças, pagamentos e despesas.</div>'}<section class="card balance-card"><small>Saldo atual</small><h2>${money(income - out)}</h2><div class="balance-grid"><div><small>Entradas</small><strong>${money(income)}</strong></div><div><small>Saídas</small><strong>${money(out)}</strong></div></div><div class="balance-track"><span style="width:${pct}%"></span></div><p>${paid} de ${charges.length} cobranças pagas · ${pct}%</p></section><div class="section-title"><h2>Movimentações</h2></div><div class="list">${movements.map(item => `<div class="card finance-row"><div class="finance-icon ${item.type === "income" ? "finance-income" : "finance-expense"}">${item.type === "income" ? "+" : "−"}</div><div class="list-main"><strong>${escapeHtml(item.description)}</strong><small>${escapeHtml(shortDate(item.date))}</small></div><strong class="money ${item.type === "income" ? "positive" : "negative"}">${item.type === "income" ? "+" : "−"}${money(item.amount)}</strong></div>`).join("") || '<div class="card empty">Sem movimentações.</div>'}</div><div class="section-title"><h2>Cobranças</h2></div><div class="list">${charges.map(charge => { const player = this.player(charge.player_id) || { name: "Grupo", primary_position: charge.description }; return `<div class="card list-row">${this.personAvatar(player)}<div class="list-main"><strong>${escapeHtml(player.name)}</strong><small>${escapeHtml(charge.description)} · ${money(charge.amount)}</small></div><span class="status-pill ${charge.status === "paid" ? "status-confirmed" : "status-out"}">${charge.status === "paid" ? "Pago" : "Pendente"}</span></div>`; }).join("") || '<div class="card empty">Nenhuma cobrança.</div>'}</div>`;
     },
 
     morePage() {
-      const group=this.currentGroup();
-      return `<div class="page-head"><div><h1>Mais</h1><p>Grupo, jogadores e configurações.</p></div></div>
-        <div class="list">
-          <button class="card list-row" data-action="players"><div class="player-avatar">♟</div><div class="list-main"><strong>Jogadores</strong><small>Cadastro, posição, nível e vínculo.</small></div><strong>›</strong></button>
-          <button class="card list-row" data-action="group"><div class="player-avatar">#</div><div class="list-main"><strong>Convidar amigos</strong><small>Código do grupo: ${escapeHtml(group?.invite_code||"—")}</small></div><strong>›</strong></button>
-          ${this.canManageMatches()?'<button class="card list-row" data-action="announcement"><div class="player-avatar">!</div><div class="list-main"><strong>Avisos</strong><small>Comunicados para todos os participantes.</small></div><strong>›</strong></button>':''}
-          <button class="card list-row" data-action="export"><div class="player-avatar">⇩</div><div class="list-main"><strong>Backup e exportação</strong><small>Baixar dados completos em JSON.</small></div><strong>›</strong></button>
-          <button class="card list-row danger-row" data-action="sign-out"><div class="player-avatar danger-avatar">↪</div><div class="list-main"><strong>Sair da conta</strong><small>Desconectar este aparelho e voltar à tela de acesso.</small></div><strong>›</strong></button>
-        </div>
-        <div class="section-title"><h2>Versão</h2></div><div class="notice">Resenha FC v0.2.4 · PWA responsiva · backend Supabase obrigatório · login por Google ou e-mail · dados iniciados do zero e sincronizados em tempo real.</div>`;
+      const group = this.currentGroup();
+      return `<div class="page-head"><div><span class="page-kicker">CONFIGURAÇÕES</span><h1>Mais</h1><p>Administração e dados da conta.</p></div></div><div class="list"><button class="card menu-row" data-action="profile"><span class="menu-icon">⚽</span><div class="list-main"><strong>Meu perfil de jogador</strong><small>Nome, apelido e posição.</small></div><strong>›</strong></button><button class="card menu-row" data-action="invite"><span class="menu-icon">↗</span><div class="list-main"><strong>Convidar pelo WhatsApp</strong><small>Código ${escapeHtml(group.invite_code)}</small></div><strong>›</strong></button>${this.canManageGroup() ? '<button class="card menu-row" data-action="group-settings"><span class="menu-icon">🛡</span><div class="list-main"><strong>Personalizar grupo</strong><small>Nome, escudo e administração.</small></div><strong>›</strong></button><button class="card menu-row" data-action="manage-roles"><span class="menu-icon">♟</span><div class="list-main"><strong>Gerenciar funções</strong><small>Administrador, organizador e tesoureiro.</small></div><strong>›</strong></button>' : ""}${this.canManageMatches() ? '<button class="card menu-row" data-action="announcement"><span class="menu-icon">!</span><div class="list-main"><strong>Avisos do grupo</strong><small>Publicar comunicado para o elenco.</small></div><strong>›</strong></button><button class="card menu-row" data-action="players"><span class="menu-icon">+</span><div class="list-main"><strong>Jogadores sem acesso</strong><small>Cadastrar convidado eventual.</small></div><strong>›</strong></button>' : ""}<button class="card menu-row" data-action="export"><span class="menu-icon">⇩</span><div class="list-main"><strong>Exportar dados</strong><small>Backup em arquivo JSON.</small></div><strong>›</strong></button><button class="card menu-row danger-row" data-action="sign-out"><span class="menu-icon danger-avatar">↪</span><div class="list-main"><strong>Sair da conta</strong><small>Desconectar e escolher outra conta Google.</small></div><strong>›</strong></button></div><div class="version-card">Resenha FC v0.3.0 · login exclusivo Google · Supabase · PWA</div>`;
     },
 
     async handleAction(action, data) {
       try {
-        const map = {
-          "new-match":()=>this.openMatchForm(), "open-match":()=>this.openMatchDetails(data.id), "rsvp":()=>this.openRsvp(data.id || this.nextMatch()?.id),
-          "draw-teams":()=>this.drawTeams(data.id), "new-finance":()=>this.openFinanceForm(), "rate-player":()=>this.openRatingForm(),
-          "players":()=>this.openPlayers(), "group":()=>this.openGroupModal(), "announcement":()=>this.openAnnouncementForm(), "export":()=>this.exportData(),
-          "sign-out":()=>this.logout()
+        const actions = {
+          "new-match": () => this.openMatchForm(),
+          "open-match": () => this.openMatchDetails(data.id),
+          rsvp: () => this.openRsvp(data.id || this.nextMatch()?.id),
+          "draw-teams": () => this.drawTeams(data.id),
+          "new-finance": () => this.openFinanceForm(),
+          "rate-members": () => this.openMemberRatings(),
+          players: () => this.openPlayers(),
+          group: () => this.openGroupModal(),
+          invite: () => this.openInviteModal(),
+          "group-settings": () => this.openGroupSettings(),
+          "manage-roles": () => this.openRoleManager(),
+          announcement: () => this.openAnnouncementForm(),
+          profile: () => this.openProfileModal(),
+          export: () => this.exportData(),
+          "sign-out": () => this.logout()
         };
-        if (map[action]) await map[action]();
-      } catch (error) { console.error(error); this.toast(error.message || "Não foi possível concluir a ação.", true); }
+        if (actions[action]) await actions[action]();
+      } catch (error) {
+        console.error(error);
+        this.toast(error.message || "Não foi possível concluir a ação.", true);
+      }
     },
 
     renderAuth() {
-      const oauthError = oauthErrorFromLocation();
-      const loginLogo = assetUrl("login-logo-v024.png");
-      const iconFallback = assetUrl("apple-touch-icon-180x180-v023.png");
-      document.body.innerHTML = `<main class="auth-screen"><section class="auth-panel"><img class="auth-logo" src="${loginLogo}" alt="Resenha FC" width="156" height="156" decoding="async"><h1>Resenha FC</h1><p>Organize presença, times, mensalidades, churrasco, notas e estatísticas da sua pelada.</p><div class="card auth-card">${oauthError?`<div class="notice auth-error"><strong>Não foi possível entrar com Google</strong><br>${escapeHtml(oauthError)}</div>`:""}<div id="googleLoginArea" class="google-login-area"><div id="googleIdentityButton" class="google-identity-button" aria-label="Continuar com Google"></div><button class="btn btn-google btn-block" type="button" id="googleOAuthFallback" hidden><svg class="google-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M21.6 12.23c0-.71-.06-1.4-.19-2.07H12v3.91h5.38a4.6 4.6 0 0 1-2 3.02v2.54h3.24c1.9-1.75 2.98-4.33 2.98-7.4Z"/><path fill="#34A853" d="M12 22c2.7 0 4.98-.9 6.63-2.43l-3.24-2.54c-.9.6-2.05.96-3.39.96-2.61 0-4.82-1.76-5.61-4.13H3.04v2.62A10 10 0 0 0 12 22Z"/><path fill="#FBBC05" d="M6.39 13.86A6.02 6.02 0 0 1 6.08 12c0-.65.11-1.28.31-1.86V7.52H3.04A10 10 0 0 0 2 12c0 1.61.39 3.14 1.04 4.48l3.35-2.62Z"/><path fill="#EA4335" d="M12 6.01c1.47 0 2.79.5 3.83 1.5l2.87-2.87A9.65 9.65 0 0 0 12 2a10 10 0 0 0-8.96 5.52l3.35 2.62C7.18 7.77 9.39 6.01 12 6.01Z"/></svg><span>Continuar com Google</span></button><small id="googleLoginHint" class="google-login-hint" hidden></small></div><div class="divider">ou entre com e-mail</div><form id="authForm" class="form-grid"><div class="field"><label>Nome</label><input id="authName" autocomplete="name" placeholder="Seu nome"></div><div class="field"><label>E-mail</label><input id="authEmail" type="email" autocomplete="email" required placeholder="voce@email.com"></div><div class="field"><label>Senha</label><input id="authPassword" type="password" autocomplete="current-password" minlength="6" required placeholder="Mínimo de 6 caracteres"></div><button class="btn btn-primary btn-block" type="submit">Entrar com e-mail</button><button class="btn btn-secondary btn-block" type="button" id="signupButton">Criar conta com e-mail</button></form></div></section></main>`;
-      const logo = $(".auth-logo");
-      logo.addEventListener("error", () => { if (logo.src !== iconFallback) logo.src = iconFallback; }, { once:true });
-      const credentials=()=>({email:$("#authEmail").value.trim(),password:$("#authPassword").value,name:$("#authName").value.trim()});
+      const error = oauthErrorFromLocation();
+      document.body.innerHTML = `<main class="auth-screen"><section class="auth-panel"><div class="auth-stadium"><div class="auth-lights"></div><img class="auth-logo" src="login-logo-v024.png" alt="Resenha FC" width="178" height="178"><span class="auth-kicker">SUA PELADA. SEU GRUPO. SEU APP.</span></div><div class="auth-copy"><h1>Entre em campo</h1><p>Presença, times equilibrados, membros, caixa e churrasco em um único lugar.</p>${error ? `<div class="notice auth-error"><strong>Falha no login</strong><br>${escapeHtml(error)}</div>` : ""}<div class="google-card"><div id="googleIdentityButton" class="google-identity-button" aria-label="Continuar com Google"></div><p id="googleLoginMessage">Use sua conta Google para continuar. Não há cadastro por e-mail ou senha.</p></div><div class="auth-features"><span>✓ Acesso seguro</span><span>✓ Dados em nuvem</span><span>✓ Sincronização entre celulares</span></div></div></section></main><div id="toastRoot" class="toast-root"></div>`;
       this.setupGoogleLogin();
-      $("#authForm").addEventListener("submit",async e=>{e.preventDefault(); const {email,password}=credentials(); const {error}=await this.repo.signIn(email,password); if(error)return this.toast(error.message,true); location.replace(appBaseUrl());});
-      $("#signupButton").addEventListener("click",async()=>{const {email,password,name}=credentials(); if(!email||!password)return this.toast("Informe e-mail e senha.",true); const {data,error}=await this.repo.signUp(email,password,name); if(error)return this.toast(error.message,true); if(data?.session)return location.replace(appBaseUrl()); this.toast("Conta criada. Verifique o e-mail para concluir o acesso.");});
-      if(oauthError && history.replaceState) history.replaceState({}, document.title, location.pathname);
+      if (error && history.replaceState) history.replaceState({}, document.title, location.pathname);
     },
 
     async setupGoogleLogin() {
       const container = $("#googleIdentityButton");
-      const fallback = $("#googleOAuthFallback");
-      const hint = $("#googleLoginHint");
-      if (!container || !fallback) return;
-      const useFallback = message => {
-        container.hidden = true;
-        fallback.hidden = false;
-        if (message && hint) { hint.hidden = false; hint.textContent = message; }
-        fallback.addEventListener("click", async event => {
-          const button = event.currentTarget;
-          const original = button.innerHTML;
-          button.disabled = true;
-          button.innerHTML = '<span class="button-spinner" aria-hidden="true"></span><span>Conectando ao Google…</span>';
-          const { error } = await this.repo.signInWithGoogleOAuth();
-          if (error) { button.disabled = false; button.innerHTML = original; this.toast(error.message, true); }
-        });
-      };
+      const message = $("#googleLoginMessage");
       const clientId = String(window.RESENHA_CONFIG?.googleClientId || "").trim();
       if (!/^[0-9a-z-]+\.apps\.googleusercontent\.com$/i.test(clientId)) {
-        useFallback("Para o login compatível com iPhone, adicione googleClientId ao supabase-config.js.");
+        message.textContent = "Client ID do Google inválido no supabase-config.js.";
+        message.classList.add("error-text");
         return;
       }
       try {
         await loadScriptOnce("google-identity-script", "https://accounts.google.com/gsi/client");
-        if (!window.google?.accounts?.id) throw new Error("O Google Identity Services não foi inicializado.");
         const nonce = randomNonce();
         const hashedNonce = await sha256Hex(nonce);
         window.google.accounts.id.initialize({
-          client_id:clientId,
-          callback:async response => {
+          client_id: clientId,
+          callback: async response => {
             if (!response?.credential) return this.toast("O Google não retornou a credencial de acesso.", true);
             container.classList.add("is-loading");
             const { error } = await this.repo.signInWithGoogleIdToken(response.credential, nonce);
-            if (error) { container.classList.remove("is-loading"); return this.toast(error.message || "Não foi possível entrar com Google.", true); }
+            if (error) {
+              container.classList.remove("is-loading");
+              return this.toast(error.message || "Não foi possível entrar com Google.", true);
+            }
             window.location.replace(appBaseUrl());
           },
-          nonce:hashedNonce,
-          ux_mode:"popup",
-          context:"signin",
-          auto_select:false,
-          cancel_on_tap_outside:true,
-          itp_support:true,
-          use_fedcm_for_prompt:true
+          nonce: hashedNonce,
+          ux_mode: "popup",
+          context: "signin",
+          auto_select: false,
+          cancel_on_tap_outside: true,
+          itp_support: true,
+          use_fedcm_for_prompt: true
         });
-        container.hidden = false;
+        container.innerHTML = "";
         window.google.accounts.id.renderButton(container, {
-          type:"standard",
-          theme:"outline",
-          size:"large",
-          text:"continue_with",
-          shape:"rectangular",
-          logo_alignment:"left",
-          width:Math.min(380, Math.max(250, container.clientWidth || 360))
+          type: "standard",
+          theme: "outline",
+          size: "large",
+          text: "continue_with",
+          shape: "pill",
+          logo_alignment: "left",
+          width: Math.min(390, Math.max(260, container.clientWidth || 350))
         });
       } catch (error) {
-        console.warn("Falha ao iniciar o login direto do Google.", error);
-        useFallback("O login direto não carregou. Usando o fluxo alternativo do Supabase.");
+        console.error(error);
+        message.innerHTML = `Não foi possível carregar o acesso Google. <button class="link-button" onclick="location.reload()">Tentar novamente</button>`;
+        message.classList.add("error-text");
       }
     },
 
     renderConfigurationError() {
-      document.body.innerHTML = `<main class="auth-screen"><section class="auth-panel"><img class="auth-logo" src="login-logo-v024.png" alt="Resenha FC" width="156" height="156"><h1>Configuração necessária</h1><p>O Resenha FC agora funciona exclusivamente com o backend Supabase.</p><div class="card auth-card"><div class="notice"><strong>Conecte o aplicativo</strong><br>Preencha a Project URL e a Publishable key no arquivo <code>supabase-config.js</code> e publique novamente.</div><button class="btn btn-primary btn-block" id="retryConfigButton">Verificar novamente</button></div></section></main>`;
-      $("#retryConfigButton").addEventListener("click", () => location.reload());
+      document.body.innerHTML = `<main class="auth-screen"><section class="auth-panel simple-auth"><img class="auth-logo" src="login-logo-v024.png" alt="Resenha FC"><h1>Configuração necessária</h1><p>Preencha Supabase URL, Publishable key e Google Client ID no arquivo <code>supabase-config.js</code>.</p><button class="btn btn-primary" onclick="location.reload()">Verificar novamente</button></section></main>`;
     },
 
     renderBackendError(error) {
-      const message = escapeHtml(error?.message || "Não foi possível conectar ao backend.");
-      document.body.innerHTML = `<main class="auth-screen"><section class="auth-panel"><img class="auth-logo" src="login-logo-v024.png" alt="Resenha FC" width="156" height="156"><h1>Falha na conexão</h1><p>Não foi possível acessar os dados em nuvem.</p><div class="card auth-card"><div class="notice"><strong>Detalhe técnico</strong><br>${message}</div><button class="btn btn-primary btn-block" id="retryCloudButton">Tentar novamente</button></div></section></main>`;
-      $("#retryCloudButton").addEventListener("click", () => location.reload());
+      document.body.innerHTML = `<main class="auth-screen"><section class="auth-panel simple-auth"><img class="auth-logo" src="login-logo-v024.png" alt="Resenha FC"><h1>Falha na conexão</h1><p>${escapeHtml(error?.message || "Não foi possível acessar o backend.")}</p><button class="btn btn-primary" onclick="location.reload()">Tentar novamente</button></section></main>`;
     },
 
     modal(title, content, onReady) {
-      const root=$("#modalRoot"); root.innerHTML=`<div class="modal-backdrop" role="dialog" aria-modal="true"><section class="modal"><div class="modal-handle"></div><div class="modal-head"><h2>${escapeHtml(title)}</h2><button class="modal-close" aria-label="Fechar">×</button></div>${content}</section></div>`;
-      const close=()=>root.innerHTML=""; $(".modal-close",root).addEventListener("click",close); $(".modal-backdrop",root).addEventListener("click",e=>{if(e.target.classList.contains("modal-backdrop"))close();});
-      onReady?.(root,close);
+      const root = $("#modalRoot");
+      root.innerHTML = `<div class="modal-backdrop" role="dialog" aria-modal="true"><section class="modal"><div class="modal-handle"></div><div class="modal-head"><h2>${escapeHtml(title)}</h2><button class="modal-close" aria-label="Fechar">×</button></div><div class="modal-content">${content}</div></section></div>`;
+      const close = () => { root.innerHTML = ""; };
+      $(".modal-close", root).addEventListener("click", close);
+      $(".modal-backdrop", root).addEventListener("click", event => { if (event.target.classList.contains("modal-backdrop")) close(); });
+      onReady?.(root, close);
+    },
+
+    avatarPicker(selected = "badge-01") {
+      return `<div class="avatar-picker">${Array.from({ length: 20 }, (_, index) => {
+        const key = `badge-${String(index + 1).padStart(2, "0")}`;
+        return `<label class="avatar-option"><input type="radio" name="avatar_key" value="${key}" ${key === avatarKey(selected) ? "checked" : ""}><img src="${groupAvatarUrl(key)}" alt="Escudo ${index + 1}"><span>✓</span></label>`;
+      }).join("")}</div>`;
+    },
+
+    openGroupModal(prefillCode = "") {
+      const groups = this.state.groups || [];
+      const current = this.currentGroup();
+      this.modal("Grupos", `${groups.length ? `<div class="section-title"><h2>Meus grupos</h2></div><div class="list">${groups.map(group => `<button class="card group-list-row" data-group-id="${group.id}">${this.groupAvatar(group)}<div class="list-main"><strong>${escapeHtml(group.name)}</strong><small>${escapeHtml(roleLabels[group.role])} · ${escapeHtml(group.invite_code)}</small></div>${group.id === current?.id ? '<span class="score-pill">Atual</span>' : '<strong>›</strong>'}</button>`).join("")}</div>` : ""}<div class="section-title"><h2>Criar novo grupo</h2></div><form id="createGroupForm" class="form-grid"><div class="field"><label>Nome do grupo</label><input name="name" required minlength="2" maxlength="80" placeholder="Ex.: Resenha de quinta"></div><div class="field"><label>Escolha o escudo</label>${this.avatarPicker()}</div><button class="btn btn-primary btn-block">Criar grupo</button></form><div class="divider">OU</div><form id="joinGroupForm" class="form-grid"><div class="field"><label>Código de convite</label><input name="code" required value="${escapeHtml(prefillCode || this.pendingInvite)}" placeholder="Ex.: A1B2C3D4"></div><button class="btn btn-secondary btn-block">Entrar no grupo</button></form>`, (root, close) => {
+        $$('[data-group-id]', root).forEach(button => button.addEventListener("click", async () => {
+          await this.repo.loadGroup(button.dataset.groupId);
+          this.state = this.repo.state;
+          localStorage.setItem("resenha-current-group", button.dataset.groupId);
+          close();
+          this.render();
+        }));
+        $("#createGroupForm", root).addEventListener("submit", async event => {
+          event.preventDefault();
+          const form = new FormData(event.currentTarget);
+          await this.repo.createGroup(form.get("name"), form.get("avatar_key"));
+          this.state = this.repo.state;
+          localStorage.setItem("resenha-current-group", this.state.currentGroupId);
+          close();
+          this.render();
+          this.toast("Grupo criado. Você é o proprietário e administrador.");
+        });
+        $("#joinGroupForm", root).addEventListener("submit", async event => {
+          event.preventDefault();
+          const form = new FormData(event.currentTarget);
+          await this.repo.joinGroup(form.get("code"));
+          this.state = this.repo.state;
+          localStorage.removeItem("resenha-pending-invite");
+          this.pendingInvite = "";
+          localStorage.setItem("resenha-current-group", this.state.currentGroupId);
+          close();
+          this.render();
+          this.toast("Você entrou no grupo como membro.");
+        });
+      });
+    },
+
+    openGroupSettings() {
+      if (!this.canManageGroup()) return this.toast("Apenas proprietário e administrador podem personalizar o grupo.", true);
+      const group = this.currentGroup();
+      this.modal("Personalizar grupo", `<form id="groupSettingsForm" class="form-grid"><div class="field"><label>Nome</label><input name="name" value="${escapeHtml(group.name)}" required></div><div class="field"><label>Escudo</label>${this.avatarPicker(group.avatar_key)}</div><button class="btn btn-primary btn-block">Salvar alterações</button></form>`, (root, close) => {
+        $("#groupSettingsForm", root).addEventListener("submit", async event => {
+          event.preventDefault();
+          const form = new FormData(event.currentTarget);
+          await this.repo.updateGroup(group.id, form.get("name"), form.get("avatar_key"));
+          this.state = this.repo.state;
+          close();
+          this.render();
+          this.toast("Grupo atualizado.");
+        });
+      });
+    },
+
+    openInviteModal() {
+      const group = this.currentGroup();
+      if (!group) return this.openGroupModal();
+      const url = new URL(appBaseUrl());
+      url.searchParams.set("invite", group.invite_code);
+      const message = `⚽ Você foi convidado para o grupo ${group.name} no Resenha FC!\n\nCódigo de convite: ${group.invite_code}\n\nAcesse ${url.href}\nEntre com sua conta Google e informe o código para participar.`;
+      this.modal("Convidar para o grupo", `<section class="invite-card">${this.groupAvatar(group, "invite-avatar")}<h3>${escapeHtml(group.name)}</h3><p>Compartilhe o código com quem participará da pelada.</p><div class="invite-code"><strong>${escapeHtml(group.invite_code)}</strong><button id="copyInviteCode" aria-label="Copiar código">⧉</button></div><button class="btn btn-whatsapp btn-block" id="shareWhatsApp">WhatsApp</button><button class="btn btn-secondary btn-block" id="nativeShare">Compartilhar convite</button></section>`, (root) => {
+        $("#copyInviteCode", root).addEventListener("click", async () => {
+          await navigator.clipboard.writeText(group.invite_code);
+          this.toast("Código copiado.");
+        });
+        $("#shareWhatsApp", root).addEventListener("click", () => window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, "_blank", "noopener"));
+        $("#nativeShare", root).addEventListener("click", async () => {
+          if (navigator.share) await navigator.share({ title: `Convite ${group.name}`, text: message, url: url.href });
+          else {
+            await navigator.clipboard.writeText(message);
+            this.toast("Convite copiado.");
+          }
+        });
+      });
+    },
+
+    openRoleManager() {
+      if (!this.canManageGroup()) return this.toast("Sem permissão para gerenciar funções.", true);
+      const actorRole = this.currentRole();
+      const group = this.currentGroup();
+      this.modal("Gerenciar funções", `<div class="notice"><strong>Proprietário</strong><br>Possui todas as permissões e pode transferir a propriedade. Administradores delegam organizador, tesoureiro ou membro.</div><div class="list">${this.state.members.map(member => {
+        const player = this.memberPlayer(member) || { name: "Membro" };
+        const isMe = member.user_id === this.state.profile.id;
+        const canEdit = !isMe && member.role !== "owner" && (actorRole === "owner" || (actorRole === "admin" && member.role !== "admin"));
+        const allowedRoles = actorRole === "owner" ? ["admin", "organizer", "treasurer", "member"] : ["organizer", "treasurer", "member"];
+        return `<div class="card role-row">${this.personAvatar(player)}<div class="list-main"><strong>${escapeHtml(player.name)}</strong><small>${escapeHtml(roleLabels[member.role])}</small></div>${canEdit ? `<select class="role-select" data-role-user="${member.user_id}">${allowedRoles.map(role => `<option value="${role}" ${role === member.role ? "selected" : ""}>${roleLabels[role]}</option>`).join("")}</select>` : `<span class="role-pill ${roleClass(member.role)}">${roleLabels[member.role]}</span>`}${actorRole === "owner" && !isMe && member.role !== "owner" ? `<button class="transfer-button" data-transfer-owner="${member.user_id}" title="Transferir propriedade">♛</button>` : ""}</div>`;
+      }).join("")}</div>`, (root, close) => {
+        $$('[data-role-user]', root).forEach(select => select.addEventListener("change", async event => {
+          event.currentTarget.disabled = true;
+          await this.repo.setMemberRole(group.id, event.currentTarget.dataset.roleUser, event.currentTarget.value);
+          this.state = this.repo.state;
+          close();
+          this.render();
+          this.toast("Função atualizada.");
+        }));
+        $$('[data-transfer-owner]', root).forEach(button => button.addEventListener("click", async () => {
+          const userId = button.dataset.transferOwner;
+          const player = this.memberPlayer(this.state.members.find(member => member.user_id === userId));
+          if (!confirm(`Transferir a propriedade do grupo para ${player?.name || "este membro"}? Você passará a administrador.`)) return;
+          await this.repo.transferOwnership(group.id, userId);
+          this.state = this.repo.state;
+          close();
+          this.render();
+          this.toast("Propriedade transferida.");
+        }));
+      });
+    },
+
+    openMemberRatings() {
+      const me = this.myPlayer();
+      const players = this.activePlayers().filter(player => player.id !== me?.id && player.user_id);
+      if (!players.length) return this.toast("Ainda não há outros membros para avaliar.", true);
+      this.modal("Avaliar membros", `<div class="notice"><strong>Avaliação confidencial</strong><br>Dê uma nota de 1 a 10 considerando o desempenho geral no futebol. Somente proprietário e administradores visualizam médias e quantidade de avaliações.</div><form id="memberRatingsForm" class="ratings-form">${players.map(player => {
+        const existing = this.myRating(player.id);
+        const value = existing?.score || 7;
+        return `<div class="rating-input-row">${this.personAvatar(player)}<div class="rating-control"><div><strong>${escapeHtml(player.name)}</strong><span data-rating-value="${player.id}">${Number(value).toFixed(1)}</span></div><small>${escapeHtml(player.primary_position || "Sem posição")}</small><input type="range" min="1" max="10" step="0.5" value="${value}" name="rating_${player.id}" data-rating-slider="${player.id}"></div></div>`;
+      }).join("")}<button class="btn btn-primary btn-block">Enviar avaliações</button></form>`, (root, close) => {
+        $$('[data-rating-slider]', root).forEach(slider => slider.addEventListener("input", event => {
+          $(`[data-rating-value="${event.currentTarget.dataset.ratingSlider}"]`, root).textContent = Number(event.currentTarget.value).toFixed(1);
+        }));
+        $("#memberRatingsForm", root).addEventListener("submit", async event => {
+          event.preventDefault();
+          const button = event.submitter;
+          button.disabled = true;
+          button.textContent = "Enviando...";
+          const form = new FormData(event.currentTarget);
+          for (const player of players) await this.repo.rateMember(this.state.currentGroupId, player.id, form.get(`rating_${player.id}`));
+          await this.repo.loadGroup(this.state.currentGroupId, { subscribe: false });
+          this.state = this.repo.state;
+          close();
+          this.render();
+          this.toast("Avaliações salvas com confidencialidade.");
+        });
+      });
+    },
+
+    openProfileModal() {
+      const profile = this.state.profile || {};
+      const player = this.myPlayer();
+      const photo = safeImageUrl(profile.avatar_url);
+      this.modal("Meu perfil", `<div class="profile-summary">${photo ? `<img class="profile-photo" src="${escapeHtml(photo)}" alt="" referrerpolicy="no-referrer">` : `<div class="profile-photo profile-initials">${initials(profile.name)}</div>`}<div><strong>${escapeHtml(profile.name)}</strong><small>${escapeHtml(profile.email)}</small><span class="role-pill ${roleClass(this.currentRole())}">${roleLabels[this.currentRole()]}</span></div></div><form id="profileForm" class="form-grid"><div class="field"><label>Nome</label><input name="name" value="${escapeHtml(profile.name || "")}" required></div>${player ? `<div class="field"><label>Apelido no grupo</label><input name="nickname" value="${escapeHtml(player.nickname || "")}" placeholder="Como aparece na escalação"></div><div class="field-row"><div class="field"><label>Posição principal</label><select name="primary_position">${positionOptions.map(position => `<option ${position === player.primary_position ? "selected" : ""}>${position}</option>`).join("")}</select></div><div class="field"><label>Posição secundária</label><select name="secondary_position"><option value="">Nenhuma</option>${positionOptions.map(position => `<option ${position === player.secondary_position ? "selected" : ""}>${position}</option>`).join("")}</select></div></div><label class="check-row"><input name="goalkeeper" type="checkbox" ${player.goalkeeper ? "checked" : ""}> Também posso jogar no gol</label>` : ""}<button class="btn btn-primary btn-block">Salvar perfil</button></form><div class="account-separator"></div><button class="btn btn-danger btn-block" id="profileLogoutButton">Sair da conta</button>`, (root, close) => {
+        $("#profileForm", root).addEventListener("submit", async event => {
+          event.preventDefault();
+          const form = new FormData(event.currentTarget);
+          await this.repo.setProfile(form.get("name"));
+          if (player) await this.repo.updateMyPlayer(this.state.currentGroupId, {
+            nickname: form.get("nickname"),
+            primaryPosition: form.get("primary_position"),
+            secondaryPosition: form.get("secondary_position"),
+            goalkeeper: form.get("goalkeeper") === "on"
+          });
+          this.state = this.repo.state;
+          close();
+          this.render();
+          this.toast("Perfil atualizado.");
+        });
+        $("#profileLogoutButton", root).addEventListener("click", async () => { close(); await this.logout(); });
+      });
     },
 
     openMatchForm() {
       if (!this.canManageMatches()) return this.toast("Seu perfil não pode criar jogos.", true);
-      const dt=new Date(Date.now()+7*86400000); dt.setHours(20,0,0,0); const local=new Date(dt.getTime()-dt.getTimezoneOffset()*60000).toISOString().slice(0,16);
-      this.modal("Novo jogo",`<form id="matchForm" class="form-grid"><div class="field"><label>Título</label><input name="title" required value="Pelada semanal"></div><div class="field"><label>Data e hora</label><input name="starts_at" type="datetime-local" required value="${local}"></div><div class="field"><label>Local</label><input name="location" required placeholder="Nome da arena e quadra"></div><div class="field-row"><div class="field"><label>Máximo de jogadores</label><input name="max_players" type="number" min="4" max="40" value="12"></div><div class="field"><label>Jogadores por time</label><input name="players_per_team" type="number" min="2" max="11" value="6"></div></div><label class="check-row"><input name="bbq_enabled" type="checkbox" checked> Organizar churrasco após o jogo</label><div class="field"><label>Valor do churrasco por pessoa</label><input name="bbq_price" type="number" min="0" step="0.01" value="25"></div><div class="field"><label>Observações</label><textarea name="notes" placeholder="Prazo de confirmação, uniforme, regras..."></textarea></div><button class="btn btn-primary btn-block">Criar jogo</button></form>`,(root,close)=>{
-        $("#matchForm",root).addEventListener("submit",async e=>{e.preventDefault(); const f=new FormData(e.currentTarget); const record={id:uid("match"),group_id:this.state.currentGroupId,title:f.get("title"),starts_at:new Date(f.get("starts_at")).toISOString(),location:f.get("location"),max_players:Number(f.get("max_players")),players_per_team:Number(f.get("players_per_team")),status:"scheduled",bbq_enabled:f.get("bbq_enabled")==="on",bbq_price:Number(f.get("bbq_price")||0),notes:f.get("notes")||"",created_at:nowIso()}; await this.repo.mutate("matches",record); this.state=this.repo.state; close(); this.render(); this.toast("Jogo criado.");});
+      const date = new Date(Date.now() + 7 * 86400000);
+      date.setHours(20, 0, 0, 0);
+      const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+      this.modal("Agendar pelada", `<form id="matchForm" class="form-grid"><div class="field"><label>Título</label><input name="title" required value="Pelada semanal"></div><div class="field"><label>Data e hora</label><input name="starts_at" type="datetime-local" min="${new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)}" required value="${local}"></div><div class="field"><label>Local</label><input name="location" required placeholder="Arena e número da quadra"></div><div class="field-row"><div class="field"><label>Máximo de jogadores</label><input name="max_players" type="number" min="4" max="60" value="12"></div><div class="field"><label>Jogadores por time</label><input name="players_per_team" type="number" min="2" max="11" value="6"></div></div><label class="check-row"><input name="bbq_enabled" type="checkbox" checked> Organizar churrasco após o jogo</label><div class="field"><label>Valor do churrasco por pessoa</label><input name="bbq_price" type="number" min="0" step="0.01" value="25"></div><div class="field"><label>Observações</label><textarea name="notes" placeholder="Uniforme, prazo, regras..."></textarea></div><button class="btn btn-primary btn-block">Criar jogo</button></form>`, (root, close) => {
+        $("#matchForm", root).addEventListener("submit", async event => {
+          event.preventDefault();
+          const form = new FormData(event.currentTarget);
+          const startsAt = new Date(form.get("starts_at"));
+          if (startsAt <= new Date()) return this.toast("Escolha uma data futura.", true);
+          await this.repo.mutate("matches", {
+            id: uid(),
+            group_id: this.state.currentGroupId,
+            title: form.get("title"),
+            starts_at: startsAt.toISOString(),
+            location: form.get("location"),
+            max_players: Number(form.get("max_players")),
+            players_per_team: Number(form.get("players_per_team")),
+            status: "scheduled",
+            bbq_enabled: form.get("bbq_enabled") === "on",
+            bbq_price: Number(form.get("bbq_price") || 0),
+            notes: form.get("notes") || "",
+            created_at: nowIso()
+          });
+          this.state = this.repo.state;
+          close();
+          this.render();
+          this.toast("Pelada agendada.");
+        });
       });
     },
 
     openMatchDetails(id) {
-      const match=this.state.matches.find(m=>m.id===id); if(!match)return;
-      const att=this.attendanceFor(id); const grouped={confirmed:[],maybe:[],out:[],waitlist:[]}; att.forEach(a=>grouped[a.status]?.push(a));
-      const groupHtml=(label,key)=>`<div class="section-title"><h2>${label} (${grouped[key].length})</h2></div><div class="list">${grouped[key].map(a=>this.playerRow(this.player(a.player_id),a.bbq?'<span class="score-pill">Churrasco</span>':'')).join("")||'<div class="card empty">Nenhum.</div>'}</div>`;
-      this.modal(match.title,`<div class="notice">${escapeHtml(shortDate(match.starts_at))}<br>${escapeHtml(match.location)}${match.notes?`<br><br>${escapeHtml(match.notes)}`:""}</div><div class="actions"><button class="btn btn-primary" data-action="rsvp" data-id="${match.id}">Minha presença</button>${this.canManageMatches()?`<button class="btn btn-secondary" data-action="draw-teams" data-id="${match.id}">Sortear times</button>`:''}</div>${groupHtml("Confirmados","confirmed")}${groupHtml("Talvez","maybe")}${groupHtml("Lista de espera","waitlist")}${groupHtml("Não vão","out")}`);
+      const match = this.state.matches.find(item => item.id === id);
+      if (!match) return;
+      const future = new Date(match.starts_at) > new Date();
+      const grouped = { confirmed: [], maybe: [], waitlist: [], out: [] };
+      this.attendanceFor(id).forEach(item => grouped[item.status]?.push(item));
+      const groupHtml = (title, key) => `<div class="section-title"><h2>${title} (${grouped[key].length})</h2></div><div class="list">${grouped[key].map(item => this.playerRow(this.player(item.player_id) || { name: "Jogador" })).join("") || '<div class="card empty">Nenhum.</div>'}</div>`;
+      this.modal(match.title, `<div class="match-detail-banner"><span class="status-pill ${future ? "status-maybe" : "status-confirmed"}">${future ? "Agendado" : "Histórico"}</span><strong>${escapeHtml(shortDate(match.starts_at))}</strong><p>${escapeHtml(match.location)}</p>${match.notes ? `<small>${escapeHtml(match.notes)}</small>` : ""}</div><div class="actions"><button class="btn btn-primary" data-modal-rsvp="${match.id}">${future ? "Minha presença" : "Ver minha resposta"}</button>${this.canManageMatches() ? `<button class="btn btn-secondary" data-modal-teams="${match.id}">Separar times</button>` : ""}</div>${future && this.canManageMatches() ? `<button class="btn btn-danger btn-block delete-match-button" data-delete-match="${match.id}">Excluir jogo agendado</button><p class="danger-help">Esta opção desaparece após o horário do evento. Jogos realizados permanecem no histórico.</p>` : ""}${groupHtml("Confirmados", "confirmed")}${groupHtml("Talvez", "maybe")}${groupHtml("Lista de espera", "waitlist")}${groupHtml("Não vão", "out")}`, (root, close) => {
+        $("[data-modal-rsvp]", root).addEventListener("click", () => { close(); this.openRsvp(match.id); });
+        $("[data-modal-teams]", root)?.addEventListener("click", async () => { close(); await this.drawTeams(match.id); });
+        $("[data-delete-match]", root)?.addEventListener("click", async () => {
+          if (!confirm("Excluir definitivamente este jogo agendado?")) return;
+          await this.repo.deleteMatch(match.id);
+          this.state = this.repo.state;
+          close();
+          this.render();
+          this.toast("Jogo excluído.");
+        });
+      });
     },
 
     openRsvp(matchId) {
-      const match=this.state.matches.find(m=>m.id===matchId); if(!match)return this.toast("Crie um jogo primeiro.",true);
-      const player=this.myPlayer(); if(!player)return this.toast("Cadastre seu jogador primeiro.",true);
-      const current=this.state.attendance.find(a=>a.match_id===matchId&&a.player_id===player.id)||{};
-      this.modal("Confirmar presença",`<form id="rsvpForm" class="form-grid"><div class="notice"><strong>${escapeHtml(match.title)}</strong><br>${escapeHtml(shortDate(match.starts_at))} · ${escapeHtml(match.location)}</div><div class="field"><label>Sua resposta</label><div class="radio-grid">${[["confirmed","Vou jogar"],["maybe","Talvez"],["out","Não vou"],["waitlist","Espera"]].map(([v,l])=>`<label class="radio-card"><input type="radio" name="status" value="${v}" ${current.status===v||(!current.status&&v==="confirmed")?"checked":""}> ${l}</label>`).join("")}</div></div>${match.bbq_enabled?`<label class="check-row"><input type="checkbox" name="bbq" ${current.bbq?"checked":""}> Participarei do churrasco</label><div class="field"><label>Acompanhantes no churrasco</label><input type="number" name="bbq_guests" min="0" max="10" value="${current.bbq_guests||0}"></div><div class="field"><label>O que vou levar / observação</label><input name="bbq_note" value="${escapeHtml(current.bbq_note||"")}" placeholder="Ex.: refrigerante, pão de alho"></div>`:""}<button class="btn btn-primary btn-block">Salvar resposta</button></form>`,(root,close)=>{
-        $("#rsvpForm",root).addEventListener("submit",async e=>{e.preventDefault();const f=new FormData(e.currentTarget);let status=f.get("status");const confirmedOthers=this.confirmedFor(matchId).filter(a=>a.player_id!==player.id);let movedToWaitlist=false;if(status==="confirmed"&&current.status!=="confirmed"&&confirmedOthers.length>=Number(match.max_players)){status="waitlist";movedToWaitlist=true;}const record={id:current.id||uid(),match_id:matchId,player_id:player.id,status,bbq:f.get("bbq")==="on",bbq_guests:Number(f.get("bbq_guests")||0),bbq_note:f.get("bbq_note")||"",responded_at:nowIso()};await this.repo.mutate("attendance",record);this.state=this.repo.state;close();this.render();this.toast(movedToWaitlist?"Vagas preenchidas. Você entrou na lista de espera.":"Presença atualizada.");});
+      const match = this.state.matches.find(item => item.id === matchId);
+      if (!match) return this.toast("Crie um jogo primeiro.", true);
+      if (new Date(match.starts_at) <= new Date()) return this.toast("A confirmação está encerrada para jogos do histórico.", true);
+      const player = this.myPlayer();
+      if (!player) return this.toast("Seu perfil de jogador não foi encontrado.", true);
+      const current = this.state.attendance.find(item => item.match_id === matchId && item.player_id === player.id) || {};
+      this.modal("Confirmar presença", `<form id="rsvpForm" class="form-grid"><div class="notice"><strong>${escapeHtml(match.title)}</strong><br>${escapeHtml(shortDate(match.starts_at))} · ${escapeHtml(match.location)}</div><div class="radio-grid">${[["confirmed", "Vou jogar"], ["maybe", "Talvez"], ["out", "Não vou"], ["waitlist", "Espera"]].map(([value, label]) => `<label class="radio-card"><input type="radio" name="status" value="${value}" ${current.status === value || (!current.status && value === "confirmed") ? "checked" : ""}>${label}</label>`).join("")}</div>${match.bbq_enabled ? `<label class="check-row"><input type="checkbox" name="bbq" ${current.bbq ? "checked" : ""}> Participarei do churrasco</label><div class="field"><label>Acompanhantes</label><input type="number" name="bbq_guests" min="0" max="20" value="${current.bbq_guests || 0}"></div><div class="field"><label>O que vou levar</label><input name="bbq_note" value="${escapeHtml(current.bbq_note || "")}" placeholder="Refrigerante, pão de alho..."></div>` : ""}<button class="btn btn-primary btn-block">Salvar resposta</button></form>`, (root, close) => {
+        $("#rsvpForm", root).addEventListener("submit", async event => {
+          event.preventDefault();
+          const form = new FormData(event.currentTarget);
+          let status = form.get("status");
+          const otherConfirmed = this.confirmedFor(matchId).filter(item => item.player_id !== player.id);
+          let waitlisted = false;
+          if (status === "confirmed" && current.status !== "confirmed" && otherConfirmed.length >= Number(match.max_players)) {
+            status = "waitlist";
+            waitlisted = true;
+          }
+          await this.repo.mutate("attendance", {
+            id: current.id || uid(),
+            match_id: matchId,
+            player_id: player.id,
+            status,
+            bbq: form.get("bbq") === "on",
+            bbq_guests: Number(form.get("bbq_guests") || 0),
+            bbq_note: form.get("bbq_note") || "",
+            responded_at: nowIso()
+          });
+          this.state = this.repo.state;
+          close();
+          this.render();
+          this.toast(waitlisted ? "Vagas preenchidas. Você entrou na lista de espera." : "Presença atualizada.");
+        });
       });
     },
 
     async drawTeams(matchId) {
-      if (!this.canManageMatches()) return this.toast("Seu perfil não pode montar os times.", true);
-      const match=this.state.matches.find(m=>m.id===matchId); const players=this.confirmedFor(matchId).map(a=>this.player(a.player_id)).filter(Boolean);
-      if(players.length<4)return this.toast("São necessários ao menos 4 jogadores confirmados.",true);
-      const perTeam=Number(match.players_per_team||6); const teamCount=clamp(Math.ceil(players.length/perTeam),2,4); const teamNames=["Time Verde","Time Branco","Time Azul","Time Laranja"].slice(0,teamCount);
-      const teams=teamNames.map(name=>({name,players:[],strength:0,goalkeepers:0,positions:{}}));
-      const ordered=[...players].sort((a,b)=>(Number(b.goalkeeper)-Number(a.goalkeeper))||(this.effectiveSkill(b)-this.effectiveSkill(a)));
-      ordered.forEach((p,index)=>{
-        const candidates=[...teams].sort((a,b)=>{
-          if(p.goalkeeper&&a.goalkeepers!==b.goalkeepers)return a.goalkeepers-b.goalkeepers;
-          if(a.players.length!==b.players.length)return a.players.length-b.players.length;
-          return a.strength-b.strength;
-        });
-        const t=candidates[0];t.players.push(p);t.strength+=this.effectiveSkill(p);t.goalkeepers+=p.goalkeeper?1:0;t.positions[p.primary_position]=(t.positions[p.primary_position]||0)+1;
-      });
-      const records=[];
-      for(const t of teams) for(let i=0;i<t.players.length;i++) records.push({id:uid(),match_id:matchId,player_id:t.players[i].id,team_name:t.name,slot:i+1});
-      await this.repo.replaceAssignments(matchId,records);
-      this.state=this.repo.state;this.route="teams";this.render();this.toast("Times sorteados com equilíbrio técnico.");
+      if (!this.canManageMatches()) return this.toast("Seu perfil não pode formar os times.", true);
+      await this.repo.balanceTeams(matchId);
+      this.state = this.repo.state;
+      this.route = "teams";
+      this.render();
+      this.toast("Times equilibrados por posição e avaliação.");
     },
 
     openFinanceForm() {
-      if (!this.canManageFinance()) return this.toast("Seu perfil não pode fazer lançamentos financeiros.", true);
-      const players=this.activePlayers();
-      this.modal("Novo lançamento",`<form id="financeForm" class="form-grid"><div class="field"><label>Tipo</label><select name="type"><option value="payment">Pagamento recebido</option><option value="expense">Despesa</option><option value="charge">Nova cobrança</option></select></div><div class="field"><label>Jogador</label><select name="player_id"><option value="">Não se aplica</option>${players.map(p=>`<option value="${p.id}">${escapeHtml(p.name)}</option>`).join("")}</select></div><div class="field"><label>Descrição</label><input name="description" required placeholder="Mensalidade, quadra, bola..."></div><div class="field"><label>Valor</label><input name="amount" type="number" min="0.01" step="0.01" required></div><button class="btn btn-primary btn-block">Salvar lançamento</button></form>`,(root,close)=>{
-        $("#financeForm",root).addEventListener("submit",async e=>{e.preventDefault();const f=new FormData(e.currentTarget);const type=f.get("type"),playerId=f.get("player_id")||null,base={id:uid(),group_id:this.state.currentGroupId,description:f.get("description"),amount:Number(f.get("amount")),player_id:playerId};if(type==="payment"){const charge=this.state.charges.filter(c=>c.group_id===this.state.currentGroupId&&c.player_id===playerId&&c.status!=="paid"&&c.status!=="cancelled").sort((a,b)=>String(a.due_date).localeCompare(String(b.due_date)))[0];await this.repo.recordPayment({...base,charge_id:charge?.id||null,paid_at:nowIso(),method:"manual"},charge);}if(type==="expense")await this.repo.mutate("expenses",{...base,occurred_at:nowIso(),category:"outros"});if(type==="charge")await this.repo.mutate("charges",{...base,due_date:new Date().toISOString().slice(0,10),status:"open"});this.state=this.repo.state;close();this.render();this.toast("Lançamento salvo.");});
-      });
-    },
-
-    openRatingForm() {
-      const match=this.pastMatches()[0]; if(!match)return this.toast("Ainda não há jogo concluído para avaliar.",true);
-      const players=this.activePlayers().filter(p=>p.id!==this.myPlayer()?.id);
-      this.modal("Avaliar jogador",`<form id="ratingForm" class="form-grid"><div class="notice">Avaliação referente a <strong>${escapeHtml(match.title)}</strong>. As médias ajudam a equilibrar os times.</div><div class="field"><label>Jogador</label><select name="player_id" required>${players.map(p=>`<option value="${p.id}">${escapeHtml(p.name)}</option>`).join("")}</select></div>${[["technical","Nota técnica"],["fair_play","Fair play"],["conditioning","Condicionamento"]].map(([n,l])=>`<div class="field"><label>${l} (1 a 5)</label><input name="${n}" type="range" min="1" max="5" step="0.5" value="4" oninput="this.nextElementSibling.textContent=this.value"><strong>4</strong></div>`).join("")}<div class="field"><label>Comentário opcional</label><textarea name="comment" placeholder="Comentário respeitoso e objetivo"></textarea></div><button class="btn btn-primary btn-block">Enviar avaliação</button></form>`,(root,close)=>{
-        $("#ratingForm",root).addEventListener("submit",async e=>{e.preventDefault();const f=new FormData(e.currentTarget);const ratedPlayerId=f.get("player_id"),raterUserId=this.state.profile?.id||"",existing=this.state.ratings.find(r=>r.match_id===match.id&&r.rated_player_id===ratedPlayerId&&r.rater_user_id===raterUserId);const record={id:existing?.id||uid("rating"),match_id:match.id,rated_player_id:ratedPlayerId,rater_user_id:raterUserId,technical:Number(f.get("technical")),fair_play:Number(f.get("fair_play")),conditioning:Number(f.get("conditioning")),comment:f.get("comment")||"",created_at:existing?.created_at||nowIso()};await this.repo.mutate("ratings",record);this.state=this.repo.state;close();this.render();this.toast("Avaliação registrada.");});
+      if (!this.canManageFinance()) return this.toast("Somente administração e tesouraria podem alterar o caixa.", true);
+      const players = this.activePlayers();
+      this.modal("Novo lançamento", `<form id="financeForm" class="form-grid"><div class="field"><label>Tipo</label><select name="type"><option value="payment">Pagamento recebido</option><option value="expense">Despesa</option><option value="charge">Nova cobrança</option></select></div><div class="field"><label>Jogador</label><select name="player_id"><option value="">Não se aplica</option>${players.map(player => `<option value="${player.id}">${escapeHtml(player.name)}</option>`).join("")}</select></div><div class="field"><label>Descrição</label><input name="description" required placeholder="Mensalidade, quadra, bola..."></div><div class="field"><label>Valor</label><input name="amount" type="number" min="0.01" step="0.01" required></div><button class="btn btn-primary btn-block">Salvar lançamento</button></form>`, (root, close) => {
+        $("#financeForm", root).addEventListener("submit", async event => {
+          event.preventDefault();
+          const form = new FormData(event.currentTarget);
+          const type = form.get("type");
+          const playerId = form.get("player_id") || null;
+          const base = { id: uid(), group_id: this.state.currentGroupId, description: form.get("description"), amount: Number(form.get("amount")), player_id: playerId };
+          if (type === "payment") {
+            const charge = this.state.charges.filter(item => item.player_id === playerId && !["paid", "cancelled"].includes(item.status)).sort((a, b) => String(a.due_date).localeCompare(String(b.due_date)))[0];
+            await this.repo.recordPayment({ ...base, paid_at: nowIso(), method: "manual" }, charge);
+          } else if (type === "expense") {
+            await this.repo.mutate("expenses", { ...base, occurred_at: nowIso(), category: "outros" });
+          } else {
+            await this.repo.mutate("charges", { ...base, due_date: new Date().toISOString().slice(0, 10), status: "open" });
+          }
+          this.state = this.repo.state;
+          close();
+          this.render();
+          this.toast("Lançamento salvo.");
+        });
       });
     },
 
     openPlayers() {
-      this.modal("Jogadores",`${this.canManageMatches()?'<div class="actions" style="margin-top:0"><button class="btn btn-primary" id="addPlayer">+ Cadastrar jogador</button></div>':''}<div class="section-title"><h2>${this.activePlayers().length} ativos</h2></div><div class="list">${this.activePlayers().map(p=>this.playerRow(p)).join("")}</div>`,(root)=>{$("#addPlayer",root)?.addEventListener("click",()=>this.openPlayerForm());});
+      this.modal("Jogadores sem acesso", `${this.canManageMatches() ? '<button class="btn btn-primary btn-block" id="addPlayer">+ Cadastrar convidado</button>' : ""}<div class="section-title"><h2>Jogadores ativos</h2></div><div class="list">${this.activePlayers().filter(player => !player.user_id).map(player => this.playerRow(player)).join("") || '<div class="card empty">Nenhum convidado cadastrado.</div>'}</div>`, root => {
+        $("#addPlayer", root)?.addEventListener("click", () => this.openPlayerForm());
+      });
     },
 
     openPlayerForm() {
-      if (!this.canManageMatches()) return this.toast("Seu perfil não pode cadastrar jogadores.", true);
-      this.modal("Cadastrar jogador",`<form id="playerForm" class="form-grid"><div class="field"><label>Nome completo</label><input name="name" required></div><div class="field-row"><div class="field"><label>Apelido</label><input name="nickname"></div><div class="field"><label>Nota inicial</label><input name="skill" type="number" min="1" max="5" step="0.1" value="3.5"></div></div><div class="field"><label>Posição principal</label><select name="position"><option>Goleiro</option><option>Zagueiro</option><option>Lateral</option><option selected>Meia</option><option>Atacante</option></select></div><label class="check-row"><input name="goalkeeper" type="checkbox"> Pode jogar no gol</label><button class="btn btn-primary btn-block">Cadastrar</button></form>`,(root,close)=>{$("#playerForm",root).addEventListener("submit",async e=>{e.preventDefault();const f=new FormData(e.currentTarget);const record={id:uid("player"),group_id:this.state.currentGroupId,user_id:null,name:f.get("name"),nickname:f.get("nickname")||f.get("name").split(" ")[0],skill:Number(f.get("skill")),fair_play:4,conditioning:3.5,primary_position:f.get("position"),secondary_position:"",goalkeeper:f.get("goalkeeper")==="on"||f.get("position")==="Goleiro",active:true,games:0,wins:0,goals:0,assists:0};await this.repo.mutate("players",record);this.state=this.repo.state;close();this.openPlayers();this.toast("Jogador cadastrado.");});});
-    },
-
-    openGroupModal() {
-      const groups=this.state.groups||[]; const current=this.currentGroup();
-      this.modal("Grupo da pelada",`${groups.length?`<div class="list">${groups.map(g=>`<button class="card list-row" data-group-id="${g.id}"><div class="player-avatar">${initials(g.name)}</div><div class="list-main"><strong>${escapeHtml(g.name)}</strong><small>${escapeHtml(g.role||"membro")} · código ${escapeHtml(g.invite_code||"—")}</small></div>${g.id===current?.id?'<span class="score-pill">Atual</span>':'<strong>›</strong>'}</button>`).join("")}</div>`:""}<div class="section-title"><h2>Adicionar grupo</h2></div><form id="groupForm" class="form-grid"><div class="field"><label>Novo grupo</label><input name="name" placeholder="Ex.: Futebol de quinta"></div><button class="btn btn-primary btn-block" name="mode" value="create">Criar grupo</button><div class="divider">ou</div><div class="field"><label>Código de convite</label><input name="code" placeholder="Ex.: QUINTA26"></div><button class="btn btn-secondary btn-block" name="mode" value="join">Entrar com código</button></form>`,(root,close)=>{
-        $$('[data-group-id]',root).forEach(btn=>btn.addEventListener("click",async()=>{this.state.currentGroupId=btn.dataset.groupId;await this.repo.loadGroup(btn.dataset.groupId);close();this.render();}));
-        $("#groupForm",root).addEventListener("submit",async e=>{e.preventDefault();const f=new FormData(e.currentTarget);const submit=e.submitter.value;if(submit==="create")await this.repo.createGroup(f.get("name"));else await this.repo.joinGroup(f.get("code"));this.state=this.repo.state;close();this.render();this.toast("Grupo atualizado.");});
+      if (!this.canManageMatches()) return this.toast("Sem permissão para cadastrar convidados.", true);
+      this.modal("Cadastrar convidado", `<form id="playerForm" class="form-grid"><div class="field"><label>Nome completo</label><input name="name" required></div><div class="field"><label>Apelido</label><input name="nickname"></div><div class="field"><label>Posição</label><select name="position">${positionOptions.map(position => `<option>${position}</option>`).join("")}</select></div><label class="check-row"><input name="goalkeeper" type="checkbox"> Também joga no gol</label><button class="btn btn-primary btn-block">Cadastrar</button></form>`, (root, close) => {
+        $("#playerForm", root).addEventListener("submit", async event => {
+          event.preventDefault();
+          const form = new FormData(event.currentTarget);
+          const position = form.get("position");
+          await this.repo.mutate("players", {
+            id: uid(),
+            group_id: this.state.currentGroupId,
+            user_id: null,
+            name: form.get("name"),
+            nickname: form.get("nickname") || String(form.get("name")).split(" ")[0],
+            skill: 3.5,
+            fair_play: 4,
+            conditioning: 3.5,
+            primary_position: position,
+            secondary_position: "",
+            goalkeeper: form.get("goalkeeper") === "on" || position === "Goleiro",
+            active: true,
+            games: 0,
+            wins: 0,
+            goals: 0,
+            assists: 0
+          });
+          this.state = this.repo.state;
+          close();
+          this.render();
+          this.toast("Convidado cadastrado.");
+        });
       });
     },
 
     openAnnouncementForm() {
-      if (!this.canManageMatches()) return this.toast("Seu perfil não pode publicar avisos.", true);
-      this.modal("Publicar aviso",`<form id="noticeForm" class="form-grid"><div class="field"><label>Título</label><input name="title" required></div><div class="field"><label>Mensagem</label><textarea name="body" required></textarea></div><button class="btn btn-primary btn-block">Publicar</button></form>`,(root,close)=>{$("#noticeForm",root).addEventListener("submit",async e=>{e.preventDefault();const f=new FormData(e.currentTarget);await this.repo.mutate("announcements",{id:uid("notice"),group_id:this.state.currentGroupId,title:f.get("title"),body:f.get("body"),created_at:nowIso()});this.state=this.repo.state;close();this.render();this.toast("Aviso publicado.");});});
-    },
-
-    async logout() {
-      const confirmed = window.confirm("Deseja sair da sua conta neste aparelho?");
-      if (!confirmed) return;
-      await this.repo.signOut();
-      this.state = null;
-      const cleanUrl = appBaseUrl();
-      window.location.replace(cleanUrl);
-    },
-
-    openProfileModal() {
-      const p=this.state.profile||{};
-      const avatarUrl=safeImageUrl(p.avatar_url);
-      const avatar=avatarUrl?`<img class="profile-photo" src="${escapeHtml(avatarUrl)}" alt="Foto de ${escapeHtml(p.name||"usuário")}" referrerpolicy="no-referrer">`:`<div class="profile-photo profile-initials">${initials(p.name||"Usuário")}</div>`;
-      this.modal("Minha conta",`<div class="profile-summary">${avatar}<div><strong>${escapeHtml(p.name||"Usuário")}</strong><small>${escapeHtml(p.email||"")}</small></div></div><form id="profileForm" class="form-grid"><div class="field"><label>Nome</label><input name="name" value="${escapeHtml(p.name||"")}" required></div><div class="field"><label>E-mail</label><input disabled value="${escapeHtml(p.email||"")}"></div><button class="btn btn-primary btn-block">Salvar perfil</button></form><div class="account-separator"></div><button class="btn btn-danger btn-block" type="button" id="profileLogoutButton">Sair da conta</button><p class="account-help">Você voltará à tela de login e poderá entrar com outra conta Google ou por e-mail.</p>`,(root,close)=>{
-        $("#profileForm",root).addEventListener("submit",async e=>{e.preventDefault();const f=new FormData(e.currentTarget);await this.repo.setProfile({name:f.get("name")});this.state=this.repo.state;close();this.render();this.toast("Perfil atualizado.");});
-        $("#profileLogoutButton",root).addEventListener("click",async()=>{close();await this.logout();});
+      if (!this.canManageMatches()) return this.toast("Sem permissão para publicar avisos.", true);
+      this.modal("Publicar aviso", `<form id="noticeForm" class="form-grid"><div class="field"><label>Título</label><input name="title" required></div><div class="field"><label>Mensagem</label><textarea name="body" required></textarea></div><button class="btn btn-primary btn-block">Publicar</button></form>`, (root, close) => {
+        $("#noticeForm", root).addEventListener("submit", async event => {
+          event.preventDefault();
+          const form = new FormData(event.currentTarget);
+          await this.repo.mutate("announcements", { id: uid(), group_id: this.state.currentGroupId, title: form.get("title"), body: form.get("body"), created_at: nowIso() });
+          this.state = this.repo.state;
+          close();
+          this.render();
+          this.toast("Aviso publicado.");
+        });
       });
     },
 
-    exportData() {
-      const blob=new Blob([JSON.stringify(this.state,null,2)],{type:"application/json"});const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download=`resenha-fc-backup-${new Date().toISOString().slice(0,10)}.json`;a.click();URL.revokeObjectURL(url);this.toast("Backup gerado.");
+    async logout() {
+      if (!confirm("Deseja sair da sua conta neste aparelho?")) return;
+      await this.repo.signOut();
+      localStorage.removeItem("resenha-current-group");
+      window.location.replace(appBaseUrl());
     },
 
-    toast(message,error=false) { const root=$("#toastRoot")||document.body; const el=document.createElement("div");el.className=`toast${error?" error":""}`;el.textContent=message;root.appendChild(el);setTimeout(()=>el.remove(),3200); }
+    exportData() {
+      const exportState = { ...this.state, member_ratings: this.canSeeRatings() ? this.state.member_ratings : this.state.member_ratings.filter(item => item.rater_user_id === this.state.profile.id) };
+      const blob = new Blob([JSON.stringify(exportState, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `resenha-fc-${new Date().toISOString().slice(0, 10)}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+      this.toast("Arquivo de dados gerado.");
+    },
+
+    toast(message, error = false) {
+      let root = $("#toastRoot");
+      if (!root) {
+        root = document.createElement("div");
+        root.id = "toastRoot";
+        root.className = "toast-root";
+        document.body.appendChild(root);
+      }
+      const toast = document.createElement("div");
+      toast.className = `toast${error ? " error" : ""}`;
+      toast.textContent = message;
+      root.appendChild(toast);
+      setTimeout(() => toast.remove(), 3600);
+    }
   };
 
   window.App = App;
+
   async function boot() {
     const config = window.RESENHA_CONFIG || {};
     const cloudConfigured = Boolean(config.supabaseUrl && config.supabasePublishableKey);
@@ -657,10 +1018,10 @@
         document.head.appendChild(script);
       }).catch(error => {
         window.RESENHA_CLOUD_LOAD_ERROR = error;
-        console.warn(error);
       });
     }
     App.init();
   }
+
   document.addEventListener("DOMContentLoaded", boot);
 })();

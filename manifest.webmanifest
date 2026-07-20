@@ -2,7 +2,7 @@
   "id": "./",
   "name": "Resenha FC",
   "short_name": "Resenha FC",
-  "description": "Organize peladas entre amigos: presença, times, churrasco, caixa, avaliações e estatísticas.",
+  "description": "Organize peladas: membros, presença, times equilibrados, caixa, churrasco e avaliações confidenciais.",
   "lang": "pt-BR",
   "dir": "ltr",
   "start_url": "./",
@@ -13,8 +13,8 @@
     "standalone",
     "minimal-ui"
   ],
-  "background_color": "#f7f9f7",
-  "theme_color": "#071f4a",
+  "background_color": "#04101a",
+  "theme_color": "#041521",
   "orientation": "portrait-primary",
   "categories": [
     "sports",
@@ -68,10 +68,10 @@
       ]
     },
     {
-      "name": "Sortear times",
-      "short_name": "Times",
-      "description": "Abrir a montagem de times",
-      "url": "./?page=teams",
+      "name": "Membros do grupo",
+      "short_name": "Membros",
+      "description": "Abrir elenco e avaliações",
+      "url": "./?page=members",
       "icons": [
         {
           "src": "icons/icon-192-v023.png",

@@ -1,26 +1,24 @@
-# Validação — Resenha FC v0.2.4
+# Validação da versão 0.3.0
 
-## Código
+## Verificações locais realizadas
 
-- `node --check app.js`: aprovado;
-- arquivo de logotipo 512 × 512 presente na raiz;
-- fallback de imagem presente;
-- cache v0.2.4 contém o novo logotipo;
-- CSP permite Supabase, Google Identity Services e fotos Google;
-- modo demonstração permanece removido;
-- logout permanece ativo.
+- sintaxe JavaScript de `app.js` validada com `node --check`;
+- sintaxe JavaScript de `service-worker.js` validada com `node --check`;
+- 20 escudos SVG gerados e renderizados em PNG para conferência visual;
+- referências de arquivos do manifesto, HTML e service worker verificadas;
+- pacote de atualização gerado sem `supabase-config.js` para preservar as credenciais públicas já configuradas.
 
-## Login Google
+## Testes obrigatórios após a migração
 
-- caminho principal: Google Identity Services → ID token → Supabase `signInWithIdToken`;
-- nonce aleatório e SHA-256 implementados;
-- caminho alternativo: Supabase `signInWithOAuth` com URL validada;
-- ausência de `googleClientId` é indicada na própria tela;
-- nenhuma chave secreta é exigida no frontend.
+1. login Google em Android, Safari e PWA do iPhone;
+2. criação de grupo com cada família de escudo;
+3. ingresso por código e por link de convite;
+4. alteração de posição pelo próprio membro;
+5. atribuição de funções por proprietário e administrador;
+6. transferência de propriedade;
+7. avaliação por membro e visualização privada pela administração;
+8. separação de times por um organizador sem exibição das notas;
+9. tentativa de lançamento financeiro por membro comum;
+10. exclusão de jogo futuro e bloqueio de exclusão após o horário.
 
-## Validação pendente em ambiente real
-
-- popup e seleção de conta em iPhone/iPad;
-- retorno com sessão real do Supabase;
-- teste com duas contas Google;
-- cache após deploy do Cloudflare.
+O SQL foi preparado para execução incremental sobre a v0.2.x, mas o teste final depende do projeto Supabase real do usuário.
