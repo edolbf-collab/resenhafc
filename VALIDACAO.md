@@ -1,23 +1,30 @@
-# Validação da versão 0.1.1
+# Validação — Resenha FC v0.2.0
 
-## Verificações executadas nesta atualização
+## Validações realizadas no pacote
 
-- sintaxe JavaScript válida em `app.js`;
-- leitura válida de `manifest.webmanifest`;
-- leitura válida de `native-assets/ios/AppIcon.appiconset/Contents.json`;
-- carregamento local do `index.html` por servidor HTTP;
-- existência dos arquivos referenciados pelo manifesto e pelo service worker;
-- dimensões dos ícones PWA de 192 px e 512 px;
-- ícones Android `maskable` com margem segura;
-- `apple-touch-icon` de 180 px;
-- catálogo iOS com tamanhos para iPhone, iPad e App Store;
-- atualização do cache do service worker para `resenha-fc-v0.1.1`;
-- atualização da marca no cabeçalho, autenticação e tela offline.
+- sintaxe de `app.js` validada com `node --check`;
+- sintaxe PostgreSQL do esquema validada por parser (`pglast`);
+- manifesto PWA interpretado como JSON válido;
+- arquivos referenciados pelo service worker conferidos;
+- configuração do Supabase mantida sem chaves administrativas;
+- fluxo local de demonstração executado em DOM simulado;
+- navegação para Times e confirmação de presença executadas sem erro;
+- visibilidade de ações validada para member, treasurer e organizer;
+- RPC de pagamento substitui a gravação em duas etapas;
+- RPC de escalação substitui exclusão/inserção não transacional;
+- assinatura Realtime filtrada por `group_id`;
+- avaliação repetida reutiliza o registro anterior.
 
-## Validações preservadas da versão anterior
+## Validação ainda necessária em projeto real
 
-Os fluxos funcionais de navegação, confirmação de presença, churrasco, sorteio de times, caixa, mensalidade, avaliações, lista de espera e estado sem grupo já haviam sido validados na versão 0.1.0.
+A conexão real não pode ser validada sem Project URL e Publishable key de um projeto Supabase ativo. Após executar o esquema, devem ser testados em dois aparelhos:
 
-## Limite desta execução
-
-O ambiente de empacotamento não concluiu uma captura automatizada pelo Chromium headless. Por isso, a atualização visual foi validada por inspeção dos arquivos, dimensões, sintaxe, referências e carregamento HTTP, mas ainda deve ser conferida em aparelhos reais após a publicação HTTPS. O backend Supabase também permanece dependente de um projeto real do usuário.
+1. cadastro e login;
+2. criação e ingresso em grupo;
+3. presença e churrasco;
+4. atualização em tempo real;
+5. sorteio dos times;
+6. cobrança e pagamento;
+7. avaliação repetida;
+8. bloqueios por função do membro;
+9. encerramento e renovação de sessão.

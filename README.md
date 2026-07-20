@@ -1,4 +1,4 @@
-# Resenha FC v0.1.1
+# Resenha FC v0.2.0
 
 Aplicativo PWA para organizar peladas entre amigos, inspirado no problema resolvido pelo antigo Peladeiro.com.br, mas com código, identidade visual e arquitetura originais.
 
@@ -33,7 +33,7 @@ Sem preencher `supabase-config.js`, o aplicativo inicia no modo demonstração e
 
 ## Ativar uso integrado em vários celulares
 
-Consulte `backend/README.md`. O processo consiste em criar o projeto Supabase, executar `backend/supabase-schema.sql`, preencher `supabase-config.js` e publicar a pasta em HTTPS.
+Consulte `BACKEND-ATIVACAO.md`. O processo consiste em criar o projeto Supabase, executar `backend/supabase-schema.sql`, preencher `supabase-config.js` e publicar a pasta em HTTPS.
 
 ## Publicar no Cloudflare Pages
 
@@ -49,7 +49,9 @@ O arquivo `_headers` inclui políticas básicas de segurança e liberação das 
 
 - `PESQUISA-PELADEIRO.md`: reconstrução histórica das funções do serviço antigo;
 - `DEPLOY-CLOUDFLARE.md`: publicação do frontend;
-- `backend/README.md`: ativação do banco e autenticação;
+- `BACKEND-ATIVACAO.md`: ativação guiada do banco e autenticação;
+- `backend/backend-healthcheck.sql`: conferência do projeto após executar o esquema;
+- `CHANGELOG.md`: alterações por versão;
 - `ROADMAP.md`: módulos previstos para as próximas versões;
 - `VALIDACAO.md`: testes executados e limites da validação;
 - `IDENTIDADE-VISUAL.md`: marca, paleta e regras de uso;
@@ -59,7 +61,7 @@ O arquivo `_headers` inclui políticas básicas de segurança e liberação das 
 
 ## Identidade visual para Android e iOS
 
-A versão 0.1.1 incorpora o emblema oficial do Resenha FC na interface, tela de autenticação, tela offline, favicon e instalação PWA.
+A identidade visual incorporada na v0.1.1 permanece o emblema oficial do Resenha FC na interface, tela de autenticação, tela offline, favicon e instalação PWA.
 
 Para Android, o manifesto contém ícones comuns e `maskable`, com margem segura para os formatos circular, quadrado e arredondado usados pelos fabricantes. Também há um pacote de recursos nativos em `native-assets/android/`.
 
@@ -67,7 +69,7 @@ Para iPhone e iPad, foram incluídos `apple-touch-icon`, telas de abertura para 
 
 A aplicação continua sendo uma PWA. Os pacotes nativos de ícones deixam a identidade pronta para uma futura conversão por Capacitor, Android Studio ou Xcode, mas esta pasta não contém APK ou IPA.
 
-## Limites desta primeira versão
+## Limites da versão atual
 
 - notificações push, cobrança Pix automática e upload de fotos ainda não foram ativados;
 - ajuste manual por arrastar jogadores entre times será implementado depois do sorteio automático;

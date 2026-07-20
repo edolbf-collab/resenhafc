@@ -1,10 +1,16 @@
 /*
- * Para ativar a sincronização em nuvem, substitua os valores abaixo pelos dados
- * do seu projeto Supabase. A publishable/anon key pode ficar no frontend quando
- * as políticas RLS do arquivo backend/supabase-schema.sql estiverem aplicadas.
+ * Resenha FC — configuração pública do Supabase.
+ *
+ * 1. Crie o projeto no Supabase.
+ * 2. Execute backend/supabase-schema.sql no SQL Editor.
+ * 3. Copie a Project URL e a Publishable key em Settings > API Keys.
+ *
+ * A Publishable key é própria para aplicações web e móveis. Nunca coloque uma
+ * Secret key ou a antiga service_role key neste arquivo.
  */
 window.RESENHA_CONFIG = {
   supabaseUrl: "",
   supabasePublishableKey: "",
+  authRedirectUrl: window.location.origin,
   appName: "Resenha FC"
 };

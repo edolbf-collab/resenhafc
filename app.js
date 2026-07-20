@@ -13,6 +13,7 @@
   const clamp = (n, min, max) => Math.min(max, Math.max(min, Number(n)));
   const sessionGet = (key) => { try { return sessionStorage.getItem(key); } catch { return null; } };
   const sessionSet = (key, value) => { try { sessionStorage.setItem(key, value); } catch { /* sessão indisponível em origem local */ } };
+  const sessionRemove = (key) => { try { sessionStorage.removeItem(key); } catch { /* sessão indisponível em origem local */ } };
 
   const sample = () => {
     const upcoming = new Date();
@@ -81,6 +82,11 @@
       this.save();
       return records;
     }
+    async recordPayment(record, charge = null) {
+      await this.mutate("payments", record);
+      if (charge) await this.mutate("charges", { ...charge, status:"paid" });
+      return record;
+    }
   }
 
   class SupabaseRepository {
@@ -91,10 +97,21 @@
       });
       this.state = { profile:null, groups:[], currentGroupId:null, players:[], matches:[], attendance:[], assignments:[], charges:[], payments:[], expenses:[], ratings:[], match_events:[], announcements:[] };
       this.channel = null;
+      this.subscribedGroupId = null;
+      this.reloadTimer = null;
     }
     async session() { return (await this.client.auth.getSession()).data.session; }
     async signIn(email, password) { return this.client.auth.signInWithPassword({ email, password }); }
-    async signUp(email, password, name) { return this.client.auth.signUp({ email, password, options:{ data:{ name } } }); }
+    async signUp(email, password, name) {
+      return this.client.auth.signUp({
+        email,
+        password,
+        options:{
+          data:{ name },
+          emailRedirectTo:this.config.authRedirectUrl || window.location.origin
+        }
+      });
+    }
     async signOut() { await this.client.auth.signOut(); }
     async init() {
       const session = await this.session();
@@ -108,49 +125,92 @@
       if (this.state.currentGroupId) await this.loadGroup(this.state.currentGroupId);
       return this.state;
     }
-    async loadGroup(groupId) {
+    async loadGroup(groupId, options = {}) {
+      const { subscribe = true } = options;
       this.state.currentGroupId = groupId;
       const tables = ["players","matches","charges","payments","expenses","announcements"];
       const results = await Promise.all(tables.map(table => this.client.from(table).select("*").eq("group_id", groupId)));
       results.forEach((res,i) => { if (res.error) throw res.error; this.state[tables[i]] = res.data || []; });
-      const matchIds = this.state.matches.map(m => m.id);
-      if (matchIds.length) {
-        const [attendance, assignments, ratings, events] = await Promise.all([
-          this.client.from("match_attendance").select("*").in("match_id", matchIds),
-          this.client.from("team_assignments").select("*").in("match_id", matchIds),
-          this.client.from("player_ratings").select("*").in("match_id", matchIds),
-          this.client.from("match_events").select("*").in("match_id", matchIds)
-        ]);
-        [["attendance",attendance],["assignments",assignments],["ratings",ratings],["match_events",events]].forEach(([key,res]) => { if(res.error) throw res.error; this.state[key]=res.data||[]; });
-      } else { this.state.attendance=[]; this.state.assignments=[]; this.state.ratings=[]; this.state.match_events=[]; }
-      this.subscribe(groupId);
+      const [attendance, assignments, ratings, events] = await Promise.all([
+        this.client.from("match_attendance").select("*").eq("group_id", groupId),
+        this.client.from("team_assignments").select("*").eq("group_id", groupId),
+        this.client.from("player_ratings").select("*").eq("group_id", groupId),
+        this.client.from("match_events").select("*").eq("group_id", groupId)
+      ]);
+      [["attendance",attendance],["assignments",assignments],["ratings",ratings],["match_events",events]].forEach(([key,res]) => {
+        if(res.error) throw res.error;
+        this.state[key]=res.data||[];
+      });
+      if (subscribe) this.subscribe(groupId);
       return this.state;
     }
+    queueReload(groupId) {
+      clearTimeout(this.reloadTimer);
+      this.reloadTimer = setTimeout(async () => {
+        if (this.state.currentGroupId !== groupId) return;
+        try {
+          await this.loadGroup(groupId, { subscribe:false });
+          App.render();
+        } catch (error) {
+          console.error("Falha ao sincronizar alteração em tempo real.", error);
+        }
+      }, 180);
+    }
     subscribe(groupId) {
+      if (this.channel && this.subscribedGroupId === groupId) return;
       if (this.channel) this.client.removeChannel(this.channel);
-      this.channel = this.client.channel(`group-${groupId}`)
-        .on("postgres_changes", { event:"*", schema:"public" }, async () => {
-          await this.loadGroup(groupId); App.render();
-        }).subscribe();
+      const onChange = () => this.queueReload(groupId);
+      let channel = this.client.channel(`group-${groupId}`);
+      channel = channel.on("postgres_changes", { event:"*", schema:"public", table:"groups", filter:`id=eq.${groupId}` }, onChange);
+      ["group_members","players","matches","match_attendance","team_assignments","player_ratings","match_events","charges","payments","expenses","announcements"].forEach(table => {
+        channel = channel.on("postgres_changes", { event:"*", schema:"public", table, filter:`group_id=eq.${groupId}` }, onChange);
+      });
+      this.channel = channel.subscribe();
+      this.subscribedGroupId = groupId;
     }
     async mutate(collection, record, mode = "upsert") {
       const tableMap = { attendance:"match_attendance", assignments:"team_assignments", ratings:"player_ratings" };
       const table = tableMap[collection] || collection;
       if (mode === "delete") {
-        const { error } = await this.client.from(table).delete().eq("id",record.id); if(error) throw error;
+        const { error } = await this.client.from(table).delete().eq("id",record.id);
+        if(error) throw error;
       } else {
-        const { error } = await this.client.from(table).upsert(record); if(error) throw error;
+        const options = collection === "ratings" ? { onConflict:"match_id,rated_player_id,rater_user_id" } : undefined;
+        const { error } = await this.client.from(table).upsert(record, options);
+        if(error) throw error;
       }
-      return this.loadGroup(this.state.currentGroupId);
+      return this.loadGroup(this.state.currentGroupId, { subscribe:false });
     }
     async replaceAssignments(matchId, records) {
-      const deleted = await this.client.from("team_assignments").delete().eq("match_id", matchId);
-      if (deleted.error) throw deleted.error;
-      if (records.length) {
-        const inserted = await this.client.from("team_assignments").insert(records);
-        if (inserted.error) throw inserted.error;
-      }
-      return this.loadGroup(this.state.currentGroupId);
+      const { error } = await this.client.rpc("replace_match_assignments", {
+        p_match_id:matchId,
+        p_assignments:records
+      });
+      if (error) throw error;
+      return this.loadGroup(this.state.currentGroupId, { subscribe:false });
+    }
+    async recordPayment(record, charge = null) {
+      const { error } = await this.client.rpc("record_payment", {
+        p_group_id:record.group_id,
+        p_player_id:record.player_id,
+        p_charge_id:charge?.id || null,
+        p_description:record.description,
+        p_amount:record.amount,
+        p_method:record.method || "manual",
+        p_paid_at:record.paid_at || new Date().toISOString()
+      });
+      if (error) throw error;
+      return this.loadGroup(this.state.currentGroupId, { subscribe:false });
+    }
+    async setProfile(profile) {
+      const name = String(profile.name || "").trim();
+      const { data, error } = await this.client.rpc("update_my_profile", { p_name:name });
+      if (error) throw error;
+      const userUpdate = await this.client.auth.updateUser({ data:{ name:data || name } });
+      if (userUpdate.error) console.warn("Perfil salvo no banco, mas os metadados da sessão não foram atualizados.", userUpdate.error);
+      this.state.profile = { ...this.state.profile, name:data || name };
+      if (this.state.currentGroupId) await this.loadGroup(this.state.currentGroupId, { subscribe:false });
+      return this.state.profile;
     }
     async createGroup(name) {
       const { data, error } = await this.client.rpc("create_group", { p_name:name }); if(error) throw error;
@@ -176,7 +236,11 @@
     async init() {
       this.bindGlobal();
       const config = window.RESENHA_CONFIG || {};
-      const hasCloud = Boolean(config.supabaseUrl && config.supabasePublishableKey && window.supabase && sessionGet("resenha-demo") !== "1");
+      const cloudConfigured = Boolean(config.supabaseUrl && config.supabasePublishableKey && sessionGet("resenha-demo") !== "1");
+      if (cloudConfigured && !window.supabase) {
+        return this.renderBackendError(window.RESENHA_CLOUD_LOAD_ERROR || new Error("Não foi possível carregar o cliente Supabase."));
+      }
+      const hasCloud = Boolean(cloudConfigured && window.supabase);
       this.cloud = hasCloud;
       this.repo = hasCloud ? new SupabaseRepository(config) : new LocalRepository();
       try {
@@ -187,8 +251,12 @@
         if (launchAction === "rsvp") setTimeout(() => this.openRsvp(this.nextMatch()?.id), 0);
         this.registerServiceWorker();
       } catch (error) {
-        console.error(error); this.toast(error.message || "Falha ao iniciar o aplicativo.", true);
-        this.cloud = false; this.repo = new LocalRepository(); this.state = await this.repo.init(); this.render();
+        console.error(error);
+        if (hasCloud) return this.renderBackendError(error);
+        this.toast(error.message || "Falha ao iniciar o aplicativo.", true);
+        this.repo = new LocalRepository();
+        this.state = await this.repo.init();
+        this.render();
       }
     },
 
@@ -217,6 +285,10 @@
     },
 
     currentGroup() { return this.state.groups.find(g => g.id === this.state.currentGroupId) || this.state.groups[0]; },
+    currentRole() { return this.currentGroup()?.role || "member"; },
+    canManageGroup() { return ["owner","admin"].includes(this.currentRole()); },
+    canManageMatches() { return ["owner","admin","organizer"].includes(this.currentRole()); },
+    canManageFinance() { return ["owner","admin","treasurer"].includes(this.currentRole()); },
     activePlayers() { return this.state.players.filter(p => p.group_id === this.state.currentGroupId && p.active !== false); },
     upcomingMatches() { return this.state.matches.filter(m => m.group_id === this.state.currentGroupId && new Date(m.starts_at) >= new Date() && m.status !== "cancelled").sort((a,b) => new Date(a.starts_at)-new Date(b.starts_at)); },
     pastMatches() { return this.state.matches.filter(m => m.group_id === this.state.currentGroupId && (new Date(m.starts_at) < new Date() || m.status === "finished")).sort((a,b) => new Date(b.starts_at)-new Date(a.starts_at)); },
@@ -228,6 +300,11 @@
     attendanceFor(matchId) { return this.state.attendance.filter(a => a.match_id === matchId); },
     confirmedFor(matchId) { return this.attendanceFor(matchId).filter(a => a.status === "confirmed"); },
     player(id) { return this.state.players.find(p => p.id === id); },
+    effectiveSkill(player) {
+      const ratings = this.state.ratings.filter(r => r.rated_player_id === player.id);
+      if (!ratings.length) return Number(player.skill || 0);
+      return ratings.reduce((sum,r) => sum + Number(r.technical || 0), 0) / ratings.length;
+    },
 
     render() {
       if (!this.state) return;
@@ -254,7 +331,7 @@
       const outgoing = this.state.expenses.filter(e=>e.group_id===this.state.currentGroupId).reduce((s,e)=>s+Number(e.amount),0);
       const notice = this.state.announcements.filter(n=>n.group_id===this.state.currentGroupId).sort((a,b)=>new Date(b.created_at)-new Date(a.created_at))[0];
       return `
-        <div class="page-head"><div><h1>Próxima resenha</h1><p>Organização do grupo em um só lugar.</p></div><button class="btn btn-primary btn-small" data-action="new-match">+ Jogo</button></div>
+        <div class="page-head"><div><h1>Próxima resenha</h1><p>Organização do grupo em um só lugar.</p></div>${this.canManageMatches()?'<button class="btn btn-primary btn-small" data-action="new-match">+ Jogo</button>':''}</div>
         ${match ? `
         <section class="card hero-card">
           <span class="eyebrow">● ${escapeHtml(shortDate(match.starts_at))}</span>
@@ -264,7 +341,7 @@
             <div class="hero-stat"><strong>${bbq}</strong><small>no churrasco</small></div>
           </div>
           <div class="actions"><button class="btn btn-ghost" data-action="rsvp" data-id="${match.id}">Confirmar presença</button><button class="btn btn-secondary" data-action="open-match" data-id="${match.id}">Ver detalhes</button></div>
-        </section>` : `<section class="card empty"><strong>Nenhum jogo agendado</strong>Crie a próxima partida e envie o código do grupo aos amigos.<div class="actions" style="justify-content:center"><button class="btn btn-primary" data-action="new-match">Criar jogo</button></div></section>`}
+        </section>` : `<section class="card empty"><strong>Nenhum jogo agendado</strong>Crie a próxima partida e envie o código do grupo aos amigos.${this.canManageMatches()?'<div class="actions" style="justify-content:center"><button class="btn btn-primary" data-action="new-match">Criar jogo</button></div>':''}</section>`}
         ${notice ? `<div class="section-title"><h2>Aviso do grupo</h2></div><div class="notice"><strong>${escapeHtml(notice.title)}</strong><br>${escapeHtml(notice.body)}</div>`:""}
         <div class="section-title"><h2>Acesso rápido</h2></div>
         <div class="quick-grid">
@@ -285,7 +362,7 @@
     matchesPage() {
       const upcoming = this.upcomingMatches(); const past = this.pastMatches();
       const cards = (list) => list.length ? list.map(m=>this.matchCard(m)).join("") : `<div class="card empty"><strong>Nenhum registro</strong>Os jogos aparecerão aqui.</div>`;
-      return `<div class="page-head"><div><h1>Jogos</h1><p>Agenda, confirmações e resenha.</p></div><button class="btn btn-primary btn-small" data-action="new-match">+ Novo</button></div>
+      return `<div class="page-head"><div><h1>Jogos</h1><p>Agenda, confirmações e resenha.</p></div>${this.canManageMatches()?'<button class="btn btn-primary btn-small" data-action="new-match">+ Novo</button>':''}</div>
         <div class="section-title"><h2>Próximos</h2></div><div class="list">${cards(upcoming)}</div>
         <div class="section-title"><h2>Histórico</h2></div><div class="list">${cards(past)}</div>`;
     },
@@ -306,20 +383,20 @@
       const confirmed = this.confirmedFor(match.id).map(a=>this.player(a.player_id)).filter(Boolean);
       const assignments = this.state.assignments.filter(a=>a.match_id===match.id);
       const teams = [...new Set(assignments.map(a=>a.team_name))];
-      return `<div class="page-head"><div><h1>Times</h1><p>${escapeHtml(match.title)} · ${confirmed.length} confirmados</p></div><button class="btn btn-primary btn-small" data-action="draw-teams" data-id="${match.id}">Sortear</button></div>
+      return `<div class="page-head"><div><h1>Times</h1><p>${escapeHtml(match.title)} · ${confirmed.length} confirmados</p></div>${this.canManageMatches()?`<button class="btn btn-primary btn-small" data-action="draw-teams" data-id="${match.id}">Sortear</button>`:''}</div>
         <div class="notice">O sorteio considera nota técnica, goleiros e posições. Depois do sorteio, o administrador pode refazer ou ajustar manualmente em uma versão futura.</div>
-        <div class="section-title"><h2>Escalação</h2><button data-action="draw-teams" data-id="${match.id}">${assignments.length?"Refazer":"Gerar times"}</button></div>
+        <div class="section-title"><h2>Escalação</h2>${this.canManageMatches()?`<button data-action="draw-teams" data-id="${match.id}">${assignments.length?"Refazer":"Gerar times"}</button>`:''}</div>
         ${teams.length ? `<div class="team-grid">${teams.map(name=>this.teamCard(name,assignments,match)).join("")}</div>` : `<div class="card empty"><strong>Times ainda não sorteados</strong>${confirmed.length<2?"Aguarde mais confirmações.":"Toque em “Sortear” para criar equipes equilibradas."}</div>`}
         <div class="section-title"><h2>Confirmados</h2></div><div class="list">${confirmed.map(p=>this.playerRow(p)).join("") || `<div class="card empty">Nenhum confirmado.</div>`}</div>`;
     },
 
     teamCard(name, assignments, match) {
       const members = assignments.filter(a=>a.team_name===name).sort((a,b)=>a.slot-b.slot).map(a=>this.player(a.player_id)).filter(Boolean);
-      const strength = members.reduce((s,p)=>s+Number(p.skill||0),0);
-      return `<section class="card team-card"><div class="team-head"><strong>${escapeHtml(name)}</strong><small>força ${strength.toFixed(1)}</small></div>${members.map(p=>`<div class="team-player"><div class="player-avatar">${initials(p.name)}</div><div class="list-main"><strong>${escapeHtml(p.nickname||p.name)}</strong><small>${escapeHtml(p.primary_position)} · nota ${Number(p.skill).toFixed(1)}</small></div>${p.goalkeeper?'<span class="score-pill">GOL</span>':''}</div>`).join("")}</section>`;
+      const strength = members.reduce((s,p)=>s+this.effectiveSkill(p),0);
+      return `<section class="card team-card"><div class="team-head"><strong>${escapeHtml(name)}</strong><small>força ${strength.toFixed(1)}</small></div>${members.map(p=>`<div class="team-player"><div class="player-avatar">${initials(p.name)}</div><div class="list-main"><strong>${escapeHtml(p.nickname||p.name)}</strong><small>${escapeHtml(p.primary_position)} · nota ${this.effectiveSkill(p).toFixed(1)}</small></div>${p.goalkeeper?'<span class="score-pill">GOL</span>':''}</div>`).join("")}</section>`;
     },
 
-    playerRow(p, trailing="") { return `<div class="card list-row"><div class="player-avatar">${initials(p.name)}</div><div class="list-main"><strong>${escapeHtml(p.name)}</strong><small>${escapeHtml(p.primary_position||"Sem posição")} · ${p.games||0} jogos</small></div>${trailing||`<span class="score-pill">${Number(p.skill||0).toFixed(1)}</span>`}</div>`; },
+    playerRow(p, trailing="") { return `<div class="card list-row"><div class="player-avatar">${initials(p.name)}</div><div class="list-main"><strong>${escapeHtml(p.name)}</strong><small>${escapeHtml(p.primary_position||"Sem posição")} · ${p.games||0} jogos</small></div>${trailing||`<span class="score-pill">${this.effectiveSkill(p).toFixed(1)}</span>`}</div>`; },
 
     financePage() {
       const groupId=this.state.currentGroupId;
@@ -327,7 +404,7 @@
       const income=payments.reduce((s,p)=>s+Number(p.amount),0); const out=expenses.reduce((s,e)=>s+Number(e.amount),0); const balance=income-out;
       const charges=this.state.charges.filter(c=>c.group_id===groupId); const paid=charges.filter(c=>c.status==="paid").length; const pct=charges.length?Math.round(paid/charges.length*100):0;
       const movements=[...payments.map(p=>({...p,type:"income",description:`Pagamento · ${this.player(p.player_id)?.nickname||"Jogador"}`,date:p.paid_at})),...expenses.map(e=>({...e,type:"expense",date:e.occurred_at}))].sort((a,b)=>new Date(b.date)-new Date(a.date));
-      return `<div class="page-head"><div><h1>Caixa</h1><p>Mensalidades, churrasco e despesas.</p></div><button class="btn btn-primary btn-small" data-action="new-finance">+ Lançar</button></div>
+      return `<div class="page-head"><div><h1>Caixa</h1><p>Mensalidades, churrasco e despesas.</p></div>${this.canManageFinance()?'<button class="btn btn-primary btn-small" data-action="new-finance">+ Lançar</button>':''}</div>
         <section class="card balance-card"><small>Saldo atual</small><h2 class="money">${money(balance)}</h2><div class="balance-track"><span style="width:${pct}%"></span></div><p style="margin:9px 0 0;color:var(--muted);font-size:12px">${paid} de ${charges.length} mensalidades pagas · ${pct}%</p></section>
         <div class="metrics" style="margin-top:10px"><div class="card metric"><strong class="money">${money(income)}</strong><small>entradas</small></div><div class="card metric"><strong class="money">${money(out)}</strong><small>saídas</small></div><div class="card metric"><strong>${charges.filter(c=>c.status!=="paid").length}</strong><small>pendentes</small></div></div>
         <div class="section-title"><h2>Movimentações</h2></div><div class="list">${movements.map(m=>`<div class="card finance-row"><div class="finance-icon ${m.type==="income"?"finance-income":"finance-expense"}">${m.type==="income"?"+":"−"}</div><div class="list-main"><strong>${escapeHtml(m.description)}</strong><small>${escapeHtml(shortDate(m.date))}</small></div><strong class="money" style="color:${m.type==="income"?'var(--primary)':'var(--danger)'}">${m.type==="income"?"+":"−"}${money(m.amount)}</strong></div>`).join("") || '<div class="card empty">Sem movimentações.</div>'}</div>
@@ -350,11 +427,11 @@
         <div class="list">
           <button class="card list-row" data-action="players"><div class="player-avatar">♟</div><div class="list-main"><strong>Jogadores</strong><small>Cadastro, posição, nível e vínculo.</small></div><strong>›</strong></button>
           <button class="card list-row" data-action="group"><div class="player-avatar">#</div><div class="list-main"><strong>Convidar amigos</strong><small>Código do grupo: ${escapeHtml(group?.invite_code||"—")}</small></div><strong>›</strong></button>
-          <button class="card list-row" data-action="announcement"><div class="player-avatar">!</div><div class="list-main"><strong>Avisos</strong><small>Comunicados para todos os participantes.</small></div><strong>›</strong></button>
+          ${this.canManageMatches()?'<button class="card list-row" data-action="announcement"><div class="player-avatar">!</div><div class="list-main"><strong>Avisos</strong><small>Comunicados para todos os participantes.</small></div><strong>›</strong></button>':''}
           <button class="card list-row" data-action="export"><div class="player-avatar">⇩</div><div class="list-main"><strong>Backup e exportação</strong><small>Baixar dados completos em JSON.</small></div><strong>›</strong></button>
           ${this.cloud?`<button class="card list-row" data-action="sign-out"><div class="player-avatar">↪</div><div class="list-main"><strong>Sair da conta</strong><small>Encerrar sessão neste aparelho.</small></div><strong>›</strong></button>`:`<button class="card list-row" data-action="reset-demo"><div class="player-avatar">↺</div><div class="list-main"><strong>Redefinir demonstração</strong><small>Restaurar os dados de exemplo.</small></div><strong>›</strong></button>`}
         </div>
-        <div class="section-title"><h2>Versão</h2></div><div class="notice">Resenha FC v0.1.1 · PWA responsiva · frontend pronto para Cloudflare Pages · backend Supabase com autenticação, PostgreSQL, RLS e sincronização em tempo real.</div>`;
+        <div class="section-title"><h2>Versão</h2></div><div class="notice">Resenha FC v0.2.0 · PWA responsiva · frontend pronto para Cloudflare Pages · backend Supabase com autenticação, PostgreSQL, RLS e sincronização em tempo real.</div>`;
     },
 
     async handleAction(action, data) {
@@ -378,6 +455,14 @@
       $("#demoButton").addEventListener("click",async()=>{sessionSet("resenha-demo","1");location.reload();});
     },
 
+
+    renderBackendError(error) {
+      const message = escapeHtml(error?.message || "Não foi possível conectar ao backend.");
+      document.body.innerHTML = `<main class="auth-screen"><section class="auth-panel"><img class="auth-logo" src="brand/logo-resenha-fc.png" alt="Resenha FC"><h1>Falha na conexão</h1><p>O backend está configurado, mas não respondeu corretamente.</p><div class="card auth-card"><div class="notice"><strong>Detalhe técnico</strong><br>${message}</div><button class="btn btn-primary btn-block" id="retryCloudButton">Tentar novamente</button><button class="btn btn-ghost btn-block" id="localFallbackButton">Abrir demonstração local</button></div></section></main>`;
+      $("#retryCloudButton").addEventListener("click", () => location.reload());
+      $("#localFallbackButton").addEventListener("click", () => { sessionSet("resenha-demo", "1"); location.reload(); });
+    },
+
     modal(title, content, onReady) {
       const root=$("#modalRoot"); root.innerHTML=`<div class="modal-backdrop" role="dialog" aria-modal="true"><section class="modal"><div class="modal-handle"></div><div class="modal-head"><h2>${escapeHtml(title)}</h2><button class="modal-close" aria-label="Fechar">×</button></div>${content}</section></div>`;
       const close=()=>root.innerHTML=""; $(".modal-close",root).addEventListener("click",close); $(".modal-backdrop",root).addEventListener("click",e=>{if(e.target.classList.contains("modal-backdrop"))close();});
@@ -385,6 +470,7 @@
     },
 
     openMatchForm() {
+      if (!this.canManageMatches()) return this.toast("Seu perfil não pode criar jogos.", true);
       const dt=new Date(Date.now()+7*86400000); dt.setHours(20,0,0,0); const local=new Date(dt.getTime()-dt.getTimezoneOffset()*60000).toISOString().slice(0,16);
       this.modal("Novo jogo",`<form id="matchForm" class="form-grid"><div class="field"><label>Título</label><input name="title" required value="Pelada semanal"></div><div class="field"><label>Data e hora</label><input name="starts_at" type="datetime-local" required value="${local}"></div><div class="field"><label>Local</label><input name="location" required placeholder="Nome da arena e quadra"></div><div class="field-row"><div class="field"><label>Máximo de jogadores</label><input name="max_players" type="number" min="4" max="40" value="12"></div><div class="field"><label>Jogadores por time</label><input name="players_per_team" type="number" min="2" max="11" value="6"></div></div><label class="check-row"><input name="bbq_enabled" type="checkbox" checked> Organizar churrasco após o jogo</label><div class="field"><label>Valor do churrasco por pessoa</label><input name="bbq_price" type="number" min="0" step="0.01" value="25"></div><div class="field"><label>Observações</label><textarea name="notes" placeholder="Prazo de confirmação, uniforme, regras..."></textarea></div><button class="btn btn-primary btn-block">Criar jogo</button></form>`,(root,close)=>{
         $("#matchForm",root).addEventListener("submit",async e=>{e.preventDefault(); const f=new FormData(e.currentTarget); const record={id:uid("match"),group_id:this.state.currentGroupId,title:f.get("title"),starts_at:new Date(f.get("starts_at")).toISOString(),location:f.get("location"),max_players:Number(f.get("max_players")),players_per_team:Number(f.get("players_per_team")),status:"scheduled",bbq_enabled:f.get("bbq_enabled")==="on",bbq_price:Number(f.get("bbq_price")||0),notes:f.get("notes")||"",created_at:nowIso()}; await this.repo.mutate("matches",record); this.state=this.repo.state; close(); this.render(); this.toast("Jogo criado.");});
@@ -395,7 +481,7 @@
       const match=this.state.matches.find(m=>m.id===id); if(!match)return;
       const att=this.attendanceFor(id); const grouped={confirmed:[],maybe:[],out:[],waitlist:[]}; att.forEach(a=>grouped[a.status]?.push(a));
       const groupHtml=(label,key)=>`<div class="section-title"><h2>${label} (${grouped[key].length})</h2></div><div class="list">${grouped[key].map(a=>this.playerRow(this.player(a.player_id),a.bbq?'<span class="score-pill">Churrasco</span>':'')).join("")||'<div class="card empty">Nenhum.</div>'}</div>`;
-      this.modal(match.title,`<div class="notice">${escapeHtml(shortDate(match.starts_at))}<br>${escapeHtml(match.location)}${match.notes?`<br><br>${escapeHtml(match.notes)}`:""}</div><div class="actions"><button class="btn btn-primary" data-action="rsvp" data-id="${match.id}">Minha presença</button><button class="btn btn-secondary" data-action="draw-teams" data-id="${match.id}">Sortear times</button></div>${groupHtml("Confirmados","confirmed")}${groupHtml("Talvez","maybe")}${groupHtml("Lista de espera","waitlist")}${groupHtml("Não vão","out")}`);
+      this.modal(match.title,`<div class="notice">${escapeHtml(shortDate(match.starts_at))}<br>${escapeHtml(match.location)}${match.notes?`<br><br>${escapeHtml(match.notes)}`:""}</div><div class="actions"><button class="btn btn-primary" data-action="rsvp" data-id="${match.id}">Minha presença</button>${this.canManageMatches()?`<button class="btn btn-secondary" data-action="draw-teams" data-id="${match.id}">Sortear times</button>`:''}</div>${groupHtml("Confirmados","confirmed")}${groupHtml("Talvez","maybe")}${groupHtml("Lista de espera","waitlist")}${groupHtml("Não vão","out")}`);
     },
 
     openRsvp(matchId) {
@@ -408,18 +494,19 @@
     },
 
     async drawTeams(matchId) {
+      if (!this.canManageMatches()) return this.toast("Seu perfil não pode montar os times.", true);
       const match=this.state.matches.find(m=>m.id===matchId); const players=this.confirmedFor(matchId).map(a=>this.player(a.player_id)).filter(Boolean);
       if(players.length<4)return this.toast("São necessários ao menos 4 jogadores confirmados.",true);
       const perTeam=Number(match.players_per_team||6); const teamCount=clamp(Math.ceil(players.length/perTeam),2,4); const teamNames=["Time Verde","Time Branco","Time Azul","Time Laranja"].slice(0,teamCount);
       const teams=teamNames.map(name=>({name,players:[],strength:0,goalkeepers:0,positions:{}}));
-      const ordered=[...players].sort((a,b)=>(Number(b.goalkeeper)-Number(a.goalkeeper))||(Number(b.skill)-Number(a.skill)));
+      const ordered=[...players].sort((a,b)=>(Number(b.goalkeeper)-Number(a.goalkeeper))||(this.effectiveSkill(b)-this.effectiveSkill(a)));
       ordered.forEach((p,index)=>{
         const candidates=[...teams].sort((a,b)=>{
           if(p.goalkeeper&&a.goalkeepers!==b.goalkeepers)return a.goalkeepers-b.goalkeepers;
           if(a.players.length!==b.players.length)return a.players.length-b.players.length;
           return a.strength-b.strength;
         });
-        const t=candidates[0];t.players.push(p);t.strength+=Number(p.skill||0);t.goalkeepers+=p.goalkeeper?1:0;t.positions[p.primary_position]=(t.positions[p.primary_position]||0)+1;
+        const t=candidates[0];t.players.push(p);t.strength+=this.effectiveSkill(p);t.goalkeepers+=p.goalkeeper?1:0;t.positions[p.primary_position]=(t.positions[p.primary_position]||0)+1;
       });
       const records=[];
       for(const t of teams) for(let i=0;i<t.players.length;i++) records.push({id:uid(),match_id:matchId,player_id:t.players[i].id,team_name:t.name,slot:i+1});
@@ -428,9 +515,10 @@
     },
 
     openFinanceForm() {
+      if (!this.canManageFinance()) return this.toast("Seu perfil não pode fazer lançamentos financeiros.", true);
       const players=this.activePlayers();
       this.modal("Novo lançamento",`<form id="financeForm" class="form-grid"><div class="field"><label>Tipo</label><select name="type"><option value="payment">Pagamento recebido</option><option value="expense">Despesa</option><option value="charge">Nova cobrança</option></select></div><div class="field"><label>Jogador</label><select name="player_id"><option value="">Não se aplica</option>${players.map(p=>`<option value="${p.id}">${escapeHtml(p.name)}</option>`).join("")}</select></div><div class="field"><label>Descrição</label><input name="description" required placeholder="Mensalidade, quadra, bola..."></div><div class="field"><label>Valor</label><input name="amount" type="number" min="0.01" step="0.01" required></div><button class="btn btn-primary btn-block">Salvar lançamento</button></form>`,(root,close)=>{
-        $("#financeForm",root).addEventListener("submit",async e=>{e.preventDefault();const f=new FormData(e.currentTarget);const type=f.get("type"),playerId=f.get("player_id")||null,base={id:uid(),group_id:this.state.currentGroupId,description:f.get("description"),amount:Number(f.get("amount")),player_id:playerId};if(type==="payment"){const charge=this.state.charges.filter(c=>c.group_id===this.state.currentGroupId&&c.player_id===playerId&&c.status!=="paid"&&c.status!=="cancelled").sort((a,b)=>String(a.due_date).localeCompare(String(b.due_date)))[0];await this.repo.mutate("payments",{...base,charge_id:charge?.id||null,paid_at:nowIso(),method:"manual"});if(charge)await this.repo.mutate("charges",{...charge,status:"paid"});}if(type==="expense")await this.repo.mutate("expenses",{...base,occurred_at:nowIso(),category:"outros"});if(type==="charge")await this.repo.mutate("charges",{...base,due_date:new Date().toISOString().slice(0,10),status:"open"});this.state=this.repo.state;close();this.render();this.toast("Lançamento salvo.");});
+        $("#financeForm",root).addEventListener("submit",async e=>{e.preventDefault();const f=new FormData(e.currentTarget);const type=f.get("type"),playerId=f.get("player_id")||null,base={id:uid(),group_id:this.state.currentGroupId,description:f.get("description"),amount:Number(f.get("amount")),player_id:playerId};if(type==="payment"){const charge=this.state.charges.filter(c=>c.group_id===this.state.currentGroupId&&c.player_id===playerId&&c.status!=="paid"&&c.status!=="cancelled").sort((a,b)=>String(a.due_date).localeCompare(String(b.due_date)))[0];await this.repo.recordPayment({...base,charge_id:charge?.id||null,paid_at:nowIso(),method:"manual"},charge);}if(type==="expense")await this.repo.mutate("expenses",{...base,occurred_at:nowIso(),category:"outros"});if(type==="charge")await this.repo.mutate("charges",{...base,due_date:new Date().toISOString().slice(0,10),status:"open"});this.state=this.repo.state;close();this.render();this.toast("Lançamento salvo.");});
       });
     },
 
@@ -438,15 +526,16 @@
       const match=this.pastMatches()[0]; if(!match)return this.toast("Ainda não há jogo concluído para avaliar.",true);
       const players=this.activePlayers().filter(p=>p.id!==this.myPlayer()?.id);
       this.modal("Avaliar jogador",`<form id="ratingForm" class="form-grid"><div class="notice">Avaliação referente a <strong>${escapeHtml(match.title)}</strong>. As médias ajudam a equilibrar os times.</div><div class="field"><label>Jogador</label><select name="player_id" required>${players.map(p=>`<option value="${p.id}">${escapeHtml(p.name)}</option>`).join("")}</select></div>${[["technical","Nota técnica"],["fair_play","Fair play"],["conditioning","Condicionamento"]].map(([n,l])=>`<div class="field"><label>${l} (1 a 5)</label><input name="${n}" type="range" min="1" max="5" step="0.5" value="4" oninput="this.nextElementSibling.textContent=this.value"><strong>4</strong></div>`).join("")}<div class="field"><label>Comentário opcional</label><textarea name="comment" placeholder="Comentário respeitoso e objetivo"></textarea></div><button class="btn btn-primary btn-block">Enviar avaliação</button></form>`,(root,close)=>{
-        $("#ratingForm",root).addEventListener("submit",async e=>{e.preventDefault();const f=new FormData(e.currentTarget);const record={id:uid("rating"),match_id:match.id,rated_player_id:f.get("player_id"),rater_user_id:this.state.profile?.id||"demo-user",technical:Number(f.get("technical")),fair_play:Number(f.get("fair_play")),conditioning:Number(f.get("conditioning")),comment:f.get("comment")||"",created_at:nowIso()};await this.repo.mutate("ratings",record);this.state=this.repo.state;close();this.render();this.toast("Avaliação registrada.");});
+        $("#ratingForm",root).addEventListener("submit",async e=>{e.preventDefault();const f=new FormData(e.currentTarget);const ratedPlayerId=f.get("player_id"),raterUserId=this.state.profile?.id||"demo-user",existing=this.state.ratings.find(r=>r.match_id===match.id&&r.rated_player_id===ratedPlayerId&&r.rater_user_id===raterUserId);const record={id:existing?.id||uid("rating"),match_id:match.id,rated_player_id:ratedPlayerId,rater_user_id:raterUserId,technical:Number(f.get("technical")),fair_play:Number(f.get("fair_play")),conditioning:Number(f.get("conditioning")),comment:f.get("comment")||"",created_at:existing?.created_at||nowIso()};await this.repo.mutate("ratings",record);this.state=this.repo.state;close();this.render();this.toast("Avaliação registrada.");});
       });
     },
 
     openPlayers() {
-      this.modal("Jogadores",`<div class="actions" style="margin-top:0"><button class="btn btn-primary" id="addPlayer">+ Cadastrar jogador</button></div><div class="section-title"><h2>${this.activePlayers().length} ativos</h2></div><div class="list">${this.activePlayers().map(p=>this.playerRow(p)).join("")}</div>`,(root)=>{$("#addPlayer",root).addEventListener("click",()=>this.openPlayerForm());});
+      this.modal("Jogadores",`${this.canManageMatches()?'<div class="actions" style="margin-top:0"><button class="btn btn-primary" id="addPlayer">+ Cadastrar jogador</button></div>':''}<div class="section-title"><h2>${this.activePlayers().length} ativos</h2></div><div class="list">${this.activePlayers().map(p=>this.playerRow(p)).join("")}</div>`,(root)=>{$("#addPlayer",root)?.addEventListener("click",()=>this.openPlayerForm());});
     },
 
     openPlayerForm() {
+      if (!this.canManageMatches()) return this.toast("Seu perfil não pode cadastrar jogadores.", true);
       this.modal("Cadastrar jogador",`<form id="playerForm" class="form-grid"><div class="field"><label>Nome completo</label><input name="name" required></div><div class="field-row"><div class="field"><label>Apelido</label><input name="nickname"></div><div class="field"><label>Nota inicial</label><input name="skill" type="number" min="1" max="5" step="0.1" value="3.5"></div></div><div class="field"><label>Posição principal</label><select name="position"><option>Goleiro</option><option>Zagueiro</option><option>Lateral</option><option selected>Meia</option><option>Atacante</option></select></div><label class="check-row"><input name="goalkeeper" type="checkbox"> Pode jogar no gol</label><button class="btn btn-primary btn-block">Cadastrar</button></form>`,(root,close)=>{$("#playerForm",root).addEventListener("submit",async e=>{e.preventDefault();const f=new FormData(e.currentTarget);const record={id:uid("player"),group_id:this.state.currentGroupId,user_id:null,name:f.get("name"),nickname:f.get("nickname")||f.get("name").split(" ")[0],skill:Number(f.get("skill")),fair_play:4,conditioning:3.5,primary_position:f.get("position"),secondary_position:"",goalkeeper:f.get("goalkeeper")==="on"||f.get("position")==="Goleiro",active:true,games:0,wins:0,goals:0,assists:0};await this.repo.mutate("players",record);this.state=this.repo.state;close();this.openPlayers();this.toast("Jogador cadastrado.");});});
     },
 
@@ -459,6 +548,7 @@
     },
 
     openAnnouncementForm() {
+      if (!this.canManageMatches()) return this.toast("Seu perfil não pode publicar avisos.", true);
       this.modal("Publicar aviso",`<form id="noticeForm" class="form-grid"><div class="field"><label>Título</label><input name="title" required></div><div class="field"><label>Mensagem</label><textarea name="body" required></textarea></div><button class="btn btn-primary btn-block">Publicar</button></form>`,(root,close)=>{$("#noticeForm",root).addEventListener("submit",async e=>{e.preventDefault();const f=new FormData(e.currentTarget);await this.repo.mutate("announcements",{id:uid("notice"),group_id:this.state.currentGroupId,title:f.get("title"),body:f.get("body"),created_at:nowIso()});this.state=this.repo.state;close();this.render();this.toast("Aviso publicado.");});});
     },
 
@@ -485,7 +575,10 @@
         script.onload = resolve;
         script.onerror = () => reject(new Error("Não foi possível carregar o cliente de nuvem."));
         document.head.appendChild(script);
-      }).catch(error => console.warn(error));
+      }).catch(error => {
+        window.RESENHA_CLOUD_LOAD_ERROR = error;
+        console.warn(error);
+      });
     }
     App.init();
   }

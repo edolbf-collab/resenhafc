@@ -33,12 +33,12 @@
 
 ## Evolução de segurança e administração
 
-- separar tecnicamente as permissões de proprietário, administrador, tesoureiro e organizador;
+- criar tela para o proprietário atribuir as funções já protegidas no backend;
 - trilha de auditoria para alterações financeiras e administrativas;
 - recuperação de conta e autenticação social;
 - política de privacidade, consentimento e exclusão de conta/dados;
 - exportação CSV/PDF e restauração de backup;
-- testes automatizados do backend e políticas RLS.
+- testes automatizados em projeto Supabase de homologação e testes específicos das políticas RLS.
 
 ## Possíveis recursos adicionais
 
