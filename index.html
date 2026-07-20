@@ -9,7 +9,7 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Resenha FC">
   <meta name="description" content="Organização completa de peladas entre amigos: presença, times, caixa, churrasco, avaliações e estatísticas.">
-  <link rel="manifest" href="manifest.webmanifest?v=0.2.3">
+  <link rel="manifest" href="manifest.webmanifest?v=0.2.4">
   <!-- iOS/iPadOS: arquivos versionados na raiz evitam reaproveitamento do ícone antigo pelo Safari. -->
   <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon-180x180-v023.png">
   <link rel="apple-touch-icon" sizes="167x167" href="/apple-touch-icon-167x167-v023.png">
@@ -26,7 +26,8 @@
   <link rel="apple-touch-startup-image" href="icons/splash/apple-splash-1170-2532.png" media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3)">
   <link rel="apple-touch-startup-image" href="icons/splash/apple-splash-1179-2556.png" media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3)">
   <link rel="apple-touch-startup-image" href="icons/splash/apple-splash-1290-2796.png" media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3)">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="preload" as="image" href="login-logo-v024.png" type="image/png">
+  <link rel="stylesheet" href="styles.css?v=0.2.4">
   <title>Resenha FC</title>
 </head>
 <body>
@@ -58,7 +59,7 @@
   <div id="modalRoot"></div>
   <div id="toastRoot" class="toast-root" aria-live="assertive"></div>
 
-  <script src="supabase-config.js"></script>
-  <script src="app.js"></script>
+  <script src="supabase-config.js?v=0.2.4"></script>
+  <script src="app.js?v=0.2.4"></script>
 </body>
 </html>

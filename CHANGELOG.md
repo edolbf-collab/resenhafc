@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.2.4 — login Google no iPhone e marca da tela de acesso
+
+- Logotipo de login otimizado, versionado e incluído na raiz e na pasta de marca.
+- Fallback automático para o Apple Touch Icon quando a imagem da tela de acesso falhar.
+- Google Identity Services adicionado como fluxo principal.
+- Sessão Google criada pelo `signInWithIdToken` do Supabase, com nonce criptográfico.
+- OAuth tradicional mantido como fallback e executado com redirecionamento controlado.
+- Política CSP ampliada somente para endpoints necessários do Google.
+- Fotos de perfil `googleusercontent.com` liberadas na CSP.
+- Cache da PWA atualizado para v0.2.4.
+
 ## v0.2.3 — correção do ícone no iPhone e iPad
 
 - Ícones Apple Touch movidos também para a raiz do site, onde o Safari procura os arquivos convencionais.

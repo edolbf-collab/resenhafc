@@ -1,4 +1,4 @@
-const CACHE = "resenha-fc-v0.2.3";
+const CACHE = "resenha-fc-v0.2.4";
 const ASSETS = [
   "./",
   "./index.html",
@@ -9,6 +9,8 @@ const ASSETS = [
   "./offline.html",
   "./brand/brand-mark.png",
   "./brand/logo-resenha-fc.png",
+  "./login-logo-v024.png",
+  "./brand/login-logo-v024.png",
   "./icons/favicon-16x16.png",
   "./icons/favicon-32x32.png",
   "./icons/icon-192-v023.png",

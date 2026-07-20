@@ -205,6 +205,11 @@ button { cursor: pointer; }
 .auth-panel > p { color: var(--muted); line-height: 1.5; text-align: center; }
 .auth-card { padding: 18px; margin-top: 20px; }
 .auth-error { margin-bottom: 14px; background: #fff1f0; color: #7f211c; border-color: #f1cbc8; }
+.google-login-area { display: grid; gap: 8px; min-height: 44px; }
+.google-identity-button { width: 100%; min-height: 44px; display: grid; place-items: center; transition: opacity .18s ease; }
+.google-identity-button > div, .google-identity-button iframe { max-width: 100% !important; }
+.google-identity-button.is-loading { opacity: .55; pointer-events: none; }
+.google-login-hint { display: block; color: var(--muted); line-height: 1.4; text-align: center; }
 .divider { display: flex; gap: 10px; align-items: center; color: var(--muted); font-size: 11px; margin: 15px 0; }
 .divider::before,.divider::after { content:""; flex:1; height:1px; background:var(--line); }
 

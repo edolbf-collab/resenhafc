@@ -20,6 +20,32 @@
     }
     return "";
   };
+  const appBaseUrl = () => new URL("./", document.baseURI).href;
+  const assetUrl = path => new URL(path, document.baseURI).href;
+  const loadScriptOnce = (id, src) => new Promise((resolve, reject) => {
+    if (document.getElementById(id)) {
+      if (id === "google-identity-script" && window.google?.accounts?.id) return resolve();
+      return document.getElementById(id).addEventListener("load", resolve, { once:true });
+    }
+    const script = document.createElement("script");
+    script.id = id;
+    script.src = src;
+    script.async = true;
+    script.defer = true;
+    script.onload = resolve;
+    script.onerror = () => reject(new Error("Não foi possível carregar o serviço de login."));
+    document.head.appendChild(script);
+  });
+  const randomNonce = () => {
+    const values = new Uint8Array(24);
+    crypto.getRandomValues(values);
+    return [...values].map(value => value.toString(16).padStart(2, "0")).join("");
+  };
+  const sha256Hex = async value => {
+    const bytes = new TextEncoder().encode(value);
+    const digest = await crypto.subtle.digest("SHA-256", bytes);
+    return [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, "0")).join("");
+  };
 
 
   class SupabaseRepository {
@@ -35,15 +61,26 @@
     }
     async session() { return (await this.client.auth.getSession()).data.session; }
     async signIn(email, password) { return this.client.auth.signInWithPassword({ email, password }); }
-    async signInWithGoogle() {
-      const redirectTo = this.config.authRedirectUrl || new URL(".", window.location.href).href;
-      return this.client.auth.signInWithOAuth({
+    async signInWithGoogleIdToken(token, nonce) {
+      return this.client.auth.signInWithIdToken({ provider:"google", token, nonce });
+    }
+    async signInWithGoogleOAuth() {
+      const redirectTo = this.config.authRedirectUrl || appBaseUrl();
+      const result = await this.client.auth.signInWithOAuth({
         provider:"google",
         options:{
           redirectTo,
+          skipBrowserRedirect:true,
           queryParams:{ prompt:"select_account" }
         }
       });
+      if (result.error) return result;
+      const authorizeUrl = result.data?.url;
+      if (!authorizeUrl || !/^https:\/\//i.test(authorizeUrl)) {
+        return { data:null, error:new Error("O Supabase não retornou uma URL válida para o Google.") };
+      }
+      window.location.assign(authorizeUrl);
+      return result;
     }
     async signUp(email, password, name) {
       return this.client.auth.signUp({
@@ -391,7 +428,7 @@
           <button class="card list-row" data-action="export"><div class="player-avatar">⇩</div><div class="list-main"><strong>Backup e exportação</strong><small>Baixar dados completos em JSON.</small></div><strong>›</strong></button>
           <button class="card list-row danger-row" data-action="sign-out"><div class="player-avatar danger-avatar">↪</div><div class="list-main"><strong>Sair da conta</strong><small>Desconectar este aparelho e voltar à tela de acesso.</small></div><strong>›</strong></button>
         </div>
-        <div class="section-title"><h2>Versão</h2></div><div class="notice">Resenha FC v0.2.3 · PWA responsiva · backend Supabase obrigatório · login por Google ou e-mail · dados iniciados do zero e sincronizados em tempo real.</div>`;
+        <div class="section-title"><h2>Versão</h2></div><div class="notice">Resenha FC v0.2.4 · PWA responsiva · backend Supabase obrigatório · login por Google ou e-mail · dados iniciados do zero e sincronizados em tempo real.</div>`;
     },
 
     async handleAction(action, data) {
@@ -408,29 +445,87 @@
 
     renderAuth() {
       const oauthError = oauthErrorFromLocation();
-      document.body.innerHTML = `<main class="auth-screen"><section class="auth-panel"><img class="auth-logo" src="brand/logo-resenha-fc.png" alt="Resenha FC"><h1>Resenha FC</h1><p>Organize presença, times, mensalidades, churrasco, notas e estatísticas da sua pelada.</p><div class="card auth-card">${oauthError?`<div class="notice auth-error"><strong>Não foi possível entrar com Google</strong><br>${escapeHtml(oauthError)}</div>`:""}<button class="btn btn-google btn-block" type="button" id="googleLoginButton" aria-label="Continuar com Google"><svg class="google-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M21.6 12.23c0-.71-.06-1.4-.19-2.07H12v3.91h5.38a4.6 4.6 0 0 1-2 3.02v2.54h3.24c1.9-1.75 2.98-4.33 2.98-7.4Z"/><path fill="#34A853" d="M12 22c2.7 0 4.98-.9 6.63-2.43l-3.24-2.54c-.9.6-2.05.96-3.39.96-2.61 0-4.82-1.76-5.61-4.13H3.04v2.62A10 10 0 0 0 12 22Z"/><path fill="#FBBC05" d="M6.39 13.86A6.02 6.02 0 0 1 6.08 12c0-.65.11-1.28.31-1.86V7.52H3.04A10 10 0 0 0 2 12c0 1.61.39 3.14 1.04 4.48l3.35-2.62Z"/><path fill="#EA4335" d="M12 6.01c1.47 0 2.79.5 3.83 1.5l2.87-2.87A9.65 9.65 0 0 0 12 2a10 10 0 0 0-8.96 5.52l3.35 2.62C7.18 7.77 9.39 6.01 12 6.01Z"/></svg><span>Continuar com Google</span></button><div class="divider">ou entre com e-mail</div><form id="authForm" class="form-grid"><div class="field"><label>Nome</label><input id="authName" autocomplete="name" placeholder="Seu nome"></div><div class="field"><label>E-mail</label><input id="authEmail" type="email" autocomplete="email" required placeholder="voce@email.com"></div><div class="field"><label>Senha</label><input id="authPassword" type="password" autocomplete="current-password" minlength="6" required placeholder="Mínimo de 6 caracteres"></div><button class="btn btn-primary btn-block" type="submit">Entrar com e-mail</button><button class="btn btn-secondary btn-block" type="button" id="signupButton">Criar conta com e-mail</button></form></div></section></main>`;
+      const loginLogo = assetUrl("login-logo-v024.png");
+      const iconFallback = assetUrl("apple-touch-icon-180x180-v023.png");
+      document.body.innerHTML = `<main class="auth-screen"><section class="auth-panel"><img class="auth-logo" src="${loginLogo}" alt="Resenha FC" width="156" height="156" decoding="async"><h1>Resenha FC</h1><p>Organize presença, times, mensalidades, churrasco, notas e estatísticas da sua pelada.</p><div class="card auth-card">${oauthError?`<div class="notice auth-error"><strong>Não foi possível entrar com Google</strong><br>${escapeHtml(oauthError)}</div>`:""}<div id="googleLoginArea" class="google-login-area"><div id="googleIdentityButton" class="google-identity-button" aria-label="Continuar com Google"></div><button class="btn btn-google btn-block" type="button" id="googleOAuthFallback" hidden><svg class="google-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M21.6 12.23c0-.71-.06-1.4-.19-2.07H12v3.91h5.38a4.6 4.6 0 0 1-2 3.02v2.54h3.24c1.9-1.75 2.98-4.33 2.98-7.4Z"/><path fill="#34A853" d="M12 22c2.7 0 4.98-.9 6.63-2.43l-3.24-2.54c-.9.6-2.05.96-3.39.96-2.61 0-4.82-1.76-5.61-4.13H3.04v2.62A10 10 0 0 0 12 22Z"/><path fill="#FBBC05" d="M6.39 13.86A6.02 6.02 0 0 1 6.08 12c0-.65.11-1.28.31-1.86V7.52H3.04A10 10 0 0 0 2 12c0 1.61.39 3.14 1.04 4.48l3.35-2.62Z"/><path fill="#EA4335" d="M12 6.01c1.47 0 2.79.5 3.83 1.5l2.87-2.87A9.65 9.65 0 0 0 12 2a10 10 0 0 0-8.96 5.52l3.35 2.62C7.18 7.77 9.39 6.01 12 6.01Z"/></svg><span>Continuar com Google</span></button><small id="googleLoginHint" class="google-login-hint" hidden></small></div><div class="divider">ou entre com e-mail</div><form id="authForm" class="form-grid"><div class="field"><label>Nome</label><input id="authName" autocomplete="name" placeholder="Seu nome"></div><div class="field"><label>E-mail</label><input id="authEmail" type="email" autocomplete="email" required placeholder="voce@email.com"></div><div class="field"><label>Senha</label><input id="authPassword" type="password" autocomplete="current-password" minlength="6" required placeholder="Mínimo de 6 caracteres"></div><button class="btn btn-primary btn-block" type="submit">Entrar com e-mail</button><button class="btn btn-secondary btn-block" type="button" id="signupButton">Criar conta com e-mail</button></form></div></section></main>`;
+      const logo = $(".auth-logo");
+      logo.addEventListener("error", () => { if (logo.src !== iconFallback) logo.src = iconFallback; }, { once:true });
       const credentials=()=>({email:$("#authEmail").value.trim(),password:$("#authPassword").value,name:$("#authName").value.trim()});
-      $("#googleLoginButton").addEventListener("click",async event=>{
-        const button=event.currentTarget;
-        const original=button.innerHTML;
-        button.disabled=true;
-        button.innerHTML='<span class="button-spinner" aria-hidden="true"></span><span>Conectando ao Google…</span>';
-        const {error}=await this.repo.signInWithGoogle();
-        if(error){button.disabled=false;button.innerHTML=original;return this.toast(error.message,true);}
-      });
-      $("#authForm").addEventListener("submit",async e=>{e.preventDefault(); const {email,password}=credentials(); const {error}=await this.repo.signIn(email,password); if(error)return this.toast(error.message,true); location.reload();});
-      $("#signupButton").addEventListener("click",async()=>{const {email,password,name}=credentials(); if(!email||!password)return this.toast("Informe e-mail e senha.",true); const {data,error}=await this.repo.signUp(email,password,name); if(error)return this.toast(error.message,true); if(data?.session)return location.reload(); this.toast("Conta criada. Verifique o e-mail para concluir o acesso.");});
+      this.setupGoogleLogin();
+      $("#authForm").addEventListener("submit",async e=>{e.preventDefault(); const {email,password}=credentials(); const {error}=await this.repo.signIn(email,password); if(error)return this.toast(error.message,true); location.replace(appBaseUrl());});
+      $("#signupButton").addEventListener("click",async()=>{const {email,password,name}=credentials(); if(!email||!password)return this.toast("Informe e-mail e senha.",true); const {data,error}=await this.repo.signUp(email,password,name); if(error)return this.toast(error.message,true); if(data?.session)return location.replace(appBaseUrl()); this.toast("Conta criada. Verifique o e-mail para concluir o acesso.");});
       if(oauthError && history.replaceState) history.replaceState({}, document.title, location.pathname);
     },
 
+    async setupGoogleLogin() {
+      const container = $("#googleIdentityButton");
+      const fallback = $("#googleOAuthFallback");
+      const hint = $("#googleLoginHint");
+      if (!container || !fallback) return;
+      const useFallback = message => {
+        container.hidden = true;
+        fallback.hidden = false;
+        if (message && hint) { hint.hidden = false; hint.textContent = message; }
+        fallback.addEventListener("click", async event => {
+          const button = event.currentTarget;
+          const original = button.innerHTML;
+          button.disabled = true;
+          button.innerHTML = '<span class="button-spinner" aria-hidden="true"></span><span>Conectando ao Google…</span>';
+          const { error } = await this.repo.signInWithGoogleOAuth();
+          if (error) { button.disabled = false; button.innerHTML = original; this.toast(error.message, true); }
+        });
+      };
+      const clientId = String(window.RESENHA_CONFIG?.googleClientId || "").trim();
+      if (!/^[0-9a-z-]+\.apps\.googleusercontent\.com$/i.test(clientId)) {
+        useFallback("Para o login compatível com iPhone, adicione googleClientId ao supabase-config.js.");
+        return;
+      }
+      try {
+        await loadScriptOnce("google-identity-script", "https://accounts.google.com/gsi/client");
+        if (!window.google?.accounts?.id) throw new Error("O Google Identity Services não foi inicializado.");
+        const nonce = randomNonce();
+        const hashedNonce = await sha256Hex(nonce);
+        window.google.accounts.id.initialize({
+          client_id:clientId,
+          callback:async response => {
+            if (!response?.credential) return this.toast("O Google não retornou a credencial de acesso.", true);
+            container.classList.add("is-loading");
+            const { error } = await this.repo.signInWithGoogleIdToken(response.credential, nonce);
+            if (error) { container.classList.remove("is-loading"); return this.toast(error.message || "Não foi possível entrar com Google.", true); }
+            window.location.replace(appBaseUrl());
+          },
+          nonce:hashedNonce,
+          ux_mode:"popup",
+          context:"signin",
+          auto_select:false,
+          cancel_on_tap_outside:true,
+          itp_support:true,
+          use_fedcm_for_prompt:true
+        });
+        container.hidden = false;
+        window.google.accounts.id.renderButton(container, {
+          type:"standard",
+          theme:"outline",
+          size:"large",
+          text:"continue_with",
+          shape:"rectangular",
+          logo_alignment:"left",
+          width:Math.min(380, Math.max(250, container.clientWidth || 360))
+        });
+      } catch (error) {
+        console.warn("Falha ao iniciar o login direto do Google.", error);
+        useFallback("O login direto não carregou. Usando o fluxo alternativo do Supabase.");
+      }
+    },
+
     renderConfigurationError() {
-      document.body.innerHTML = `<main class="auth-screen"><section class="auth-panel"><img class="auth-logo" src="brand/logo-resenha-fc.png" alt="Resenha FC"><h1>Configuração necessária</h1><p>O Resenha FC agora funciona exclusivamente com o backend Supabase.</p><div class="card auth-card"><div class="notice"><strong>Conecte o aplicativo</strong><br>Preencha a Project URL e a Publishable key no arquivo <code>supabase-config.js</code> e publique novamente.</div><button class="btn btn-primary btn-block" id="retryConfigButton">Verificar novamente</button></div></section></main>`;
+      document.body.innerHTML = `<main class="auth-screen"><section class="auth-panel"><img class="auth-logo" src="login-logo-v024.png" alt="Resenha FC" width="156" height="156"><h1>Configuração necessária</h1><p>O Resenha FC agora funciona exclusivamente com o backend Supabase.</p><div class="card auth-card"><div class="notice"><strong>Conecte o aplicativo</strong><br>Preencha a Project URL e a Publishable key no arquivo <code>supabase-config.js</code> e publique novamente.</div><button class="btn btn-primary btn-block" id="retryConfigButton">Verificar novamente</button></div></section></main>`;
       $("#retryConfigButton").addEventListener("click", () => location.reload());
     },
 
     renderBackendError(error) {
       const message = escapeHtml(error?.message || "Não foi possível conectar ao backend.");
-      document.body.innerHTML = `<main class="auth-screen"><section class="auth-panel"><img class="auth-logo" src="brand/logo-resenha-fc.png" alt="Resenha FC"><h1>Falha na conexão</h1><p>Não foi possível acessar os dados em nuvem.</p><div class="card auth-card"><div class="notice"><strong>Detalhe técnico</strong><br>${message}</div><button class="btn btn-primary btn-block" id="retryCloudButton">Tentar novamente</button></div></section></main>`;
+      document.body.innerHTML = `<main class="auth-screen"><section class="auth-panel"><img class="auth-logo" src="login-logo-v024.png" alt="Resenha FC" width="156" height="156"><h1>Falha na conexão</h1><p>Não foi possível acessar os dados em nuvem.</p><div class="card auth-card"><div class="notice"><strong>Detalhe técnico</strong><br>${message}</div><button class="btn btn-primary btn-block" id="retryCloudButton">Tentar novamente</button></div></section></main>`;
       $("#retryCloudButton").addEventListener("click", () => location.reload());
     },
 
@@ -528,7 +623,7 @@
       if (!confirmed) return;
       await this.repo.signOut();
       this.state = null;
-      const cleanUrl = new URL(".", window.location.href).href;
+      const cleanUrl = appBaseUrl();
       window.location.replace(cleanUrl);
     },
 

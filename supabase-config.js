@@ -1,17 +1,7 @@
-/*
- * Resenha FC — configuração pública do Supabase.
- *
- * 1. Crie o projeto no Supabase.
- * 2. Execute backend/supabase-schema.sql no SQL Editor.
- * 3. Copie a Project URL e a Publishable key em Settings > API Keys.
- * 4. Ative o provedor Google conforme LOGIN-GOOGLE.md.
- *
- * A Publishable key é própria para aplicações web e móveis. Nunca coloque uma
- * Secret key ou a antiga service_role key neste arquivo.
- */
 window.RESENHA_CONFIG = {
-  supabaseUrl: "https://resenhafc.edolbf.workers.dev/",
+  supabaseUrl: "https://xvwgrpnioaqyijhzqxqh.supabase.co",
   supabasePublishableKey: "sb_publishable_d0sXTfLf9ZNhDNbDfVhRYg_ZfNjQscs",
-  authRedirectUrl: new URL(".", window.location.href).href,
+  googleClientId: "450022998573-t005205phn1crgmbk7g7sddg3qj9b0jp.apps.googleusercontent.com",
+  authRedirectUrl: new URL("./", window.location.href).href,
   appName: "Resenha FC"
 };

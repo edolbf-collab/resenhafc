@@ -1,32 +1,26 @@
-# Validação — Resenha FC v0.2.3
+# Validação — Resenha FC v0.2.4
 
-## Verificações executadas
+## Código
 
-- sintaxe JavaScript validada com `node --check`;
-- ausência de `LocalRepository`, gerador de dados de exemplo e botão de demonstração;
-- inicialização bloqueada quando Project URL ou Publishable key não estão configuradas;
-- tela de autenticação mantém Google e e-mail;
-- logout disponível pelo avatar mesmo quando o usuário ainda não possui grupo;
-- logout também disponível na área Mais;
-- encerramento da assinatura Realtime antes da saída;
-- remoção do estado legado `resenha-fc-state-v1` e da antiga chave `resenha-demo`;
-- cache do service worker alterado para `resenha-fc-v0.2.3`;
-- pacote ZIP conferido após geração.
+- `node --check app.js`: aprovado;
+- arquivo de logotipo 512 × 512 presente na raiz;
+- fallback de imagem presente;
+- cache v0.2.4 contém o novo logotipo;
+- CSP permite Supabase, Google Identity Services e fotos Google;
+- modo demonstração permanece removido;
+- logout permanece ativo.
 
-## Teste recomendado no ambiente publicado
+## Login Google
 
-1. Entre com a conta atual.
-2. Toque no avatar e selecione **Sair da conta**.
-3. Confirme o retorno à tela de acesso.
-4. Entre com uma conta Google diferente.
-5. Confirme que a nova conta começa sem dados e sem grupos vinculados.
-6. Crie um grupo e insira os primeiros dados.
+- caminho principal: Google Identity Services → ID token → Supabase `signInWithIdToken`;
+- nonce aleatório e SHA-256 implementados;
+- caminho alternativo: Supabase `signInWithOAuth` com URL validada;
+- ausência de `googleClientId` é indicada na própria tela;
+- nenhuma chave secreta é exigida no frontend.
 
+## Validação pendente em ambiente real
 
-## Validação v0.2.3 — ícones Apple
-
-- `apple-touch-icon` referenciado em 120, 152, 167 e 180 px.
-- Todos os PNGs são quadrados, RGB e sem transparência.
-- Cópias convencionais `apple-touch-icon.png` e `apple-touch-icon-precomposed.png` disponíveis na raiz.
-- Ícones Apple usam nomes versionados no HTML.
-- Manifesto e service worker atualizados para v0.2.3.
+- popup e seleção de conta em iPhone/iPad;
+- retorno com sessão real do Supabase;
+- teste com duas contas Google;
+- cache após deploy do Cloudflare.
