@@ -1,4 +1,4 @@
-# Resenha FC v0.2.0
+# Resenha FC v0.2.1
 
 Aplicativo PWA para organizar peladas entre amigos, inspirado no problema resolvido pelo antigo Peladeiro.com.br, mas com código, identidade visual e arquitetura originais.
 
@@ -17,7 +17,7 @@ Aplicativo PWA para organizar peladas entre amigos, inspirado no problema resolv
 - ranking, gols, assistências e histórico básico;
 - avisos do grupo;
 - backup dos dados em JSON;
-- autenticação, banco PostgreSQL, RLS e Realtime via Supabase.
+- autenticação por Google ou e-mail, banco PostgreSQL, RLS e Realtime via Supabase.
 
 ## Teste imediato
 
@@ -50,6 +50,7 @@ O arquivo `_headers` inclui políticas básicas de segurança e liberação das 
 - `PESQUISA-PELADEIRO.md`: reconstrução histórica das funções do serviço antigo;
 - `DEPLOY-CLOUDFLARE.md`: publicação do frontend;
 - `BACKEND-ATIVACAO.md`: ativação guiada do banco e autenticação;
+- `LOGIN-GOOGLE.md`: criação do cliente OAuth e ativação do login Google;
 - `backend/backend-healthcheck.sql`: conferência do projeto após executar o esquema;
 - `CHANGELOG.md`: alterações por versão;
 - `ROADMAP.md`: módulos previstos para as próximas versões;

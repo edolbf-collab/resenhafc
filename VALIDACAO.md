@@ -1,4 +1,4 @@
-# Validação — Resenha FC v0.2.0
+# Validação — Resenha FC v0.2.1
 
 ## Validações realizadas no pacote
 
@@ -28,3 +28,12 @@ A conexão real não pode ser validada sem Project URL e Publishable key de um p
 7. avaliação repetida;
 8. bloqueios por função do membro;
 9. encerramento e renovação de sessão.
+
+
+## Login Google
+
+- `app.js` validado sintaticamente após a inclusão de `signInWithOAuth`;
+- redirecionamento calculado pela pasta pública atual do aplicativo;
+- tratamento visual de erro OAuth implementado;
+- perfil compatível com metadados usuais do Google;
+- ativação real depende de Client ID/Secret no Google e no painel Supabase.

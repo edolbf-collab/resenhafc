@@ -1,4 +1,4 @@
-# Ativação do backend — Resenha FC v0.2.0
+# Ativação do backend — Resenha FC v0.2.1
 
 Esta versão usa Supabase para autenticação, PostgreSQL, políticas RLS e sincronização em tempo real. O frontend permanece estático no Cloudflare Pages.
 
@@ -46,6 +46,10 @@ http://localhost:8080/**
 ```
 
 Para o primeiro teste controlado, é possível desabilitar temporariamente **Confirm email**. Antes de liberar o aplicativo ao grupo, reative a confirmação e configure um SMTP próprio.
+
+### Login com Google
+
+O frontend já contém o botão **Continuar com Google**. A ativação exige criar um cliente OAuth do tipo Web no Google Auth Platform, cadastrar a Callback URL do Supabase e habilitar o provedor em **Authentication → Sign In / Providers → Google**. Siga `LOGIN-GOOGLE.md`.
 
 ## 5. Obter as credenciais públicas
 

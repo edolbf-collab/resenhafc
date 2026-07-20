@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.2.1
+
+- login com conta Google por Supabase OAuth;
+- botão Google com identidade visual própria na tela de acesso;
+- retorno automático para Cloudflare ou ambiente local;
+- exibição de erros OAuth na tela de autenticação;
+- leitura correta de `full_name`, `given_name`, `family_name` e foto do perfil Google;
+- trigger de perfil atualizado para novos usuários sociais;
+- guia completo `LOGIN-GOOGLE.md`;
+- cache PWA atualizado.
+
 ## v0.2.0 — backend pronto para ativação
 
 - esquema Supabase revisto e idempotente para projeto novo;

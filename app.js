@@ -14,6 +14,14 @@
   const sessionGet = (key) => { try { return sessionStorage.getItem(key); } catch { return null; } };
   const sessionSet = (key, value) => { try { sessionStorage.setItem(key, value); } catch { /* sessão indisponível em origem local */ } };
   const sessionRemove = (key) => { try { sessionStorage.removeItem(key); } catch { /* sessão indisponível em origem local */ } };
+  const oauthErrorFromLocation = () => {
+    const sources = [new URLSearchParams(location.search), new URLSearchParams(location.hash.replace(/^#/, ""))];
+    for (const params of sources) {
+      const message = params.get("error_description") || params.get("error");
+      if (message) return String(message).replace(/\+/g, " ");
+    }
+    return "";
+  };
 
   const sample = () => {
     const upcoming = new Date();
@@ -102,6 +110,16 @@
     }
     async session() { return (await this.client.auth.getSession()).data.session; }
     async signIn(email, password) { return this.client.auth.signInWithPassword({ email, password }); }
+    async signInWithGoogle() {
+      const redirectTo = this.config.authRedirectUrl || new URL(".", window.location.href).href;
+      return this.client.auth.signInWithOAuth({
+        provider:"google",
+        options:{
+          redirectTo,
+          queryParams:{ prompt:"select_account" }
+        }
+      });
+    }
     async signUp(email, password, name) {
       return this.client.auth.signUp({
         email,
@@ -117,7 +135,15 @@
       const session = await this.session();
       if (!session) return null;
       const user = session.user;
-      this.state.profile = { id:user.id, email:user.email, name:user.user_metadata?.name || user.email.split("@")[0] };
+      const meta = user.user_metadata || {};
+      const fallbackEmail = user.email || "";
+      const displayName = meta.name || meta.full_name || [meta.given_name, meta.family_name].filter(Boolean).join(" ") || fallbackEmail.split("@")[0] || "Usuário";
+      this.state.profile = {
+        id:user.id,
+        email:fallbackEmail,
+        name:displayName,
+        avatar_url:meta.avatar_url || meta.picture || ""
+      };
       const { data: memberships, error } = await this.client.from("group_members").select("role, player_id, groups(id,name,invite_code,default_players_per_team,monthly_fee)").eq("user_id", user.id);
       if (error) throw error;
       this.state.groups = (memberships || []).map(m => ({ ...m.groups, role:m.role, player_id:m.player_id }));
@@ -431,7 +457,7 @@
           <button class="card list-row" data-action="export"><div class="player-avatar">⇩</div><div class="list-main"><strong>Backup e exportação</strong><small>Baixar dados completos em JSON.</small></div><strong>›</strong></button>
           ${this.cloud?`<button class="card list-row" data-action="sign-out"><div class="player-avatar">↪</div><div class="list-main"><strong>Sair da conta</strong><small>Encerrar sessão neste aparelho.</small></div><strong>›</strong></button>`:`<button class="card list-row" data-action="reset-demo"><div class="player-avatar">↺</div><div class="list-main"><strong>Redefinir demonstração</strong><small>Restaurar os dados de exemplo.</small></div><strong>›</strong></button>`}
         </div>
-        <div class="section-title"><h2>Versão</h2></div><div class="notice">Resenha FC v0.2.0 · PWA responsiva · frontend pronto para Cloudflare Pages · backend Supabase com autenticação, PostgreSQL, RLS e sincronização em tempo real.</div>`;
+        <div class="section-title"><h2>Versão</h2></div><div class="notice">Resenha FC v0.2.1 · PWA responsiva · frontend pronto para Cloudflare Pages · backend Supabase com autenticação, PostgreSQL, RLS e sincronização em tempo real.</div>`;
     },
 
     async handleAction(action, data) {
@@ -448,11 +474,21 @@
     },
 
     renderAuth() {
-      document.body.innerHTML = `<main class="auth-screen"><section class="auth-panel"><img class="auth-logo" src="brand/logo-resenha-fc.png" alt="Resenha FC"><h1>Resenha FC</h1><p>Organize presença, times, mensalidades, churrasco, notas e estatísticas da sua pelada.</p><div class="card auth-card"><form id="authForm" class="form-grid"><div class="field"><label>Nome</label><input id="authName" placeholder="Seu nome"></div><div class="field"><label>E-mail</label><input id="authEmail" type="email" required placeholder="voce@email.com"></div><div class="field"><label>Senha</label><input id="authPassword" type="password" minlength="6" required placeholder="Mínimo de 6 caracteres"></div><button class="btn btn-primary btn-block" type="submit">Entrar</button><button class="btn btn-secondary btn-block" type="button" id="signupButton">Criar conta</button></form><div class="divider">ou</div><button class="btn btn-ghost btn-block" id="demoButton">Abrir demonstração local</button></div></section></main>`;
+      const oauthError = oauthErrorFromLocation();
+      document.body.innerHTML = `<main class="auth-screen"><section class="auth-panel"><img class="auth-logo" src="brand/logo-resenha-fc.png" alt="Resenha FC"><h1>Resenha FC</h1><p>Organize presença, times, mensalidades, churrasco, notas e estatísticas da sua pelada.</p><div class="card auth-card">${oauthError?`<div class="notice auth-error"><strong>Não foi possível entrar com Google</strong><br>${escapeHtml(oauthError)}</div>`:""}<button class="btn btn-google btn-block" type="button" id="googleLoginButton" aria-label="Continuar com Google"><svg class="google-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M21.6 12.23c0-.71-.06-1.4-.19-2.07H12v3.91h5.38a4.6 4.6 0 0 1-2 3.02v2.54h3.24c1.9-1.75 2.98-4.33 2.98-7.4Z"/><path fill="#34A853" d="M12 22c2.7 0 4.98-.9 6.63-2.43l-3.24-2.54c-.9.6-2.05.96-3.39.96-2.61 0-4.82-1.76-5.61-4.13H3.04v2.62A10 10 0 0 0 12 22Z"/><path fill="#FBBC05" d="M6.39 13.86A6.02 6.02 0 0 1 6.08 12c0-.65.11-1.28.31-1.86V7.52H3.04A10 10 0 0 0 2 12c0 1.61.39 3.14 1.04 4.48l3.35-2.62Z"/><path fill="#EA4335" d="M12 6.01c1.47 0 2.79.5 3.83 1.5l2.87-2.87A9.65 9.65 0 0 0 12 2a10 10 0 0 0-8.96 5.52l3.35 2.62C7.18 7.77 9.39 6.01 12 6.01Z"/></svg><span>Continuar com Google</span></button><div class="divider">ou entre com e-mail</div><form id="authForm" class="form-grid"><div class="field"><label>Nome</label><input id="authName" autocomplete="name" placeholder="Seu nome"></div><div class="field"><label>E-mail</label><input id="authEmail" type="email" autocomplete="email" required placeholder="voce@email.com"></div><div class="field"><label>Senha</label><input id="authPassword" type="password" autocomplete="current-password" minlength="6" required placeholder="Mínimo de 6 caracteres"></div><button class="btn btn-primary btn-block" type="submit">Entrar com e-mail</button><button class="btn btn-secondary btn-block" type="button" id="signupButton">Criar conta com e-mail</button></form><div class="divider">modo de teste</div><button class="btn btn-ghost btn-block" id="demoButton">Abrir demonstração local</button></div></section></main>`;
       const credentials=()=>({email:$("#authEmail").value.trim(),password:$("#authPassword").value,name:$("#authName").value.trim()});
+      $("#googleLoginButton").addEventListener("click",async event=>{
+        const button=event.currentTarget;
+        const original=button.innerHTML;
+        button.disabled=true;
+        button.innerHTML='<span class="button-spinner" aria-hidden="true"></span><span>Conectando ao Google…</span>';
+        const {error}=await this.repo.signInWithGoogle();
+        if(error){button.disabled=false;button.innerHTML=original;return this.toast(error.message,true);}
+      });
       $("#authForm").addEventListener("submit",async e=>{e.preventDefault(); const {email,password}=credentials(); const {error}=await this.repo.signIn(email,password); if(error)return this.toast(error.message,true); location.reload();});
       $("#signupButton").addEventListener("click",async()=>{const {email,password,name}=credentials(); if(!email||!password)return this.toast("Informe e-mail e senha.",true); const {data,error}=await this.repo.signUp(email,password,name); if(error)return this.toast(error.message,true); if(data?.session)return location.reload(); this.toast("Conta criada. Verifique o e-mail para concluir o acesso.");});
       $("#demoButton").addEventListener("click",async()=>{sessionSet("resenha-demo","1");location.reload();});
+      if(oauthError && history.replaceState) history.replaceState({}, document.title, location.pathname);
     },
 
 
