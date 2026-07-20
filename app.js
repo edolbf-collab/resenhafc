@@ -11,9 +11,7 @@
   const escapeHtml = (value = "") => String(value).replace(/[&<>'"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[char]));
   const initials = (name = "") => name.split(/\s+/).filter(Boolean).slice(0, 2).map(p => p[0]).join("").toUpperCase() || "?";
   const clamp = (n, min, max) => Math.min(max, Math.max(min, Number(n)));
-  const sessionGet = (key) => { try { return sessionStorage.getItem(key); } catch { return null; } };
-  const sessionSet = (key, value) => { try { sessionStorage.setItem(key, value); } catch { /* sessão indisponível em origem local */ } };
-  const sessionRemove = (key) => { try { sessionStorage.removeItem(key); } catch { /* sessão indisponível em origem local */ } };
+  const safeImageUrl = (value = "") => { try { const url = new URL(value, window.location.href); return ["http:", "https:"].includes(url.protocol) ? url.href : ""; } catch { return ""; } };
   const oauthErrorFromLocation = () => {
     const sources = [new URLSearchParams(location.search), new URLSearchParams(location.hash.replace(/^#/, ""))];
     for (const params of sources) {
@@ -23,79 +21,6 @@
     return "";
   };
 
-  const sample = () => {
-    const upcoming = new Date();
-    upcoming.setDate(upcoming.getDate() + ((4 - upcoming.getDay() + 7) % 7 || 7));
-    upcoming.setHours(20, 0, 0, 0);
-    const past = new Date(); past.setDate(past.getDate() - 7); past.setHours(20,0,0,0);
-    const players = [
-      ["p1","Edo Batista",4.3,"Meia",false,true], ["p2","Bruno Lima",4.6,"Atacante",false,false],
-      ["p3","Carlos Mendes",4.0,"Zagueiro",false,false], ["p4","Diego Alves",4.5,"Goleiro",true,false],
-      ["p5","Fabio Rocha",3.8,"Lateral",false,false], ["p6","Gustavo Nunes",4.2,"Atacante",false,false],
-      ["p7","Henrique Souza",3.9,"Meia",false,false], ["p8","Igor Costa",4.1,"Zagueiro",false,false],
-      ["p9","João Vitor",3.7,"Lateral",false,false], ["p10","Lucas Prado",4.4,"Meia",false,false],
-      ["p11","Marcos Silva",3.6,"Atacante",false,false], ["p12","Rafael Dias",4.0,"Goleiro",true,false],
-      ["p13","Sérgio Lopes",3.5,"Zagueiro",false,false], ["p14","Tiago Reis",4.2,"Meia",false,false]
-    ].map(([id,name,skill,position,goalkeeper,isSelf], i) => ({
-      id, group_id:"g1", user_id:isSelf?"demo-user":null, name, nickname:name.split(" ")[0], skill, fair_play:4.4-(i%3)*.2,
-      conditioning:3.8+(i%4)*.2, primary_position:position, secondary_position:"", goalkeeper, active:true,
-      games: 18 - (i%6), wins: 10 - (i%4), goals: position === "Atacante" ? 9-(i%4) : position === "Meia" ? 5-(i%3) : 1+(i%2), assists: position === "Meia" ? 8-(i%4) : 2+(i%3)
-    }));
-    return {
-      profile: { id:"demo-user", name:"Edo Batista", email:"demo@resenhafc.app" },
-      groups: [{ id:"g1", name:"Pelada de Quinta", role:"owner", invite_code:"QUINTA26", default_players_per_team:6, monthly_fee:65 }],
-      currentGroupId:"g1",
-      players,
-      matches: [
-        { id:"m1", group_id:"g1", title:"Pelada semanal", starts_at:upcoming.toISOString(), location:"Arena do Bairro · Quadra 2", max_players:12, players_per_team:6, status:"scheduled", bbq_enabled:true, bbq_price:25, notes:"Chegar 15 minutos antes.", created_at:nowIso() },
-        { id:"m0", group_id:"g1", title:"Pelada semanal", starts_at:past.toISOString(), location:"Arena do Bairro · Quadra 1", max_players:12, players_per_team:6, status:"finished", bbq_enabled:true, bbq_price:25, notes:"", created_at:past.toISOString() }
-      ],
-      attendance: players.slice(0,12).map((p,i) => ({ id:`a${i}`, match_id:"m1", player_id:p.id, status:i<10?"confirmed":i===10?"maybe":"waitlist", bbq:i<7, bbq_guests:i===2?1:0, responded_at:nowIso() })),
-      assignments: [],
-      charges: players.slice(0,12).map((p,i) => ({ id:`c${i}`, group_id:"g1", player_id:p.id, description:`Mensalidade · ${monthLabel(nowIso())}`, amount:65, due_date:new Date(new Date().getFullYear(),new Date().getMonth(),10).toISOString().slice(0,10), status:i<9?"paid":"open" })),
-      payments: players.slice(0,9).map((p,i) => ({ id:`pay${i}`, group_id:"g1", player_id:p.id, charge_id:`c${i}`, amount:65, paid_at:new Date(Date.now()-i*86400000).toISOString(), method:"pix" })),
-      expenses: [
-        { id:"e1", group_id:"g1", description:"Aluguel da quadra", amount:520, occurred_at:new Date().toISOString(), category:"quadra" },
-        { id:"e2", group_id:"g1", description:"Bola nova", amount:139.9, occurred_at:new Date(Date.now()-5*86400000).toISOString(), category:"material" }
-      ],
-      ratings: players.slice(1,8).map((p,i) => ({ id:`r${i}`, match_id:"m0", rated_player_id:p.id, rater_user_id:"demo-rater", technical:4+(i%2)*.5, fair_play:4.5, conditioning:3.5+(i%3)*.5 })),
-      match_events: [
-        { id:"ev1", match_id:"m0", type:"goal", player_id:"p2", assist_player_id:"p1", minute:8 },
-        { id:"ev2", match_id:"m0", type:"goal", player_id:"p6", assist_player_id:"p7", minute:16 }
-      ],
-      announcements: [{ id:"n1", group_id:"g1", title:"Novo horário", body:"A partir deste mês a quadra começa às 20h. Confirme presença até quarta-feira às 18h.", created_at:nowIso() }]
-    };
-  };
-
-  class LocalRepository {
-    constructor() { this.key = "resenha-fc-state-v1"; this.state = this.load(); }
-    load() { try { return JSON.parse(localStorage.getItem(this.key)) || sample(); } catch { return sample(); } }
-    save() { try { localStorage.setItem(this.key, JSON.stringify(this.state)); } catch (error) { console.warn("Armazenamento local indisponível; dados mantidos apenas nesta sessão.", error); } }
-    async init() { return this.state; }
-    async reset() { this.state = sample(); this.save(); return this.state; }
-    async mutate(collection, record, mode = "upsert") {
-      const list = this.state[collection] || [];
-      if (mode === "delete") this.state[collection] = list.filter(x => x.id !== record.id);
-      else {
-        const index = list.findIndex(x => x.id === record.id);
-        if (index >= 0) list[index] = { ...list[index], ...record };
-        else list.push(record);
-        this.state[collection] = list;
-      }
-      this.save(); return record;
-    }
-    async setProfile(profile) { this.state.profile = { ...this.state.profile, ...profile }; this.save(); }
-    async replaceAssignments(matchId, records) {
-      this.state.assignments = this.state.assignments.filter(item => item.match_id !== matchId).concat(records);
-      this.save();
-      return records;
-    }
-    async recordPayment(record, charge = null) {
-      await this.mutate("payments", record);
-      if (charge) await this.mutate("charges", { ...charge, status:"paid" });
-      return record;
-    }
-  }
 
   class SupabaseRepository {
     constructor(config) {
@@ -130,7 +55,16 @@
         }
       });
     }
-    async signOut() { await this.client.auth.signOut(); }
+    async signOut() {
+      clearTimeout(this.reloadTimer);
+      if (this.channel) {
+        await this.client.removeChannel(this.channel);
+        this.channel = null;
+        this.subscribedGroupId = null;
+      }
+      const { error } = await this.client.auth.signOut({ scope:"local" });
+      if (error) throw error;
+    }
     async init() {
       const session = await this.session();
       if (!session) return null;
@@ -256,34 +190,34 @@
     route: "home",
     repo: null,
     state: null,
-    cloud: false,
     selectedMatchId: null,
 
     async init() {
       this.bindGlobal();
+      this.clearLegacyDemoData();
       const config = window.RESENHA_CONFIG || {};
-      const cloudConfigured = Boolean(config.supabaseUrl && config.supabasePublishableKey && sessionGet("resenha-demo") !== "1");
-      if (cloudConfigured && !window.supabase) {
+      const cloudConfigured = Boolean(config.supabaseUrl && config.supabasePublishableKey);
+      if (!cloudConfigured) return this.renderConfigurationError();
+      if (!window.supabase) {
         return this.renderBackendError(window.RESENHA_CLOUD_LOAD_ERROR || new Error("Não foi possível carregar o cliente Supabase."));
       }
-      const hasCloud = Boolean(cloudConfigured && window.supabase);
-      this.cloud = hasCloud;
-      this.repo = hasCloud ? new SupabaseRepository(config) : new LocalRepository();
+      this.repo = new SupabaseRepository(config);
       try {
         this.state = await this.repo.init();
-        if (hasCloud && !this.state) return this.renderAuth();
+        if (!this.state) return this.renderAuth();
         const launchAction = this.prepareLaunchIntent();
         this.render();
         if (launchAction === "rsvp") setTimeout(() => this.openRsvp(this.nextMatch()?.id), 0);
         this.registerServiceWorker();
       } catch (error) {
         console.error(error);
-        if (hasCloud) return this.renderBackendError(error);
-        this.toast(error.message || "Falha ao iniciar o aplicativo.", true);
-        this.repo = new LocalRepository();
-        this.state = await this.repo.init();
-        this.render();
+        return this.renderBackendError(error);
       }
+    },
+
+    clearLegacyDemoData() {
+      try { localStorage.removeItem("resenha-fc-state-v1"); } catch { /* armazenamento indisponível */ }
+      try { sessionStorage.removeItem("resenha-demo"); } catch { /* armazenamento indisponível */ }
     },
 
     bindGlobal() {
@@ -336,7 +270,7 @@
       if (!this.state) return;
       const group = this.currentGroup();
       $("#groupName").textContent = group?.name || "Crie ou entre em um grupo";
-      $("#syncLabel").textContent = this.cloud ? "Sincronizado na nuvem" : "Modo demonstração · dados neste aparelho";
+      $("#syncLabel").textContent = "Sincronizado na nuvem";
       $("#profileButton").textContent = initials(this.state.profile?.name || "Usuário");
       $$(".nav-item").forEach(btn => btn.classList.toggle("active", btn.dataset.route === this.route));
       if (!group) {
@@ -455,9 +389,9 @@
           <button class="card list-row" data-action="group"><div class="player-avatar">#</div><div class="list-main"><strong>Convidar amigos</strong><small>Código do grupo: ${escapeHtml(group?.invite_code||"—")}</small></div><strong>›</strong></button>
           ${this.canManageMatches()?'<button class="card list-row" data-action="announcement"><div class="player-avatar">!</div><div class="list-main"><strong>Avisos</strong><small>Comunicados para todos os participantes.</small></div><strong>›</strong></button>':''}
           <button class="card list-row" data-action="export"><div class="player-avatar">⇩</div><div class="list-main"><strong>Backup e exportação</strong><small>Baixar dados completos em JSON.</small></div><strong>›</strong></button>
-          ${this.cloud?`<button class="card list-row" data-action="sign-out"><div class="player-avatar">↪</div><div class="list-main"><strong>Sair da conta</strong><small>Encerrar sessão neste aparelho.</small></div><strong>›</strong></button>`:`<button class="card list-row" data-action="reset-demo"><div class="player-avatar">↺</div><div class="list-main"><strong>Redefinir demonstração</strong><small>Restaurar os dados de exemplo.</small></div><strong>›</strong></button>`}
+          <button class="card list-row danger-row" data-action="sign-out"><div class="player-avatar danger-avatar">↪</div><div class="list-main"><strong>Sair da conta</strong><small>Desconectar este aparelho e voltar à tela de acesso.</small></div><strong>›</strong></button>
         </div>
-        <div class="section-title"><h2>Versão</h2></div><div class="notice">Resenha FC v0.2.1 · PWA responsiva · frontend pronto para Cloudflare Pages · backend Supabase com autenticação, PostgreSQL, RLS e sincronização em tempo real.</div>`;
+        <div class="section-title"><h2>Versão</h2></div><div class="notice">Resenha FC v0.2.3 · PWA responsiva · backend Supabase obrigatório · login por Google ou e-mail · dados iniciados do zero e sincronizados em tempo real.</div>`;
     },
 
     async handleAction(action, data) {
@@ -466,8 +400,7 @@
           "new-match":()=>this.openMatchForm(), "open-match":()=>this.openMatchDetails(data.id), "rsvp":()=>this.openRsvp(data.id || this.nextMatch()?.id),
           "draw-teams":()=>this.drawTeams(data.id), "new-finance":()=>this.openFinanceForm(), "rate-player":()=>this.openRatingForm(),
           "players":()=>this.openPlayers(), "group":()=>this.openGroupModal(), "announcement":()=>this.openAnnouncementForm(), "export":()=>this.exportData(),
-          "reset-demo":async()=>{ await this.repo.reset(); this.state=await this.repo.init(); this.render(); this.toast("Demonstração restaurada."); },
-          "sign-out":async()=>{ await this.repo.signOut(); location.reload(); }
+          "sign-out":()=>this.logout()
         };
         if (map[action]) await map[action]();
       } catch (error) { console.error(error); this.toast(error.message || "Não foi possível concluir a ação.", true); }
@@ -475,7 +408,7 @@
 
     renderAuth() {
       const oauthError = oauthErrorFromLocation();
-      document.body.innerHTML = `<main class="auth-screen"><section class="auth-panel"><img class="auth-logo" src="brand/logo-resenha-fc.png" alt="Resenha FC"><h1>Resenha FC</h1><p>Organize presença, times, mensalidades, churrasco, notas e estatísticas da sua pelada.</p><div class="card auth-card">${oauthError?`<div class="notice auth-error"><strong>Não foi possível entrar com Google</strong><br>${escapeHtml(oauthError)}</div>`:""}<button class="btn btn-google btn-block" type="button" id="googleLoginButton" aria-label="Continuar com Google"><svg class="google-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M21.6 12.23c0-.71-.06-1.4-.19-2.07H12v3.91h5.38a4.6 4.6 0 0 1-2 3.02v2.54h3.24c1.9-1.75 2.98-4.33 2.98-7.4Z"/><path fill="#34A853" d="M12 22c2.7 0 4.98-.9 6.63-2.43l-3.24-2.54c-.9.6-2.05.96-3.39.96-2.61 0-4.82-1.76-5.61-4.13H3.04v2.62A10 10 0 0 0 12 22Z"/><path fill="#FBBC05" d="M6.39 13.86A6.02 6.02 0 0 1 6.08 12c0-.65.11-1.28.31-1.86V7.52H3.04A10 10 0 0 0 2 12c0 1.61.39 3.14 1.04 4.48l3.35-2.62Z"/><path fill="#EA4335" d="M12 6.01c1.47 0 2.79.5 3.83 1.5l2.87-2.87A9.65 9.65 0 0 0 12 2a10 10 0 0 0-8.96 5.52l3.35 2.62C7.18 7.77 9.39 6.01 12 6.01Z"/></svg><span>Continuar com Google</span></button><div class="divider">ou entre com e-mail</div><form id="authForm" class="form-grid"><div class="field"><label>Nome</label><input id="authName" autocomplete="name" placeholder="Seu nome"></div><div class="field"><label>E-mail</label><input id="authEmail" type="email" autocomplete="email" required placeholder="voce@email.com"></div><div class="field"><label>Senha</label><input id="authPassword" type="password" autocomplete="current-password" minlength="6" required placeholder="Mínimo de 6 caracteres"></div><button class="btn btn-primary btn-block" type="submit">Entrar com e-mail</button><button class="btn btn-secondary btn-block" type="button" id="signupButton">Criar conta com e-mail</button></form><div class="divider">modo de teste</div><button class="btn btn-ghost btn-block" id="demoButton">Abrir demonstração local</button></div></section></main>`;
+      document.body.innerHTML = `<main class="auth-screen"><section class="auth-panel"><img class="auth-logo" src="brand/logo-resenha-fc.png" alt="Resenha FC"><h1>Resenha FC</h1><p>Organize presença, times, mensalidades, churrasco, notas e estatísticas da sua pelada.</p><div class="card auth-card">${oauthError?`<div class="notice auth-error"><strong>Não foi possível entrar com Google</strong><br>${escapeHtml(oauthError)}</div>`:""}<button class="btn btn-google btn-block" type="button" id="googleLoginButton" aria-label="Continuar com Google"><svg class="google-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M21.6 12.23c0-.71-.06-1.4-.19-2.07H12v3.91h5.38a4.6 4.6 0 0 1-2 3.02v2.54h3.24c1.9-1.75 2.98-4.33 2.98-7.4Z"/><path fill="#34A853" d="M12 22c2.7 0 4.98-.9 6.63-2.43l-3.24-2.54c-.9.6-2.05.96-3.39.96-2.61 0-4.82-1.76-5.61-4.13H3.04v2.62A10 10 0 0 0 12 22Z"/><path fill="#FBBC05" d="M6.39 13.86A6.02 6.02 0 0 1 6.08 12c0-.65.11-1.28.31-1.86V7.52H3.04A10 10 0 0 0 2 12c0 1.61.39 3.14 1.04 4.48l3.35-2.62Z"/><path fill="#EA4335" d="M12 6.01c1.47 0 2.79.5 3.83 1.5l2.87-2.87A9.65 9.65 0 0 0 12 2a10 10 0 0 0-8.96 5.52l3.35 2.62C7.18 7.77 9.39 6.01 12 6.01Z"/></svg><span>Continuar com Google</span></button><div class="divider">ou entre com e-mail</div><form id="authForm" class="form-grid"><div class="field"><label>Nome</label><input id="authName" autocomplete="name" placeholder="Seu nome"></div><div class="field"><label>E-mail</label><input id="authEmail" type="email" autocomplete="email" required placeholder="voce@email.com"></div><div class="field"><label>Senha</label><input id="authPassword" type="password" autocomplete="current-password" minlength="6" required placeholder="Mínimo de 6 caracteres"></div><button class="btn btn-primary btn-block" type="submit">Entrar com e-mail</button><button class="btn btn-secondary btn-block" type="button" id="signupButton">Criar conta com e-mail</button></form></div></section></main>`;
       const credentials=()=>({email:$("#authEmail").value.trim(),password:$("#authPassword").value,name:$("#authName").value.trim()});
       $("#googleLoginButton").addEventListener("click",async event=>{
         const button=event.currentTarget;
@@ -487,16 +420,18 @@
       });
       $("#authForm").addEventListener("submit",async e=>{e.preventDefault(); const {email,password}=credentials(); const {error}=await this.repo.signIn(email,password); if(error)return this.toast(error.message,true); location.reload();});
       $("#signupButton").addEventListener("click",async()=>{const {email,password,name}=credentials(); if(!email||!password)return this.toast("Informe e-mail e senha.",true); const {data,error}=await this.repo.signUp(email,password,name); if(error)return this.toast(error.message,true); if(data?.session)return location.reload(); this.toast("Conta criada. Verifique o e-mail para concluir o acesso.");});
-      $("#demoButton").addEventListener("click",async()=>{sessionSet("resenha-demo","1");location.reload();});
       if(oauthError && history.replaceState) history.replaceState({}, document.title, location.pathname);
     },
 
+    renderConfigurationError() {
+      document.body.innerHTML = `<main class="auth-screen"><section class="auth-panel"><img class="auth-logo" src="brand/logo-resenha-fc.png" alt="Resenha FC"><h1>Configuração necessária</h1><p>O Resenha FC agora funciona exclusivamente com o backend Supabase.</p><div class="card auth-card"><div class="notice"><strong>Conecte o aplicativo</strong><br>Preencha a Project URL e a Publishable key no arquivo <code>supabase-config.js</code> e publique novamente.</div><button class="btn btn-primary btn-block" id="retryConfigButton">Verificar novamente</button></div></section></main>`;
+      $("#retryConfigButton").addEventListener("click", () => location.reload());
+    },
 
     renderBackendError(error) {
       const message = escapeHtml(error?.message || "Não foi possível conectar ao backend.");
-      document.body.innerHTML = `<main class="auth-screen"><section class="auth-panel"><img class="auth-logo" src="brand/logo-resenha-fc.png" alt="Resenha FC"><h1>Falha na conexão</h1><p>O backend está configurado, mas não respondeu corretamente.</p><div class="card auth-card"><div class="notice"><strong>Detalhe técnico</strong><br>${message}</div><button class="btn btn-primary btn-block" id="retryCloudButton">Tentar novamente</button><button class="btn btn-ghost btn-block" id="localFallbackButton">Abrir demonstração local</button></div></section></main>`;
+      document.body.innerHTML = `<main class="auth-screen"><section class="auth-panel"><img class="auth-logo" src="brand/logo-resenha-fc.png" alt="Resenha FC"><h1>Falha na conexão</h1><p>Não foi possível acessar os dados em nuvem.</p><div class="card auth-card"><div class="notice"><strong>Detalhe técnico</strong><br>${message}</div><button class="btn btn-primary btn-block" id="retryCloudButton">Tentar novamente</button></div></section></main>`;
       $("#retryCloudButton").addEventListener("click", () => location.reload());
-      $("#localFallbackButton").addEventListener("click", () => { sessionSet("resenha-demo", "1"); location.reload(); });
     },
 
     modal(title, content, onReady) {
@@ -562,7 +497,7 @@
       const match=this.pastMatches()[0]; if(!match)return this.toast("Ainda não há jogo concluído para avaliar.",true);
       const players=this.activePlayers().filter(p=>p.id!==this.myPlayer()?.id);
       this.modal("Avaliar jogador",`<form id="ratingForm" class="form-grid"><div class="notice">Avaliação referente a <strong>${escapeHtml(match.title)}</strong>. As médias ajudam a equilibrar os times.</div><div class="field"><label>Jogador</label><select name="player_id" required>${players.map(p=>`<option value="${p.id}">${escapeHtml(p.name)}</option>`).join("")}</select></div>${[["technical","Nota técnica"],["fair_play","Fair play"],["conditioning","Condicionamento"]].map(([n,l])=>`<div class="field"><label>${l} (1 a 5)</label><input name="${n}" type="range" min="1" max="5" step="0.5" value="4" oninput="this.nextElementSibling.textContent=this.value"><strong>4</strong></div>`).join("")}<div class="field"><label>Comentário opcional</label><textarea name="comment" placeholder="Comentário respeitoso e objetivo"></textarea></div><button class="btn btn-primary btn-block">Enviar avaliação</button></form>`,(root,close)=>{
-        $("#ratingForm",root).addEventListener("submit",async e=>{e.preventDefault();const f=new FormData(e.currentTarget);const ratedPlayerId=f.get("player_id"),raterUserId=this.state.profile?.id||"demo-user",existing=this.state.ratings.find(r=>r.match_id===match.id&&r.rated_player_id===ratedPlayerId&&r.rater_user_id===raterUserId);const record={id:existing?.id||uid("rating"),match_id:match.id,rated_player_id:ratedPlayerId,rater_user_id:raterUserId,technical:Number(f.get("technical")),fair_play:Number(f.get("fair_play")),conditioning:Number(f.get("conditioning")),comment:f.get("comment")||"",created_at:existing?.created_at||nowIso()};await this.repo.mutate("ratings",record);this.state=this.repo.state;close();this.render();this.toast("Avaliação registrada.");});
+        $("#ratingForm",root).addEventListener("submit",async e=>{e.preventDefault();const f=new FormData(e.currentTarget);const ratedPlayerId=f.get("player_id"),raterUserId=this.state.profile?.id||"",existing=this.state.ratings.find(r=>r.match_id===match.id&&r.rated_player_id===ratedPlayerId&&r.rater_user_id===raterUserId);const record={id:existing?.id||uid("rating"),match_id:match.id,rated_player_id:ratedPlayerId,rater_user_id:raterUserId,technical:Number(f.get("technical")),fair_play:Number(f.get("fair_play")),conditioning:Number(f.get("conditioning")),comment:f.get("comment")||"",created_at:existing?.created_at||nowIso()};await this.repo.mutate("ratings",record);this.state=this.repo.state;close();this.render();this.toast("Avaliação registrada.");});
       });
     },
 
@@ -578,8 +513,8 @@
     openGroupModal() {
       const groups=this.state.groups||[]; const current=this.currentGroup();
       this.modal("Grupo da pelada",`${groups.length?`<div class="list">${groups.map(g=>`<button class="card list-row" data-group-id="${g.id}"><div class="player-avatar">${initials(g.name)}</div><div class="list-main"><strong>${escapeHtml(g.name)}</strong><small>${escapeHtml(g.role||"membro")} · código ${escapeHtml(g.invite_code||"—")}</small></div>${g.id===current?.id?'<span class="score-pill">Atual</span>':'<strong>›</strong>'}</button>`).join("")}</div>`:""}<div class="section-title"><h2>Adicionar grupo</h2></div><form id="groupForm" class="form-grid"><div class="field"><label>Novo grupo</label><input name="name" placeholder="Ex.: Futebol de quinta"></div><button class="btn btn-primary btn-block" name="mode" value="create">Criar grupo</button><div class="divider">ou</div><div class="field"><label>Código de convite</label><input name="code" placeholder="Ex.: QUINTA26"></div><button class="btn btn-secondary btn-block" name="mode" value="join">Entrar com código</button></form>`,(root,close)=>{
-        $$('[data-group-id]',root).forEach(btn=>btn.addEventListener("click",async()=>{this.state.currentGroupId=btn.dataset.groupId;if(this.cloud)await this.repo.loadGroup(btn.dataset.groupId);else this.repo.save();close();this.render();}));
-        $("#groupForm",root).addEventListener("submit",async e=>{e.preventDefault();const f=new FormData(e.currentTarget);const submit=e.submitter.value;if(this.cloud){if(submit==="create")await this.repo.createGroup(f.get("name"));else await this.repo.joinGroup(f.get("code"));this.state=this.repo.state;}else{if(submit==="create"){const id=uid("group"),name=f.get("name")||"Nova pelada";this.state.groups.push({id,name,role:"owner",invite_code:Math.random().toString(36).slice(2,8).toUpperCase(),default_players_per_team:6,monthly_fee:0});this.state.currentGroupId=id;this.repo.save();}else return this.toast("O ingresso por código requer o backend em nuvem.",true);}close();this.render();this.toast("Grupo atualizado.");});
+        $$('[data-group-id]',root).forEach(btn=>btn.addEventListener("click",async()=>{this.state.currentGroupId=btn.dataset.groupId;await this.repo.loadGroup(btn.dataset.groupId);close();this.render();}));
+        $("#groupForm",root).addEventListener("submit",async e=>{e.preventDefault();const f=new FormData(e.currentTarget);const submit=e.submitter.value;if(submit==="create")await this.repo.createGroup(f.get("name"));else await this.repo.joinGroup(f.get("code"));this.state=this.repo.state;close();this.render();this.toast("Grupo atualizado.");});
       });
     },
 
@@ -588,9 +523,23 @@
       this.modal("Publicar aviso",`<form id="noticeForm" class="form-grid"><div class="field"><label>Título</label><input name="title" required></div><div class="field"><label>Mensagem</label><textarea name="body" required></textarea></div><button class="btn btn-primary btn-block">Publicar</button></form>`,(root,close)=>{$("#noticeForm",root).addEventListener("submit",async e=>{e.preventDefault();const f=new FormData(e.currentTarget);await this.repo.mutate("announcements",{id:uid("notice"),group_id:this.state.currentGroupId,title:f.get("title"),body:f.get("body"),created_at:nowIso()});this.state=this.repo.state;close();this.render();this.toast("Aviso publicado.");});});
     },
 
+    async logout() {
+      const confirmed = window.confirm("Deseja sair da sua conta neste aparelho?");
+      if (!confirmed) return;
+      await this.repo.signOut();
+      this.state = null;
+      const cleanUrl = new URL(".", window.location.href).href;
+      window.location.replace(cleanUrl);
+    },
+
     openProfileModal() {
       const p=this.state.profile||{};
-      this.modal("Meu perfil",`<form id="profileForm" class="form-grid"><div class="field"><label>Nome</label><input name="name" value="${escapeHtml(p.name||"")}"></div><div class="field"><label>E-mail</label><input disabled value="${escapeHtml(p.email||"Modo demonstração")}"></div><button class="btn btn-primary btn-block">Salvar</button></form>`,(root,close)=>{$("#profileForm",root).addEventListener("submit",async e=>{e.preventDefault();const f=new FormData(e.currentTarget);if(this.repo.setProfile)await this.repo.setProfile({name:f.get("name")});this.state=this.repo.state;close();this.render();this.toast("Perfil atualizado.");});});
+      const avatarUrl=safeImageUrl(p.avatar_url);
+      const avatar=avatarUrl?`<img class="profile-photo" src="${escapeHtml(avatarUrl)}" alt="Foto de ${escapeHtml(p.name||"usuário")}" referrerpolicy="no-referrer">`:`<div class="profile-photo profile-initials">${initials(p.name||"Usuário")}</div>`;
+      this.modal("Minha conta",`<div class="profile-summary">${avatar}<div><strong>${escapeHtml(p.name||"Usuário")}</strong><small>${escapeHtml(p.email||"")}</small></div></div><form id="profileForm" class="form-grid"><div class="field"><label>Nome</label><input name="name" value="${escapeHtml(p.name||"")}" required></div><div class="field"><label>E-mail</label><input disabled value="${escapeHtml(p.email||"")}"></div><button class="btn btn-primary btn-block">Salvar perfil</button></form><div class="account-separator"></div><button class="btn btn-danger btn-block" type="button" id="profileLogoutButton">Sair da conta</button><p class="account-help">Você voltará à tela de login e poderá entrar com outra conta Google ou por e-mail.</p>`,(root,close)=>{
+        $("#profileForm",root).addEventListener("submit",async e=>{e.preventDefault();const f=new FormData(e.currentTarget);await this.repo.setProfile({name:f.get("name")});this.state=this.repo.state;close();this.render();this.toast("Perfil atualizado.");});
+        $("#profileLogoutButton",root).addEventListener("click",async()=>{close();await this.logout();});
+      });
     },
 
     exportData() {
@@ -603,8 +552,8 @@
   window.App = App;
   async function boot() {
     const config = window.RESENHA_CONFIG || {};
-    const needsCloud = Boolean(config.supabaseUrl && config.supabasePublishableKey && sessionGet("resenha-demo") !== "1");
-    if (needsCloud && !window.supabase) {
+    const cloudConfigured = Boolean(config.supabaseUrl && config.supabasePublishableKey);
+    if (cloudConfigured && !window.supabase) {
       await new Promise((resolve, reject) => {
         const script = document.createElement("script");
         script.src = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2";

@@ -1,39 +1,32 @@
-# Validação — Resenha FC v0.2.1
+# Validação — Resenha FC v0.2.3
 
-## Validações realizadas no pacote
+## Verificações executadas
 
-- sintaxe de `app.js` validada com `node --check`;
-- sintaxe PostgreSQL do esquema validada por parser (`pglast`);
-- manifesto PWA interpretado como JSON válido;
-- arquivos referenciados pelo service worker conferidos;
-- configuração do Supabase mantida sem chaves administrativas;
-- fluxo local de demonstração executado em DOM simulado;
-- navegação para Times e confirmação de presença executadas sem erro;
-- visibilidade de ações validada para member, treasurer e organizer;
-- RPC de pagamento substitui a gravação em duas etapas;
-- RPC de escalação substitui exclusão/inserção não transacional;
-- assinatura Realtime filtrada por `group_id`;
-- avaliação repetida reutiliza o registro anterior.
+- sintaxe JavaScript validada com `node --check`;
+- ausência de `LocalRepository`, gerador de dados de exemplo e botão de demonstração;
+- inicialização bloqueada quando Project URL ou Publishable key não estão configuradas;
+- tela de autenticação mantém Google e e-mail;
+- logout disponível pelo avatar mesmo quando o usuário ainda não possui grupo;
+- logout também disponível na área Mais;
+- encerramento da assinatura Realtime antes da saída;
+- remoção do estado legado `resenha-fc-state-v1` e da antiga chave `resenha-demo`;
+- cache do service worker alterado para `resenha-fc-v0.2.3`;
+- pacote ZIP conferido após geração.
 
-## Validação ainda necessária em projeto real
+## Teste recomendado no ambiente publicado
 
-A conexão real não pode ser validada sem Project URL e Publishable key de um projeto Supabase ativo. Após executar o esquema, devem ser testados em dois aparelhos:
-
-1. cadastro e login;
-2. criação e ingresso em grupo;
-3. presença e churrasco;
-4. atualização em tempo real;
-5. sorteio dos times;
-6. cobrança e pagamento;
-7. avaliação repetida;
-8. bloqueios por função do membro;
-9. encerramento e renovação de sessão.
+1. Entre com a conta atual.
+2. Toque no avatar e selecione **Sair da conta**.
+3. Confirme o retorno à tela de acesso.
+4. Entre com uma conta Google diferente.
+5. Confirme que a nova conta começa sem dados e sem grupos vinculados.
+6. Crie um grupo e insira os primeiros dados.
 
 
-## Login Google
+## Validação v0.2.3 — ícones Apple
 
-- `app.js` validado sintaticamente após a inclusão de `signInWithOAuth`;
-- redirecionamento calculado pela pasta pública atual do aplicativo;
-- tratamento visual de erro OAuth implementado;
-- perfil compatível com metadados usuais do Google;
-- ativação real depende de Client ID/Secret no Google e no painel Supabase.
+- `apple-touch-icon` referenciado em 120, 152, 167 e 180 px.
+- Todos os PNGs são quadrados, RGB e sem transparência.
+- Cópias convencionais `apple-touch-icon.png` e `apple-touch-icon-precomposed.png` disponíveis na raiz.
+- Ícones Apple usam nomes versionados no HTML.
+- Manifesto e service worker atualizados para v0.2.3.

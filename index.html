@@ -9,9 +9,12 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Resenha FC">
   <meta name="description" content="Organização completa de peladas entre amigos: presença, times, caixa, churrasco, avaliações e estatísticas.">
-  <link rel="manifest" href="manifest.webmanifest">
-  <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png">
-  <link rel="apple-touch-icon-precomposed" sizes="180x180" href="icons/apple-touch-icon-precomposed.png">
+  <link rel="manifest" href="manifest.webmanifest?v=0.2.3">
+  <!-- iOS/iPadOS: arquivos versionados na raiz evitam reaproveitamento do ícone antigo pelo Safari. -->
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon-180x180-v023.png">
+  <link rel="apple-touch-icon" sizes="167x167" href="/apple-touch-icon-167x167-v023.png">
+  <link rel="apple-touch-icon" sizes="152x152" href="/apple-touch-icon-152x152-v023.png">
+  <link rel="apple-touch-icon" sizes="120x120" href="/apple-touch-icon-120x120-v023.png">
   <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32x32.png">
   <link rel="icon" type="image/png" sizes="16x16" href="icons/favicon-16x16.png">
   <link rel="icon" type="image/png" sizes="192x192" href="icons/android-chrome-192x192.png">
@@ -33,7 +36,7 @@
         <img class="brand-mark" src="brand/brand-mark.png" alt="" width="42" height="42">
         <span class="group-copy">
           <strong id="groupName">Resenha FC</strong>
-          <small id="syncLabel">Modo demonstração</small>
+          <small id="syncLabel">Conectando à nuvem</small>
         </span>
         <span aria-hidden="true">⌄</span>
       </button>

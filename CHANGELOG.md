@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.2.3 — correção do ícone no iPhone e iPad
+
+- Ícones Apple Touch movidos também para a raiz do site, onde o Safari procura os arquivos convencionais.
+- Referências `apple-touch-icon` passaram a usar nomes versionados para evitar o reaproveitamento do ícone antigo.
+- Incluídos tamanhos 120, 152, 167 e 180 px para iPhone e iPad.
+- Ícones do manifesto também foram versionados.
+- Cache da PWA atualizado e metadados de ícone/manifesto configurados para revalidação.
+- Mantidas as alterações da v0.2.2: logout e remoção do modo demonstração.
+
+## v0.2.2
+
+- modo demonstração e repositório local removidos;
+- dados de exemplo eliminados;
+- backend Supabase passa a ser obrigatório;
+- logout disponível no perfil e na tela Mais;
+- logout encerra Realtime e limpa a sessão local;
+- tela específica para backend não configurado;
+- falha de conexão não oferece mais fallback local;
+- limpeza automática de dados legados da demonstração;
+- cache PWA atualizado.
+
 ## v0.2.1
 
 - login com conta Google por Supabase OAuth;
