@@ -25,7 +25,7 @@
   const avatarKey = value => /^badge-(0[1-9]|1[0-9]|20)$/.test(String(value || "")) ? String(value) : "badge-01";
   const groupAvatarUrl = key => {
     const normalized = avatarKey(key);
-    return window.RESENHA_GROUP_AVATARS?.[normalized] || assetUrl(`assets/group-avatars/${normalized}.png?v=0.3.1.6`);
+    return window.RESENHA_GROUP_AVATARS?.[normalized] || assetUrl(`assets/group-avatars/${normalized}.png?v=0.3.2`);
   };
   const positionOptions = ["Goleiro", "Zagueiro", "Lateral", "Volante", "Meia", "Atacante", "Coringa"];
   const roleLabels = { owner: "Proprietário", admin: "Administrador", organizer: "Organizador", treasurer: "Tesoureiro", member: "Membro" };
@@ -143,7 +143,11 @@
       this.state.groups = (memberships || []).filter(item => item.groups).map(item => ({ ...item.groups, role: item.role, player_id: item.player_id }));
       const preferred = this.state.groups.find(group => group.id === preferredGroupId)?.id;
       this.state.currentGroupId = preferred || this.state.groups[0]?.id || null;
-      if (this.state.currentGroupId) await this.loadGroup(this.state.currentGroupId);
+      if (this.state.currentGroupId) {
+        await this.loadGroup(this.state.currentGroupId);
+      } else {
+        ["members", "players", "matches", "attendance", "assignments", "charges", "payments", "expenses", "member_ratings", "match_events", "announcements"].forEach(key => { this.state[key] = []; });
+      }
       return this.state;
     }
 
@@ -253,6 +257,40 @@
       await this.init(groupId);
     }
 
+    async deleteGroup(groupId, confirmation) {
+      clearTimeout(this.reloadTimer);
+      const { error } = await this.client.rpc("delete_group_permanently", {
+        p_group_id: groupId,
+        p_confirmation: confirmation
+      });
+      if (error) throw error;
+      if (this.channel) {
+        await this.client.removeChannel(this.channel);
+        this.channel = null;
+        this.subscribedGroupId = null;
+      }
+      await this.init(null);
+      return this.state;
+    }
+
+    async createMatchSchedule(payload) {
+      const { data, error } = await this.client.rpc("create_match_schedule", {
+        p_group_id: payload.groupId,
+        p_title: payload.title,
+        p_starts_at: payload.startsAt,
+        p_location: payload.location,
+        p_max_players: payload.maxPlayers,
+        p_players_per_team: payload.playersPerTeam,
+        p_bbq_enabled: payload.bbqEnabled,
+        p_bbq_price: payload.bbqPrice,
+        p_notes: payload.notes || "",
+        p_occurrences: payload.occurrences || 1
+      });
+      if (error) throw error;
+      await this.loadGroup(payload.groupId, { subscribe: false });
+      return data || [];
+    }
+
     async setMemberRole(groupId, userId, role) {
       const { error } = await this.client.rpc("set_member_role", { p_group_id: groupId, p_user_id: userId, p_role: role });
       if (error) throw error;
@@ -272,6 +310,12 @@
 
     async deleteMatch(matchId) {
       const { error } = await this.client.rpc("delete_scheduled_match", { p_match_id: matchId });
+      if (error) throw error;
+      return this.loadGroup(this.state.currentGroupId, { subscribe: false });
+    }
+
+    async deleteMatchSeries(matchId) {
+      const { error } = await this.client.rpc("delete_scheduled_match_series", { p_match_id: matchId });
       if (error) throw error;
       return this.loadGroup(this.state.currentGroupId, { subscribe: false });
     }
@@ -357,7 +401,7 @@
         if (!(image instanceof HTMLImageElement) || !image.matches("[data-group-avatar]")) return;
         if (image.dataset.fallbackApplied === "true") return;
         image.dataset.fallbackApplied = "true";
-        image.src = window.RESENHA_GROUP_AVATARS?.["badge-01"] || assetUrl("assets/group-avatars/badge-01.png?v=0.3.1.2");
+        image.src = window.RESENHA_GROUP_AVATARS?.["badge-01"] || assetUrl("assets/group-avatars/badge-01.png?v=0.3.2");
       }, true);
     },
 
@@ -489,7 +533,8 @@
       const date = new Date(match.starts_at);
       const confirmed = this.confirmedFor(match.id);
       const future = date > new Date();
-      return `<article class="card match-card"><div class="match-top"><div class="match-date"><small>${date.toLocaleDateString("pt-BR", { month: "short" }).replace(".", "").toUpperCase()}</small><strong>${String(date.getDate()).padStart(2, "0")}</strong></div><div class="match-info"><h3>${escapeHtml(match.title)}</h3><p>${escapeHtml(shortDate(match.starts_at))}<br>${escapeHtml(match.location)}</p></div><span class="status-pill ${future ? "status-maybe" : "status-confirmed"}">${future ? "Agendado" : "Histórico"}</span></div><div class="match-footer"><div class="avatar-stack">${confirmed.slice(0, 5).map(item => `<span>${initials(this.player(item.player_id)?.name)}</span>`).join("")}${confirmed.length > 5 ? `<span>+${confirmed.length - 5}</span>` : ""}</div><button class="btn btn-ghost btn-small" data-action="open-match" data-id="${match.id}">${confirmed.length}/${match.max_players} jogadores</button></div></article>`;
+      const recurring = Number(match.recurrence_total || 1) > 1;
+      return `<article class="card match-card"><div class="match-top"><div class="match-date"><small>${date.toLocaleDateString("pt-BR", { month: "short" }).replace(".", "").toUpperCase()}</small><strong>${String(date.getDate()).padStart(2, "0")}</strong></div><div class="match-info"><h3>${escapeHtml(match.title)}</h3><p>${escapeHtml(shortDate(match.starts_at))}<br>${escapeHtml(match.location)}</p>${recurring ? '<span class="recurrence-chip">↻ Semanal</span>' : ""}</div><span class="status-pill ${future ? "status-maybe" : "status-confirmed"}">${future ? "Agendado" : "Histórico"}</span></div><div class="match-footer"><div class="avatar-stack">${confirmed.slice(0, 5).map(item => `<span>${initials(this.player(item.player_id)?.name)}</span>`).join("")}${confirmed.length > 5 ? `<span>+${confirmed.length - 5}</span>` : ""}</div><button class="btn btn-ghost btn-small" data-action="open-match" data-id="${match.id}">${confirmed.length}/${match.max_players} jogadores</button></div></article>`;
     },
 
     teamsPage() {
@@ -552,7 +597,7 @@
 
     morePage() {
       const group = this.currentGroup();
-      return `<div class="page-head"><div><span class="page-kicker">CONFIGURAÇÕES</span><h1>Mais</h1><p>Administração e dados da conta.</p></div></div><div class="list"><button class="card menu-row" data-action="profile"><span class="menu-icon">⚽</span><div class="list-main"><strong>Meu perfil de jogador</strong><small>Nome, apelido e posição.</small></div><strong>›</strong></button><button class="card menu-row" data-action="invite"><span class="menu-icon">↗</span><div class="list-main"><strong>Convidar pelo WhatsApp</strong><small>Código ${escapeHtml(group.invite_code)}</small></div><strong>›</strong></button>${this.canManageGroup() ? '<button class="card menu-row" data-action="group-settings"><span class="menu-icon">🛡</span><div class="list-main"><strong>Personalizar grupo</strong><small>Nome, escudo e administração.</small></div><strong>›</strong></button><button class="card menu-row" data-action="manage-roles"><span class="menu-icon">♟</span><div class="list-main"><strong>Gerenciar funções</strong><small>Administrador, organizador e tesoureiro.</small></div><strong>›</strong></button>' : ""}${this.canManageMatches() ? '<button class="card menu-row" data-action="announcement"><span class="menu-icon">!</span><div class="list-main"><strong>Avisos do grupo</strong><small>Publicar comunicado para o elenco.</small></div><strong>›</strong></button><button class="card menu-row" data-action="players"><span class="menu-icon">+</span><div class="list-main"><strong>Jogadores sem acesso</strong><small>Cadastrar convidado eventual.</small></div><strong>›</strong></button>' : ""}<button class="card menu-row" data-action="export"><span class="menu-icon">⇩</span><div class="list-main"><strong>Exportar dados</strong><small>Backup em arquivo JSON.</small></div><strong>›</strong></button><button class="card menu-row danger-row" data-action="sign-out"><span class="menu-icon danger-avatar">↪</span><div class="list-main"><strong>Sair da conta</strong><small>Desconectar e escolher outra conta Google.</small></div><strong>›</strong></button></div><div class="version-card">Resenha FC v0.3.1.2 · experiência visual e fluxo de grupos · Supabase · PWA</div>`;
+      return `<div class="page-head"><div><span class="page-kicker">CONFIGURAÇÕES</span><h1>Mais</h1><p>Administração e dados da conta.</p></div></div><div class="list"><button class="card menu-row" data-action="profile"><span class="menu-icon">⚽</span><div class="list-main"><strong>Meu perfil de jogador</strong><small>Nome, apelido e posição.</small></div><strong>›</strong></button><button class="card menu-row" data-action="invite"><span class="menu-icon">↗</span><div class="list-main"><strong>Convidar pelo WhatsApp</strong><small>Código ${escapeHtml(group.invite_code)}</small></div><strong>›</strong></button>${this.canManageGroup() ? '<button class="card menu-row" data-action="group-settings"><span class="menu-icon">🛡</span><div class="list-main"><strong>Personalizar grupo</strong><small>Nome, escudo e administração.</small></div><strong>›</strong></button><button class="card menu-row" data-action="manage-roles"><span class="menu-icon">♟</span><div class="list-main"><strong>Gerenciar funções</strong><small>Administrador, organizador e tesoureiro.</small></div><strong>›</strong></button>' : ""}${this.canManageMatches() ? '<button class="card menu-row" data-action="announcement"><span class="menu-icon">!</span><div class="list-main"><strong>Avisos do grupo</strong><small>Publicar comunicado para o elenco.</small></div><strong>›</strong></button><button class="card menu-row" data-action="players"><span class="menu-icon">+</span><div class="list-main"><strong>Jogadores sem acesso</strong><small>Cadastrar convidado eventual.</small></div><strong>›</strong></button>' : ""}<button class="card menu-row" data-action="export"><span class="menu-icon">⇩</span><div class="list-main"><strong>Exportar dados</strong><small>Backup em arquivo JSON.</small></div><strong>›</strong></button><button class="card menu-row danger-row" data-action="sign-out"><span class="menu-icon danger-avatar">↪</span><div class="list-main"><strong>Sair da conta</strong><small>Desconectar e escolher outra conta Google.</small></div><strong>›</strong></button></div><div class="version-card">Resenha FC v0.3.2 · grupos e peladas recorrentes · Supabase · PWA</div>`;
     },
 
     async handleAction(action, data) {
@@ -710,7 +755,8 @@
     openGroupSettings() {
       if (!this.canManageGroup()) return this.toast("Apenas proprietário e administrador podem personalizar o grupo.", true);
       const group = this.currentGroup();
-      this.modal("Personalizar grupo", `<form id="groupSettingsForm" class="form-grid"><div class="field"><label>Nome</label><input name="name" value="${escapeHtml(group.name)}" required></div><div class="field"><label>Escudo</label>${this.avatarPicker(group.avatar_key)}</div><button class="btn btn-primary btn-block">Salvar alterações</button></form>`, (root, close) => {
+      const deleteArea = this.currentRole() === "owner" ? `<div class="danger-zone"><div><strong>Excluir grupo permanentemente</strong><p>Apaga jogos, histórico, caixa, avaliações, avisos e todos os vínculos. Não existe recuperação.</p></div><button type="button" class="btn btn-danger btn-block" id="openDeleteGroup">Excluir grupo</button></div>` : "";
+      this.modal("Personalizar grupo", `<form id="groupSettingsForm" class="form-grid"><div class="field"><label>Nome</label><input name="name" value="${escapeHtml(group.name)}" required></div><div class="field"><label>Escudo</label>${this.avatarPicker(group.avatar_key)}</div><button class="btn btn-primary btn-block">Salvar alterações</button></form>${deleteArea}`, (root, close) => {
         $("#groupSettingsForm", root).addEventListener("submit", async event => {
           event.preventDefault();
           const form = new FormData(event.currentTarget);
@@ -719,6 +765,33 @@
           close();
           this.render();
           this.toast("Grupo atualizado.");
+        });
+        $("#openDeleteGroup", root)?.addEventListener("click", () => {
+          close();
+          setTimeout(() => this.openDeleteGroupConfirmation(group), 0);
+        });
+      });
+    },
+
+    openDeleteGroupConfirmation(group) {
+      if (this.currentRole() !== "owner") return this.toast("Somente o proprietário pode excluir o grupo.", true);
+      this.modal("Excluir grupo", `<form id="deleteGroupForm" class="form-grid"><div class="destructive-warning"><span>!</span><div><strong>Exclusão permanente e irreversível</strong><p>O grupo <b>${escapeHtml(group.name)}</b> e todos os seus jogos, históricos, membros, avaliações, avisos e dados financeiros serão apagados definitivamente.</p></div></div><div class="field"><label>Digite EXCLUIR para confirmar</label><input name="confirmation" required autocomplete="off" autocapitalize="characters" placeholder="EXCLUIR"></div><button class="btn btn-danger btn-block" disabled id="confirmDeleteGroup">Excluir definitivamente</button></form>`, (root, close) => {
+        const input = $('[name="confirmation"]', root);
+        const button = $("#confirmDeleteGroup", root);
+        input.addEventListener("input", () => { button.disabled = input.value.trim().toUpperCase() !== "EXCLUIR"; });
+        $("#deleteGroupForm", root).addEventListener("submit", async event => {
+          event.preventDefault();
+          const form = new FormData(event.currentTarget);
+          button.disabled = true;
+          button.textContent = "Excluindo...";
+          await this.repo.deleteGroup(group.id, form.get("confirmation"));
+          this.state = this.repo.state;
+          localStorage.removeItem("resenha-current-group");
+          if (this.state.currentGroupId) localStorage.setItem("resenha-current-group", this.state.currentGroupId);
+          close();
+          this.route = "home";
+          this.render();
+          this.toast("Grupo excluído permanentemente.");
         });
       });
     },
@@ -834,30 +907,44 @@
       const date = new Date(Date.now() + 7 * 86400000);
       date.setHours(20, 0, 0, 0);
       const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
-      this.modal("Agendar pelada", `<form id="matchForm" class="form-grid"><div class="field"><label>Título</label><input name="title" required value="Pelada semanal"></div><div class="field"><label>Data e hora</label><input name="starts_at" type="datetime-local" min="${new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)}" required value="${local}"></div><div class="field"><label>Local</label><input name="location" required placeholder="Arena e número da quadra"></div><div class="field-row"><div class="field"><label>Máximo de jogadores</label><input name="max_players" type="number" min="4" max="60" value="12"></div><div class="field"><label>Jogadores por time</label><input name="players_per_team" type="number" min="2" max="11" value="6"></div></div><label class="check-row"><input name="bbq_enabled" type="checkbox" checked> Organizar churrasco após o jogo</label><div class="field"><label>Valor do churrasco por pessoa</label><input name="bbq_price" type="number" min="0" step="0.01" value="25"></div><div class="field"><label>Observações</label><textarea name="notes" placeholder="Uniforme, prazo, regras..."></textarea></div><button class="btn btn-primary btn-block">Criar jogo</button></form>`, (root, close) => {
+      this.modal("Agendar pelada", `<form id="matchForm" class="form-grid"><div class="field"><label>Título</label><input name="title" required value="Pelada semanal"></div><div class="field"><label>Data e hora da primeira pelada</label><input name="starts_at" type="datetime-local" min="${new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)}" required value="${local}"></div><div class="field"><label>Local</label><input name="location" required placeholder="Arena e número da quadra"></div><div class="field-row"><div class="field"><label>Máximo de jogadores</label><input name="max_players" type="number" min="4" max="60" value="12"></div><div class="field"><label>Jogadores por time</label><input name="players_per_team" type="number" min="2" max="11" value="6"></div></div><label class="check-row recurrence-toggle"><input name="repeat_weekly" type="checkbox"> Repetir esta pelada toda semana</label><div class="recurrence-panel" id="recurrencePanel" hidden><div class="field"><label>Quantidade total de peladas</label><input name="occurrences" type="number" min="2" max="52" value="8" inputmode="numeric"><small>Será criada uma ocorrência a cada 7 dias, sempre no mesmo horário.</small></div><div class="recurrence-preview" id="recurrencePreview">8 peladas semanais serão agendadas.</div></div><label class="check-row"><input name="bbq_enabled" type="checkbox" checked> Organizar churrasco após o jogo</label><div class="field"><label>Valor do churrasco por pessoa</label><input name="bbq_price" type="number" min="0" step="0.01" value="25"></div><div class="field"><label>Observações</label><textarea name="notes" placeholder="Uniforme, prazo, regras..."></textarea></div><button class="btn btn-primary btn-block">Criar programação</button></form>`, (root, close) => {
+        const repeat = $('[name="repeat_weekly"]', root);
+        const panel = $("#recurrencePanel", root);
+        const occurrencesInput = $('[name="occurrences"]', root);
+        const preview = $("#recurrencePreview", root);
+        const refreshRecurrence = () => {
+          panel.hidden = !repeat.checked;
+          const count = Math.max(2, Math.min(52, Number(occurrencesInput.value || 8)));
+          preview.textContent = `${count} peladas semanais serão agendadas.`;
+        };
+        repeat.addEventListener("change", refreshRecurrence);
+        occurrencesInput.addEventListener("input", refreshRecurrence);
+        refreshRecurrence();
         $("#matchForm", root).addEventListener("submit", async event => {
           event.preventDefault();
           const form = new FormData(event.currentTarget);
           const startsAt = new Date(form.get("starts_at"));
           if (startsAt <= new Date()) return this.toast("Escolha uma data futura.", true);
-          await this.repo.mutate("matches", {
-            id: uid(),
-            group_id: this.state.currentGroupId,
+          const occurrences = repeat.checked ? Math.max(2, Math.min(52, Number(form.get("occurrences") || 8))) : 1;
+          const submit = event.submitter;
+          submit.disabled = true;
+          submit.textContent = occurrences > 1 ? "Criando série..." : "Criando...";
+          await this.repo.createMatchSchedule({
+            groupId: this.state.currentGroupId,
             title: form.get("title"),
-            starts_at: startsAt.toISOString(),
+            startsAt: startsAt.toISOString(),
             location: form.get("location"),
-            max_players: Number(form.get("max_players")),
-            players_per_team: Number(form.get("players_per_team")),
-            status: "scheduled",
-            bbq_enabled: form.get("bbq_enabled") === "on",
-            bbq_price: Number(form.get("bbq_price") || 0),
+            maxPlayers: Number(form.get("max_players")),
+            playersPerTeam: Number(form.get("players_per_team")),
+            bbqEnabled: form.get("bbq_enabled") === "on",
+            bbqPrice: Number(form.get("bbq_price") || 0),
             notes: form.get("notes") || "",
-            created_at: nowIso()
+            occurrences
           });
           this.state = this.repo.state;
           close();
           this.render();
-          this.toast("Pelada agendada.");
+          this.toast(occurrences > 1 ? `${occurrences} peladas semanais agendadas.` : "Pelada agendada.");
         });
       });
     },
@@ -866,19 +953,31 @@
       const match = this.state.matches.find(item => item.id === id);
       if (!match) return;
       const future = new Date(match.starts_at) > new Date();
+      const recurring = Number(match.recurrence_total || 1) > 1;
       const grouped = { confirmed: [], maybe: [], waitlist: [], out: [] };
       this.attendanceFor(id).forEach(item => grouped[item.status]?.push(item));
       const groupHtml = (title, key) => `<div class="section-title"><h2>${title} (${grouped[key].length})</h2></div><div class="list">${grouped[key].map(item => this.playerRow(this.player(item.player_id) || { name: "Jogador" })).join("") || '<div class="card empty">Nenhum.</div>'}</div>`;
-      this.modal(match.title, `<div class="match-detail-banner"><span class="status-pill ${future ? "status-maybe" : "status-confirmed"}">${future ? "Agendado" : "Histórico"}</span><strong>${escapeHtml(shortDate(match.starts_at))}</strong><p>${escapeHtml(match.location)}</p>${match.notes ? `<small>${escapeHtml(match.notes)}</small>` : ""}</div><div class="actions"><button class="btn btn-primary" data-modal-rsvp="${match.id}">${future ? "Minha presença" : "Ver minha resposta"}</button>${this.canManageMatches() ? `<button class="btn btn-secondary" data-modal-teams="${match.id}">Separar times</button>` : ""}</div>${future && this.canManageMatches() ? `<button class="btn btn-danger btn-block delete-match-button" data-delete-match="${match.id}">Excluir jogo agendado</button><p class="danger-help">Esta opção desaparece após o horário do evento. Jogos realizados permanecem no histórico.</p>` : ""}${groupHtml("Confirmados", "confirmed")}${groupHtml("Talvez", "maybe")}${groupHtml("Lista de espera", "waitlist")}${groupHtml("Não vão", "out")}`, (root, close) => {
+      const recurringInfo = recurring ? `<div class="recurrence-detail"><span>↻</span><div><strong>Pelada semanal recorrente</strong><small>Esta data pertence a uma série criada automaticamente.</small></div></div>` : "";
+      const deleteControls = future && this.canManageMatches() ? `<div class="delete-match-actions"><button class="btn btn-danger btn-block delete-match-button" data-delete-match="${match.id}">${recurring ? "Excluir somente esta data" : "Excluir jogo agendado"}</button>${recurring ? `<button class="btn btn-danger-outline btn-block" data-delete-series="${match.id}">Excluir esta e as próximas</button>` : ""}<p class="danger-help">A exclusão só é permitida antes do horário. Peladas realizadas permanecem no histórico.</p></div>` : "";
+      this.modal(match.title, `<div class="match-detail-banner"><span class="status-pill ${future ? "status-maybe" : "status-confirmed"}">${future ? "Agendado" : "Histórico"}</span><strong>${escapeHtml(shortDate(match.starts_at))}</strong><p>${escapeHtml(match.location)}</p>${match.notes ? `<small>${escapeHtml(match.notes)}</small>` : ""}</div>${recurringInfo}<div class="actions"><button class="btn btn-primary" data-modal-rsvp="${match.id}">${future ? "Minha presença" : "Ver minha resposta"}</button>${this.canManageMatches() ? `<button class="btn btn-secondary" data-modal-teams="${match.id}">Separar times</button>` : ""}</div>${deleteControls}${groupHtml("Confirmados", "confirmed")}${groupHtml("Talvez", "maybe")}${groupHtml("Lista de espera", "waitlist")}${groupHtml("Não vão", "out")}`, (root, close) => {
         $("[data-modal-rsvp]", root).addEventListener("click", () => { close(); this.openRsvp(match.id); });
         $("[data-modal-teams]", root)?.addEventListener("click", async () => { close(); await this.drawTeams(match.id); });
         $("[data-delete-match]", root)?.addEventListener("click", async () => {
-          if (!confirm("Excluir definitivamente este jogo agendado?")) return;
+          const message = recurring ? "Excluir somente esta ocorrência da pelada semanal? As demais datas serão mantidas." : "Excluir definitivamente este jogo agendado?";
+          if (!confirm(message)) return;
           await this.repo.deleteMatch(match.id);
           this.state = this.repo.state;
           close();
           this.render();
-          this.toast("Jogo excluído.");
+          this.toast(recurring ? "Ocorrência excluída. As demais foram mantidas." : "Jogo excluído.");
+        });
+        $("[data-delete-series]", root)?.addEventListener("click", async () => {
+          if (!confirm("Excluir esta ocorrência e todas as próximas desta série semanal? Peladas anteriores e já realizadas serão preservadas.")) return;
+          await this.repo.deleteMatchSeries(match.id);
+          this.state = this.repo.state;
+          close();
+          this.render();
+          this.toast("Esta ocorrência e as próximas foram excluídas.");
         });
       });
     },
