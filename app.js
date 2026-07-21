@@ -389,7 +389,35 @@
       const { data, error } = await this.client.functions.invoke("publish-announcement", {
         body: { groupId, title, body }
       });
-      if (error) throw error;
+
+      if (error) {
+        let message = error?.message || "A Edge Function recusou a publicação do aviso.";
+        let details = null;
+
+        try {
+          const response = error?.context;
+          if (response && typeof response.clone === "function") {
+            const cloned = response.clone();
+            details = await cloned.json().catch(async () => {
+              const text = await response.text().catch(() => "");
+              return text ? { error: text } : null;
+            });
+          }
+        } catch (parseError) {
+          console.warn("Não foi possível ler o retorno da Edge Function:", parseError);
+        }
+
+        if (details?.error || details?.message) {
+          message = details.error || details.message;
+          if (details.stage) message += ` [etapa: ${details.stage}]`;
+        }
+
+        const wrapped = new Error(message);
+        wrapped.cause = error;
+        wrapped.details = details;
+        throw wrapped;
+      }
+
       if (!data?.announcement) throw new Error(data?.error || "O aviso não foi criado.");
       await this.loadGroup(groupId, { subscribe: false });
       return data;
