@@ -84,7 +84,7 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .app-shell.home-shell{height:100svh;min-height:100svh;overflow:hidden}.home-hero .next-match-panel{position:relative;overflow:hidden}.home-hero .next-match-panel:after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent 49.7%,rgba(255,255,255,.08) 49.8% 50.2%,transparent 50.3%),radial-gradient(circle at 50% 72%,transparent 0 39px,rgba(255,255,255,.08) 40px 41px,transparent 42px);pointer-events:none}.home-hero .next-match-panel>*{position:relative;z-index:1}
 
 
-/* v0.3.1.1 — login integrado e ícones autocontidos */
+/* v0.3.1.2 — correção de acionamento do login Google */
 .auth-logo,.welcome-mark,.top-group-avatar,.hero-group-avatar,.summary-group-avatar,.invite-avatar,.group-avatar,.avatar-option img{
   background:transparent!important;
   box-shadow:none;
@@ -114,12 +114,14 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .google-identity-button{
   position:absolute;
   inset:0;
-  z-index:2;
+  z-index:1;
   min-height:52px;
   display:block;
-  opacity:.001;
+  opacity:1;
   overflow:hidden;
   cursor:pointer;
+  pointer-events:auto;
+  touch-action:manipulation;
 }
 .google-identity-button>div,.google-identity-button iframe{
   position:absolute!important;
@@ -128,11 +130,13 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
   max-width:none!important;
   height:100%!important;
   min-height:52px!important;
+  opacity:1!important;
+  pointer-events:auto!important;
 }
 .google-login-visual{
   position:absolute;
   inset:0;
-  z-index:1;
+  z-index:2;
   display:flex;
   align-items:center;
   justify-content:center;
@@ -142,11 +146,14 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
   font-weight:850;
   letter-spacing:.01em;
   pointer-events:none;
-  background:transparent;
+  background:linear-gradient(180deg,rgba(4,23,33,.985),rgba(3,17,27,.985));
 }
+.google-login-visual *{pointer-events:none!important}
 .google-g{width:23px;height:23px;flex:0 0 auto;filter:drop-shadow(0 2px 4px rgba(0,0,0,.35))}
 .google-card p{margin-top:9px}
 .avatar-option img,.group-avatar,.top-group-avatar,.hero-group-avatar,.summary-group-avatar,.invite-avatar{
   object-fit:contain;
 }
 .avatar-option img{display:block}
+
+.google-login-shell.is-loading .google-login-visual{opacity:.58}
