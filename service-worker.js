@@ -1,4 +1,4 @@
-const CACHE = "resenha-fc-v0.3.1";
+const CACHE = "resenha-fc-v0.3.1.1";
 const ASSETS = [
   "./",
   "./index.html",
@@ -9,8 +9,9 @@ const ASSETS = [
   "./offline.html",
   "./brand/brand-mark.png",
   "./brand/logo-resenha-fc.png",
-  "./login-logo-transparent-v031.png",
-  "./brand/brand-mark-transparent-v031.png",
+  "./login-logo-transparent-v0311.png",
+  "./brand/brand-mark-transparent-v0311.png",
+  "./group-avatars-data.js",
   "./icons/favicon-16x16.png",
   "./icons/favicon-32x32.png",
   "./icons/icon-192-v023.png",
@@ -41,9 +42,14 @@ const ASSETS = [
   "./assets/group-avatars/badge-20.png"
 ];
 
-self.addEventListener("install", event => event.waitUntil(
-  caches.open(CACHE).then(cache => cache.addAll(ASSETS)).then(() => self.skipWaiting())
-));
+self.addEventListener("install", event => event.waitUntil((async () => {
+  const cache = await caches.open(CACHE);
+  await Promise.allSettled(ASSETS.map(async asset => {
+    try { await cache.add(asset); }
+    catch (error) { console.warn("Asset não armazenado no cache:", asset, error); }
+  }));
+  await self.skipWaiting();
+})()));
 
 self.addEventListener("activate", event => event.waitUntil(
   caches.keys().then(keys => Promise.all(keys.filter(key => key !== CACHE).map(key => caches.delete(key)))).then(() => self.clients.claim())

@@ -18,8 +18,14 @@
   Cache-Control: no-cache, max-age=0, must-revalidate
 
 
-/login-logo-transparent-v031.png
+/login-logo-transparent-v0311.png
   Cache-Control: public, max-age=31536000, immutable
 
 /assets/group-avatars/*
+  Cache-Control: public, max-age=31536000, immutable
+
+/group-avatars-data.js
+  Cache-Control: no-cache, max-age=0, must-revalidate
+
+/brand/brand-mark-transparent-v0311.png
   Cache-Control: public, max-age=31536000, immutable

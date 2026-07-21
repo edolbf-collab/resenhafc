@@ -24,3 +24,9 @@
 - perfil esportivo e posições;
 - exclusão de partidas somente antes do horário;
 - interface esportiva e backend Supabase.
+
+## v0.3.1.1
+- Transparência real nos logotipos da interface.
+- Botão Google integrado ao tema sem fundo branco ou tarja visível.
+- Escudos de grupos incorporados ao aplicativo para evitar falhas de caminho/cache.
+- Instalação do service worker tolerante a falhas isoladas.
