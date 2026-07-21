@@ -98,62 +98,31 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
   box-shadow:none;
   padding:0;
 }
-.google-login-shell{
-  position:relative;
+.google-identity-button{
   width:100%;
   min-height:52px;
-  border:1px solid rgba(155,227,63,.52);
-  border-radius:16px;
-  overflow:hidden;
-  background:rgba(3,17,27,.2);
-  box-shadow:inset 0 0 0 1px rgba(255,255,255,.025),0 12px 32px rgba(0,0,0,.22);
-  transition:border-color .18s ease,background .18s ease,transform .18s ease;
-}
-.google-login-shell:active{transform:scale(.992)}
-.google-login-shell:hover{border-color:rgba(155,227,63,.82);background:rgba(20,66,42,.18)}
-.google-identity-button{
-  position:absolute;
-  inset:0;
-  z-index:1;
-  min-height:52px;
-  display:block;
-  opacity:1;
-  overflow:hidden;
-  cursor:pointer;
-  pointer-events:auto;
-  touch-action:manipulation;
-}
-.google-identity-button>div,.google-identity-button iframe{
-  position:absolute!important;
-  inset:0!important;
-  width:100%!important;
-  max-width:none!important;
-  height:100%!important;
-  min-height:52px!important;
-  opacity:1!important;
-  pointer-events:auto!important;
-}
-.google-login-visual{
-  position:absolute;
-  inset:0;
-  z-index:2;
   display:flex;
   align-items:center;
   justify-content:center;
-  gap:12px;
-  color:#f8fff8;
-  font-size:14px;
-  font-weight:850;
-  letter-spacing:.01em;
-  pointer-events:none;
-  background:linear-gradient(180deg,rgba(4,23,33,.985),rgba(3,17,27,.985));
+  overflow:visible;
+  cursor:pointer;
+  touch-action:manipulation;
 }
-.google-login-visual *{pointer-events:none!important}
-.google-g{width:23px;height:23px;flex:0 0 auto;filter:drop-shadow(0 2px 4px rgba(0,0,0,.35))}
+.google-identity-button.is-loading{opacity:.58;pointer-events:none}
+.google-identity-button>div{
+  width:100%!important;
+  max-width:420px!important;
+  margin:0 auto!important;
+}
+.google-identity-button iframe{
+  display:block!important;
+  max-width:100%!important;
+  min-height:44px!important;
+  pointer-events:auto!important;
+}
 .google-card p{margin-top:9px}
 .avatar-option img,.group-avatar,.top-group-avatar,.hero-group-avatar,.summary-group-avatar,.invite-avatar{
   object-fit:contain;
 }
 .avatar-option img{display:block}
 
-.google-login-shell.is-loading .google-login-visual{opacity:.58}
