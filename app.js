@@ -367,15 +367,28 @@
 
     async savePushSubscription(subscription) {
       const json = subscription.toJSON();
+      const endpoint = String(json.endpoint || "").trim();
       const { error } = await this.client.rpc("save_push_subscription", {
-        p_endpoint: json.endpoint,
+        p_endpoint: endpoint,
         p_p256dh: json.keys?.p256dh || "",
         p_auth: json.keys?.auth || "",
         p_device_label: deviceLabel(),
         p_user_agent: navigator.userAgent
       });
       if (error) throw error;
-      return this.loadGroup(this.state.currentGroupId, { subscribe: false });
+
+      const verification = await this.client
+        .from("push_subscriptions")
+        .select("id,endpoint,device_label,enabled,created_at,updated_at")
+        .eq("user_id", this.state.profile.id)
+        .eq("endpoint", endpoint)
+        .eq("enabled", true)
+        .maybeSingle();
+      if (verification.error) throw verification.error;
+      if (!verification.data) throw new Error("O aparelho autorizou notificações, mas a assinatura não foi vinculada ao seu usuário no banco.");
+
+      await this.loadGroup(this.state.currentGroupId, { subscribe: false });
+      return verification.data;
     }
 
     async removePushSubscription(endpoint) {
@@ -714,7 +727,7 @@
       const group = this.currentGroup();
       const pushConfigured = Boolean(String(window.RESENHA_CONFIG?.vapidPublicKey || "").trim());
       const pushText = !pushSupported() ? "Este navegador não oferece notificações push." : !pushConfigured ? "Conclua a configuração VAPID da v0.3.3." : "Receba avisos mesmo com o aplicativo fechado.";
-      return `<div class="page-head"><div><span class="page-kicker">CONFIGURAÇÕES</span><h1>Mais</h1><p>Administração e dados da conta.</p></div></div><div class="list"><button class="card menu-row" data-action="profile"><span class="menu-icon">⚽</span><div class="list-main"><strong>Meu perfil de jogador</strong><small>Nome, apelido e posição.</small></div><strong>›</strong></button><button class="card menu-row" data-action="notification-settings"><span class="menu-icon">🔔</span><div class="list-main"><strong>Notificações no celular</strong><small>${escapeHtml(pushText)}</small></div><strong>›</strong></button><button class="card menu-row" data-action="announcement-center"><span class="menu-icon">📣</span><div class="list-main"><strong>Central de avisos</strong><small>Consulte os comunicados do grupo.</small></div><strong>›</strong></button><button class="card menu-row" data-action="invite"><span class="menu-icon">↗</span><div class="list-main"><strong>Convidar pelo WhatsApp</strong><small>Código ${escapeHtml(group.invite_code)}</small></div><strong>›</strong></button>${this.canManageGroup() ? '<button class="card menu-row" data-action="group-settings"><span class="menu-icon">🛡</span><div class="list-main"><strong>Personalizar grupo</strong><small>Nome, escudo e administração.</small></div><strong>›</strong></button><button class="card menu-row" data-action="manage-roles"><span class="menu-icon">♟</span><div class="list-main"><strong>Gerenciar funções</strong><small>Administrador, organizador e tesoureiro.</small></div><strong>›</strong></button>' : ""}${this.canManageMatches() ? '<button class="card menu-row" data-action="announcement"><span class="menu-icon">!</span><div class="list-main"><strong>Publicar aviso</strong><small>Enviar comunicado e notificação ao elenco.</small></div><strong>›</strong></button><button class="card menu-row" data-action="players"><span class="menu-icon">+</span><div class="list-main"><strong>Jogadores sem acesso</strong><small>Cadastrar convidado eventual.</small></div><strong>›</strong></button>' : ""}<button class="card menu-row" data-action="export"><span class="menu-icon">⇩</span><div class="list-main"><strong>Exportar dados</strong><small>Backup em arquivo JSON.</small></div><strong>›</strong></button><button class="card menu-row danger-row" data-action="sign-out"><span class="menu-icon danger-avatar">↪</span><div class="list-main"><strong>Sair da conta</strong><small>Desconectar e escolher outra conta Google.</small></div><strong>›</strong></button></div><div class="version-card">Resenha FC v0.3.3.1 · correção da publicação de avisos · Supabase · PWA</div>`;
+      return `<div class="page-head"><div><span class="page-kicker">CONFIGURAÇÕES</span><h1>Mais</h1><p>Administração e dados da conta.</p></div></div><div class="list"><button class="card menu-row" data-action="profile"><span class="menu-icon">⚽</span><div class="list-main"><strong>Meu perfil de jogador</strong><small>Nome, apelido e posição.</small></div><strong>›</strong></button><button class="card menu-row" data-action="notification-settings"><span class="menu-icon">🔔</span><div class="list-main"><strong>Notificações no celular</strong><small>${escapeHtml(pushText)}</small></div><strong>›</strong></button><button class="card menu-row" data-action="announcement-center"><span class="menu-icon">📣</span><div class="list-main"><strong>Central de avisos</strong><small>Consulte os comunicados do grupo.</small></div><strong>›</strong></button><button class="card menu-row" data-action="invite"><span class="menu-icon">↗</span><div class="list-main"><strong>Convidar pelo WhatsApp</strong><small>Código ${escapeHtml(group.invite_code)}</small></div><strong>›</strong></button>${this.canManageGroup() ? '<button class="card menu-row" data-action="group-settings"><span class="menu-icon">🛡</span><div class="list-main"><strong>Personalizar grupo</strong><small>Nome, escudo e administração.</small></div><strong>›</strong></button><button class="card menu-row" data-action="manage-roles"><span class="menu-icon">♟</span><div class="list-main"><strong>Gerenciar funções</strong><small>Administrador, organizador e tesoureiro.</small></div><strong>›</strong></button>' : ""}${this.canManageMatches() ? '<button class="card menu-row" data-action="announcement"><span class="menu-icon">!</span><div class="list-main"><strong>Publicar aviso</strong><small>Enviar comunicado e notificação ao elenco.</small></div><strong>›</strong></button><button class="card menu-row" data-action="players"><span class="menu-icon">+</span><div class="list-main"><strong>Jogadores sem acesso</strong><small>Cadastrar convidado eventual.</small></div><strong>›</strong></button>' : ""}<button class="card menu-row" data-action="export"><span class="menu-icon">⇩</span><div class="list-main"><strong>Exportar dados</strong><small>Backup em arquivo JSON.</small></div><strong>›</strong></button><button class="card menu-row danger-row" data-action="sign-out"><span class="menu-icon danger-avatar">↪</span><div class="list-main"><strong>Sair da conta</strong><small>Desconectar e escolher outra conta Google.</small></div><strong>›</strong></button></div><div class="version-card">Resenha FC v0.3.3.3 · correção do vínculo e envio push · Supabase · PWA</div>`;
     },
 
     async handleAction(action, data) {
@@ -1302,16 +1315,19 @@
       const supported = pushSupported();
       const configured = Boolean(String(window.RESENHA_CONFIG?.vapidPublicKey || "").trim());
       const subscription = supported ? await this.currentPushSubscription() : null;
+      const endpoint = subscription?.endpoint || "";
+      const linked = Boolean(endpoint && (this.state.push_subscriptions || []).some(item => item.endpoint === endpoint && item.enabled));
       const permission = supported ? Notification.permission : "unsupported";
       const iosInstallRequired = isIos() && !isStandalone();
-      const status = subscription ? "Ativas neste aparelho" : permission === "denied" ? "Bloqueadas nos ajustes" : "Desativadas neste aparelho";
-      const explanation = !supported ? "O navegador deste aparelho não oferece a tecnologia necessária." : !configured ? "A chave pública VAPID precisa ser adicionada ao supabase-config.js." : iosInstallRequired ? "No iPhone, notificações funcionam quando o site é adicionado à Tela de Início e aberto pelo ícone." : "Você receberá os avisos publicados pelo administrador ou organizador, mesmo com o aplicativo fechado.";
-      const action = subscription ? '<button class="btn btn-danger btn-block" id="disablePush">Desativar neste aparelho</button>' : '<button class="btn btn-primary btn-block" id="enablePush">Ativar notificações</button>';
-      this.modal("Notificações no celular", `<div class="notification-status-card ${subscription ? "is-active" : ""}"><span>🔔</span><div><strong>${escapeHtml(status)}</strong><p>${escapeHtml(explanation)}</p></div></div>${configured && supported && !iosInstallRequired ? action : ""}<div class="notice"><strong>Privacidade</strong><br>A ativação vale somente para este aparelho. Você pode desativar a qualquer momento.</div>`, (root, close) => {
+      const active = Boolean(subscription && linked);
+      const status = active ? "Ativas neste aparelho" : subscription && !linked ? "Aguardando vinculação" : permission === "denied" ? "Bloqueadas nos ajustes" : "Desativadas neste aparelho";
+      const explanation = !supported ? "O navegador deste aparelho não oferece a tecnologia necessária." : !configured ? "A chave pública VAPID precisa ser adicionada ao supabase-config.js." : iosInstallRequired ? "No iPhone, notificações funcionam quando o site é adicionado à Tela de Início e aberto pelo ícone." : subscription && !linked ? "A permissão existe no aparelho, mas a assinatura ainda não está registrada no grupo. Toque em Vincular novamente." : "Você receberá os avisos publicados pelo administrador ou organizador, mesmo com o aplicativo fechado.";
+      const action = active ? '<button class="btn btn-danger btn-block" id="disablePush">Desativar neste aparelho</button>' : `<button class="btn btn-primary btn-block" id="enablePush">${subscription ? "Vincular novamente" : "Ativar notificações"}</button>`;
+      this.modal("Notificações no celular", `<div class="notification-status-card ${active ? "is-active" : ""}"><span>🔔</span><div><strong>${escapeHtml(status)}</strong><p>${escapeHtml(explanation)}</p></div></div>${configured && supported && !iosInstallRequired ? action : ""}<div class="notice"><strong>Privacidade</strong><br>A ativação vale somente para este aparelho. Você pode desativar a qualquer momento.</div>`, (root, close) => {
         $("#enablePush", root)?.addEventListener("click", async event => {
           const button = event.currentTarget; button.disabled = true; button.textContent = "Ativando…";
-          try { await this.enablePushNotifications(); close(); this.toast("Notificações ativadas neste aparelho."); }
-          catch (error) { button.disabled = false; button.textContent = "Ativar notificações"; this.toast(error.message, true); }
+          try { await this.enablePushNotifications(); close(); this.toast("Notificações ativadas e vinculadas neste aparelho."); }
+          catch (error) { button.disabled = false; button.textContent = subscription ? "Vincular novamente" : "Ativar notificações"; this.toast(error.message, true); }
         });
         $("#disablePush", root)?.addEventListener("click", async event => {
           const button = event.currentTarget; button.disabled = true; button.textContent = "Desativando…";
@@ -1346,7 +1362,17 @@
             close();
             this.render();
             const sent = Number(result.sent || 0);
-            this.toast(sent ? `Aviso publicado e enviado a ${sent} aparelho(s).` : "Aviso publicado. Nenhum integrante ativou notificações ainda.");
+            const failed = Number(result.failed || 0);
+            const subscriptions = Number(result.subscriptions || 0);
+            if (sent > 0) {
+              this.toast(`Aviso publicado e enviado a ${sent} aparelho(s)${failed ? `; ${failed} envio(s) falharam` : ""}.`);
+            } else if (subscriptions > 0 || failed > 0) {
+              const reason = String(result.failureReason || "").trim();
+              const status = Number(result.failureStatus || 0);
+              this.toast(`Aviso publicado, mas o envio falhou em ${failed || subscriptions} aparelho(s)${status ? ` (código ${status})` : ""}${reason ? `: ${reason}` : "."}`, true);
+            } else {
+              this.toast("Aviso publicado. Nenhum integrante possui assinatura vinculada no banco.");
+            }
           } catch (error) {
             button.disabled = false;
             button.textContent = "Publicar e notificar";
