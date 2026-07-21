@@ -1,4 +1,4 @@
-const CACHE = "resenha-fc-v0.3.2.1";
+const CACHE = "resenha-fc-v0.3.3";
 const ASSETS = [
   "./",
   "./index.html",
@@ -14,32 +14,14 @@ const ASSETS = [
   "./group-avatars-data.js",
   "./icons/favicon-16x16.png",
   "./icons/favicon-32x32.png",
+  "./icons/icon-96.png",
   "./icons/icon-192-v023.png",
   "./icons/icon-512-v023.png",
   "./icons/maskable-icon-192.png",
   "./icons/maskable-icon-512.png",
   "./apple-touch-icon.png",
   "./apple-touch-icon-180x180-v023.png",
-  "./assets/group-avatars/badge-01.png",
-  "./assets/group-avatars/badge-02.png",
-  "./assets/group-avatars/badge-03.png",
-  "./assets/group-avatars/badge-04.png",
-  "./assets/group-avatars/badge-05.png",
-  "./assets/group-avatars/badge-06.png",
-  "./assets/group-avatars/badge-07.png",
-  "./assets/group-avatars/badge-08.png",
-  "./assets/group-avatars/badge-09.png",
-  "./assets/group-avatars/badge-10.png",
-  "./assets/group-avatars/badge-11.png",
-  "./assets/group-avatars/badge-12.png",
-  "./assets/group-avatars/badge-13.png",
-  "./assets/group-avatars/badge-14.png",
-  "./assets/group-avatars/badge-15.png",
-  "./assets/group-avatars/badge-16.png",
-  "./assets/group-avatars/badge-17.png",
-  "./assets/group-avatars/badge-18.png",
-  "./assets/group-avatars/badge-19.png",
-  "./assets/group-avatars/badge-20.png"
+  ...Array.from({ length: 20 }, (_, index) => `./assets/group-avatars/badge-${String(index + 1).padStart(2, "0")}.png`)
 ];
 
 self.addEventListener("install", event => event.waitUntil((async () => {
@@ -69,4 +51,40 @@ self.addEventListener("fetch", event => {
       })
       .catch(() => caches.match(event.request, { ignoreSearch: true }).then(hit => hit || (navigation ? caches.match("./index.html", { ignoreSearch: true }) : caches.match("./offline.html", { ignoreSearch: true }))))
   );
+});
+
+self.addEventListener("push", event => {
+  let payload = {};
+  try { payload = event.data?.json() || {}; }
+  catch { payload = { body: event.data?.text() || "Novo aviso do grupo." }; }
+
+  const title = payload.title || "Resenha FC";
+  const options = {
+    body: payload.body || "Novo aviso do grupo.",
+    icon: payload.icon || "./icons/icon-192-v023.png",
+    badge: payload.badge || "./icons/icon-96.png",
+    tag: payload.tag || "resenha-fc-aviso",
+    renotify: true,
+    data: payload.data || { url: payload.url || "./?page=home" },
+    vibrate: [120, 60, 120],
+    timestamp: payload.timestamp || Date.now()
+  };
+
+  event.waitUntil((async () => {
+    await self.registration.showNotification(title, options);
+    try { await self.registration.setAppBadge?.(1); } catch {}
+  })());
+});
+
+self.addEventListener("notificationclick", event => {
+  event.notification.close();
+  const target = new URL(event.notification.data?.url || "./?page=home", self.location.origin).href;
+  event.waitUntil((async () => {
+    const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    for (const client of windows) {
+      if ("navigate" in client) await client.navigate(target);
+      if ("focus" in client) return client.focus();
+    }
+    return self.clients.openWindow(target);
+  })());
 });

@@ -25,7 +25,7 @@
   const avatarKey = value => /^badge-(0[1-9]|1[0-9]|20)$/.test(String(value || "")) ? String(value) : "badge-01";
   const groupAvatarUrl = key => {
     const normalized = avatarKey(key);
-    return window.RESENHA_GROUP_AVATARS?.[normalized] || assetUrl(`assets/group-avatars/${normalized}.png?v=0.3.2.1`);
+    return window.RESENHA_GROUP_AVATARS?.[normalized] || assetUrl(`assets/group-avatars/${normalized}.png?v=0.3.3`);
   };
   const positionOptions = ["Goleiro", "Zagueiro", "Lateral", "Volante", "Meia", "Atacante", "Coringa"];
   const roleLabels = { owner: "Administrador", admin: "Administrador", organizer: "Organizador", treasurer: "Tesoureiro", member: "Membro" };
@@ -65,6 +65,16 @@
     const digest = await crypto.subtle.digest("SHA-256", bytes);
     return [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, "0")).join("");
   };
+  const base64UrlToUint8Array = value => {
+    const padding = "=".repeat((4 - value.length % 4) % 4);
+    const base64 = (value + padding).replace(/-/g, "+").replace(/_/g, "/");
+    const raw = atob(base64);
+    return Uint8Array.from([...raw].map(char => char.charCodeAt(0)));
+  };
+  const isIos = () => /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const isStandalone = () => window.matchMedia?.("(display-mode: standalone)").matches || window.navigator.standalone === true;
+  const pushSupported = () => "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+  const deviceLabel = () => isIos() ? "iPhone/iPad" : /android/i.test(navigator.userAgent) ? "Android" : "Navegador";
 
   class SupabaseRepository {
     constructor(config) {
@@ -86,7 +96,8 @@
         expenses: [],
         member_ratings: [],
         match_events: [],
-        announcements: []
+        announcements: [],
+        push_subscriptions: []
       };
       this.channel = null;
       this.subscribedGroupId = null;
@@ -146,7 +157,7 @@
       if (this.state.currentGroupId) {
         await this.loadGroup(this.state.currentGroupId);
       } else {
-        ["members", "players", "matches", "attendance", "assignments", "charges", "payments", "expenses", "member_ratings", "match_events", "announcements"].forEach(key => { this.state[key] = []; });
+        ["members", "players", "matches", "attendance", "assignments", "charges", "payments", "expenses", "member_ratings", "match_events", "announcements", "push_subscriptions"].forEach(key => { this.state[key] = []; });
       }
       return this.state;
     }
@@ -161,6 +172,10 @@
         const stateKey = tableNames[index] === "group_members" ? "members" : tableNames[index];
         this.state[stateKey] = result.data || [];
       });
+
+      const subscriptions = await this.client.from("push_subscriptions").select("id,endpoint,device_label,enabled,created_at,updated_at").eq("user_id", this.state.profile.id);
+      if (subscriptions.error) throw subscriptions.error;
+      this.state.push_subscriptions = subscriptions.data || [];
 
       const [attendance, assignments, events] = await Promise.all([
         this.client.from("match_attendance").select("*").eq("group_id", groupId),
@@ -349,6 +364,36 @@
       if (error) throw error;
       return this.loadGroup(this.state.currentGroupId, { subscribe: false });
     }
+
+    async savePushSubscription(subscription) {
+      const json = subscription.toJSON();
+      const { error } = await this.client.rpc("save_push_subscription", {
+        p_endpoint: json.endpoint,
+        p_p256dh: json.keys?.p256dh || "",
+        p_auth: json.keys?.auth || "",
+        p_device_label: deviceLabel(),
+        p_user_agent: navigator.userAgent
+      });
+      if (error) throw error;
+      return this.loadGroup(this.state.currentGroupId, { subscribe: false });
+    }
+
+    async removePushSubscription(endpoint) {
+      if (!endpoint) return;
+      const { error } = await this.client.rpc("remove_push_subscription", { p_endpoint: endpoint });
+      if (error) throw error;
+      this.state.push_subscriptions = this.state.push_subscriptions.filter(item => item.endpoint !== endpoint);
+    }
+
+    async publishAnnouncement(groupId, title, body) {
+      const { data, error } = await this.client.functions.invoke("publish-announcement", {
+        body: { groupId, title, body }
+      });
+      if (error) throw error;
+      if (!data?.announcement) throw new Error(data?.error || "O aviso não foi criado.");
+      await this.loadGroup(groupId, { subscribe: false });
+      return data;
+    }
   }
 
   const App = {
@@ -357,6 +402,9 @@
     state: null,
     pendingInvite: "",
     launchAction: "",
+    launchGroupId: "",
+    launchAnnouncementId: "",
+    swRegistration: null,
 
     async init() {
       this.bindGlobal();
@@ -367,12 +415,14 @@
 
       this.repo = new SupabaseRepository(config);
       try {
-        this.state = await this.repo.init(localStorage.getItem("resenha-current-group") || null);
+        this.state = await this.repo.init(this.launchGroupId || localStorage.getItem("resenha-current-group") || null);
         if (!this.state) return this.renderAuth();
         this.render();
         this.registerServiceWorker();
+        navigator.clearAppBadge?.().catch?.(() => {});
         if (this.pendingInvite) setTimeout(() => this.openJoinGroupModal(this.pendingInvite), 80);
         else if (this.launchAction === "rsvp") setTimeout(() => this.openRsvp(this.nextMatch()?.id), 80);
+        else if (this.launchAnnouncementId) setTimeout(() => this.openAnnouncementCenter(this.launchAnnouncementId), 120);
       } catch (error) {
         console.error(error);
         this.renderBackendError(error);
@@ -387,6 +437,8 @@
       const page = params.get("page");
       if (["home", "matches", "teams", "members", "finance", "more"].includes(page)) this.route = page;
       this.launchAction = params.get("action") || "";
+      this.launchGroupId = String(params.get("group") || "").trim();
+      this.launchAnnouncementId = String(params.get("announcement") || "").trim();
     },
 
     bindGlobal() {
@@ -412,20 +464,32 @@
         if (this.currentGroup() && this.canManageGroup()) this.openGroupSettings();
         else this.openGroupModal();
       });
+      $("#notificationButton")?.addEventListener("click", () => this.openAnnouncementCenter());
       $("#profileButton")?.addEventListener("click", () => this.openProfileModal());
       document.addEventListener("error", event => {
         const image = event.target;
         if (!(image instanceof HTMLImageElement) || !image.matches("[data-group-avatar]")) return;
         if (image.dataset.fallbackApplied === "true") return;
         image.dataset.fallbackApplied = "true";
-        image.src = window.RESENHA_GROUP_AVATARS?.["badge-01"] || assetUrl("assets/group-avatars/badge-01.png?v=0.3.2.1");
+        image.src = window.RESENHA_GROUP_AVATARS?.["badge-01"] || assetUrl("assets/group-avatars/badge-01.png?v=0.3.3");
       }, true);
     },
 
-    registerServiceWorker() {
-      if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
-        navigator.serviceWorker.register("service-worker.js").catch(console.warn);
+    async registerServiceWorker() {
+      if (!("serviceWorker" in navigator) || !location.protocol.startsWith("http")) return null;
+      try {
+        this.swRegistration = await navigator.serviceWorker.register("service-worker.js");
+        return this.swRegistration;
+      } catch (error) {
+        console.warn("Falha ao registrar o service worker.", error);
+        return null;
       }
+    },
+
+    async ensureServiceWorker() {
+      if (this.swRegistration) return this.swRegistration;
+      await this.registerServiceWorker();
+      return navigator.serviceWorker.ready;
     },
 
     currentGroup() {
@@ -491,6 +555,11 @@
       const profileButton = $("#profileButton");
       const profilePhoto = safeImageUrl(this.state.profile?.avatar_url);
       profileButton.innerHTML = profilePhoto ? `<img src="${escapeHtml(profilePhoto)}" alt="Meu perfil" referrerpolicy="no-referrer">` : initials(this.state.profile?.name || "Usuário");
+      const notificationButton = $("#notificationButton");
+      if (notificationButton) {
+        notificationButton.hidden = !group;
+        notificationButton.setAttribute("aria-label", group ? "Abrir avisos do grupo" : "Avisos");
+      }
       $$(".nav-item").forEach(button => button.classList.toggle("active", button.dataset.route === this.route));
       const compactHome = Boolean(group && this.route === "home");
       $("#mainContent")?.classList.toggle("home-compact", compactHome);
@@ -531,7 +600,7 @@
           <div class="group-identity">${emblem}<div><span class="eyebrow">${escapeHtml(roleLabels[this.currentRole()])}</span><h1>${escapeHtml(group.name)}</h1><p>Administrador: ${escapeHtml(administrator?.name || "Não identificado")}</p></div></div>
           ${match ? `<div class="next-match-panel"><div class="next-match-heading"><div><span class="match-kicker">PRÓXIMA PELADA</span><h2>${escapeHtml(match.title)}</h2></div><button class="match-detail-link" data-action="open-match" data-id="${match.id}">Detalhes</button></div><p>${escapeHtml(shortDate(match.starts_at))} · ${escapeHtml(match.location)}</p><div class="hero-numbers"><div><strong>${confirmed.length}</strong><small>confirmados</small></div><div><strong>${match.max_players}</strong><small>vagas</small></div><div><strong>${Math.max(0, Number(match.max_players) - confirmed.length)}</strong><small>restantes</small></div></div><button class="btn btn-primary btn-block home-rsvp" data-action="rsvp" data-id="${match.id}">Confirmar presença</button></div>` : `<div class="next-match-panel empty-match-panel"><span class="match-kicker">AGENDA LIVRE</span><h2>Nenhuma pelada marcada</h2><p>Organizadores podem criar o próximo jogo.</p>${this.canManageMatches() ? '<button class="btn btn-primary btn-small" data-action="new-match">Agendar pelada</button>' : ""}</div>`}
         </section>
-        ${notice ? `<button class="home-notice" data-route="more"><span>📣</span><div><strong>${escapeHtml(notice.title)}</strong><small>${escapeHtml(notice.body)}</small></div><b>›</b></button>` : ""}
+        ${notice ? `<button class="home-notice" data-action="announcement-center" data-id="${notice.id}"><span>📣</span><div><strong>${escapeHtml(notice.title)}</strong><small>${escapeHtml(notice.body)}</small></div><b>›</b></button>` : ""}
         <div class="home-quick-grid">
           <button class="quick-card" data-action="rsvp" data-id="${match?.id || ""}"><span class="quick-icon">✓</span><span><strong>Presença</strong><small>Confirme sua participação</small></span></button>
           <button class="quick-card" data-route="teams"><span class="quick-icon">⇄</span><span><strong>Times</strong><small>Equilíbrio do elenco</small></span></button>
@@ -615,7 +684,9 @@
 
     morePage() {
       const group = this.currentGroup();
-      return `<div class="page-head"><div><span class="page-kicker">CONFIGURAÇÕES</span><h1>Mais</h1><p>Administração e dados da conta.</p></div></div><div class="list"><button class="card menu-row" data-action="profile"><span class="menu-icon">⚽</span><div class="list-main"><strong>Meu perfil de jogador</strong><small>Nome, apelido e posição.</small></div><strong>›</strong></button><button class="card menu-row" data-action="invite"><span class="menu-icon">↗</span><div class="list-main"><strong>Convidar pelo WhatsApp</strong><small>Código ${escapeHtml(group.invite_code)}</small></div><strong>›</strong></button>${this.canManageGroup() ? '<button class="card menu-row" data-action="group-settings"><span class="menu-icon">🛡</span><div class="list-main"><strong>Personalizar grupo</strong><small>Nome, escudo e administração.</small></div><strong>›</strong></button><button class="card menu-row" data-action="manage-roles"><span class="menu-icon">♟</span><div class="list-main"><strong>Gerenciar funções</strong><small>Administrador, organizador e tesoureiro.</small></div><strong>›</strong></button>' : ""}${this.canManageMatches() ? '<button class="card menu-row" data-action="announcement"><span class="menu-icon">!</span><div class="list-main"><strong>Avisos do grupo</strong><small>Publicar comunicado para o elenco.</small></div><strong>›</strong></button><button class="card menu-row" data-action="players"><span class="menu-icon">+</span><div class="list-main"><strong>Jogadores sem acesso</strong><small>Cadastrar convidado eventual.</small></div><strong>›</strong></button>' : ""}<button class="card menu-row" data-action="export"><span class="menu-icon">⇩</span><div class="list-main"><strong>Exportar dados</strong><small>Backup em arquivo JSON.</small></div><strong>›</strong></button><button class="card menu-row danger-row" data-action="sign-out"><span class="menu-icon danger-avatar">↪</span><div class="list-main"><strong>Sair da conta</strong><small>Desconectar e escolher outra conta Google.</small></div><strong>›</strong></button></div><div class="version-card">Resenha FC v0.3.2.1 · administração única e churrasco por pelada · Supabase · PWA</div>`;
+      const pushConfigured = Boolean(String(window.RESENHA_CONFIG?.vapidPublicKey || "").trim());
+      const pushText = !pushSupported() ? "Este navegador não oferece notificações push." : !pushConfigured ? "Conclua a configuração VAPID da v0.3.3." : "Receba avisos mesmo com o aplicativo fechado.";
+      return `<div class="page-head"><div><span class="page-kicker">CONFIGURAÇÕES</span><h1>Mais</h1><p>Administração e dados da conta.</p></div></div><div class="list"><button class="card menu-row" data-action="profile"><span class="menu-icon">⚽</span><div class="list-main"><strong>Meu perfil de jogador</strong><small>Nome, apelido e posição.</small></div><strong>›</strong></button><button class="card menu-row" data-action="notification-settings"><span class="menu-icon">🔔</span><div class="list-main"><strong>Notificações no celular</strong><small>${escapeHtml(pushText)}</small></div><strong>›</strong></button><button class="card menu-row" data-action="announcement-center"><span class="menu-icon">📣</span><div class="list-main"><strong>Central de avisos</strong><small>Consulte os comunicados do grupo.</small></div><strong>›</strong></button><button class="card menu-row" data-action="invite"><span class="menu-icon">↗</span><div class="list-main"><strong>Convidar pelo WhatsApp</strong><small>Código ${escapeHtml(group.invite_code)}</small></div><strong>›</strong></button>${this.canManageGroup() ? '<button class="card menu-row" data-action="group-settings"><span class="menu-icon">🛡</span><div class="list-main"><strong>Personalizar grupo</strong><small>Nome, escudo e administração.</small></div><strong>›</strong></button><button class="card menu-row" data-action="manage-roles"><span class="menu-icon">♟</span><div class="list-main"><strong>Gerenciar funções</strong><small>Administrador, organizador e tesoureiro.</small></div><strong>›</strong></button>' : ""}${this.canManageMatches() ? '<button class="card menu-row" data-action="announcement"><span class="menu-icon">!</span><div class="list-main"><strong>Publicar aviso</strong><small>Enviar comunicado e notificação ao elenco.</small></div><strong>›</strong></button><button class="card menu-row" data-action="players"><span class="menu-icon">+</span><div class="list-main"><strong>Jogadores sem acesso</strong><small>Cadastrar convidado eventual.</small></div><strong>›</strong></button>' : ""}<button class="card menu-row" data-action="export"><span class="menu-icon">⇩</span><div class="list-main"><strong>Exportar dados</strong><small>Backup em arquivo JSON.</small></div><strong>›</strong></button><button class="card menu-row danger-row" data-action="sign-out"><span class="menu-icon danger-avatar">↪</span><div class="list-main"><strong>Sair da conta</strong><small>Desconectar e escolher outra conta Google.</small></div><strong>›</strong></button></div><div class="version-card">Resenha FC v0.3.3 · avisos com notificações push · Supabase · PWA</div>`;
     },
 
     async handleAction(action, data) {
@@ -635,6 +706,8 @@
           "group-settings": () => this.openGroupSettings(),
           "manage-roles": () => this.openRoleManager(),
           announcement: () => this.openAnnouncementForm(),
+          "announcement-center": () => this.openAnnouncementCenter(data.id),
+          "notification-settings": () => this.openNotificationSettings(),
           profile: () => this.openProfileModal(),
           export: () => this.exportData(),
           "sign-out": () => this.logout(),
@@ -1144,23 +1217,108 @@
       });
     },
 
+    openAnnouncementCenter(selectedId = "") {
+      const announcements = [...(this.state.announcements || [])].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+      const list = announcements.length ? announcements.map(item => `<article class="announcement-card ${item.id === selectedId ? "is-selected" : ""}"><div class="announcement-icon">📣</div><div><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(shortDate(item.created_at))}</small><p>${escapeHtml(item.body)}</p></div></article>`).join("") : '<div class="card empty"><strong>Nenhum aviso publicado</strong><span>Os comunicados do grupo aparecerão aqui.</span></div>';
+      this.modal("Avisos do grupo", `<div class="announcement-list">${list}</div>`, root => {
+        if (selectedId) root.querySelector(".announcement-card.is-selected")?.scrollIntoView({ block: "center" });
+      });
+      navigator.clearAppBadge?.().catch?.(() => {});
+      if (this.launchAnnouncementId && history.replaceState) {
+        this.launchAnnouncementId = "";
+        history.replaceState({}, document.title, appBaseUrl());
+      }
+    },
+
+    async currentPushSubscription() {
+      if (!pushSupported()) return null;
+      const registration = await this.ensureServiceWorker();
+      return registration?.pushManager?.getSubscription() || null;
+    },
+
+    async enablePushNotifications() {
+      if (!pushSupported()) throw new Error("Este navegador não oferece notificações push.");
+      const publicKey = String(window.RESENHA_CONFIG?.vapidPublicKey || "").trim();
+      if (!publicKey) throw new Error("A chave pública VAPID ainda não foi configurada.");
+      if (isIos() && !isStandalone()) throw new Error("No iPhone, adicione o Resenha FC à Tela de Início e abra pelo ícone antes de ativar as notificações.");
+      const permission = await Notification.requestPermission();
+      if (permission !== "granted") throw new Error(permission === "denied" ? "As notificações foram bloqueadas nos ajustes do aparelho." : "A permissão para notificações não foi concedida.");
+      const registration = await this.ensureServiceWorker();
+      let subscription = await registration.pushManager.getSubscription();
+      if (!subscription) {
+        subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: base64UrlToUint8Array(publicKey)
+        });
+      }
+      await this.repo.savePushSubscription(subscription);
+      this.state = this.repo.state;
+      return subscription;
+    },
+
+    async disablePushNotifications(silent = false) {
+      if (!pushSupported()) return;
+      try {
+        const subscription = await this.currentPushSubscription();
+        if (!subscription) return;
+        await this.repo.removePushSubscription(subscription.endpoint);
+        await subscription.unsubscribe();
+        this.state = this.repo.state;
+      } catch (error) {
+        if (!silent) throw error;
+        console.warn("Não foi possível remover a assinatura push durante a saída.", error);
+      }
+    },
+
+    async openNotificationSettings() {
+      const supported = pushSupported();
+      const configured = Boolean(String(window.RESENHA_CONFIG?.vapidPublicKey || "").trim());
+      const subscription = supported ? await this.currentPushSubscription() : null;
+      const permission = supported ? Notification.permission : "unsupported";
+      const iosInstallRequired = isIos() && !isStandalone();
+      const status = subscription ? "Ativas neste aparelho" : permission === "denied" ? "Bloqueadas nos ajustes" : "Desativadas neste aparelho";
+      const explanation = !supported ? "O navegador deste aparelho não oferece a tecnologia necessária." : !configured ? "A chave pública VAPID precisa ser adicionada ao supabase-config.js." : iosInstallRequired ? "No iPhone, notificações funcionam quando o site é adicionado à Tela de Início e aberto pelo ícone." : "Você receberá os avisos publicados pelo administrador ou organizador, mesmo com o aplicativo fechado.";
+      const action = subscription ? '<button class="btn btn-danger btn-block" id="disablePush">Desativar neste aparelho</button>' : '<button class="btn btn-primary btn-block" id="enablePush">Ativar notificações</button>';
+      this.modal("Notificações no celular", `<div class="notification-status-card ${subscription ? "is-active" : ""}"><span>🔔</span><div><strong>${escapeHtml(status)}</strong><p>${escapeHtml(explanation)}</p></div></div>${configured && supported && !iosInstallRequired ? action : ""}<div class="notice"><strong>Privacidade</strong><br>A ativação vale somente para este aparelho. Você pode desativar a qualquer momento.</div>`, (root, close) => {
+        $("#enablePush", root)?.addEventListener("click", async event => {
+          const button = event.currentTarget; button.disabled = true; button.textContent = "Ativando…";
+          try { await this.enablePushNotifications(); close(); this.toast("Notificações ativadas neste aparelho."); }
+          catch (error) { button.disabled = false; button.textContent = "Ativar notificações"; this.toast(error.message, true); }
+        });
+        $("#disablePush", root)?.addEventListener("click", async event => {
+          const button = event.currentTarget; button.disabled = true; button.textContent = "Desativando…";
+          try { await this.disablePushNotifications(); close(); this.toast("Notificações desativadas neste aparelho."); }
+          catch (error) { button.disabled = false; button.textContent = "Desativar neste aparelho"; this.toast(error.message, true); }
+        });
+      });
+    },
+
     openAnnouncementForm() {
       if (!this.canManageMatches()) return this.toast("Sem permissão para publicar avisos.", true);
-      this.modal("Publicar aviso", `<form id="noticeForm" class="form-grid"><div class="field"><label>Título</label><input name="title" required></div><div class="field"><label>Mensagem</label><textarea name="body" required></textarea></div><button class="btn btn-primary btn-block">Publicar</button></form>`, (root, close) => {
+      this.modal("Publicar aviso", `<form id="noticeForm" class="form-grid"><div class="notice notice-success"><strong>Aviso com notificação</strong><br>O comunicado será salvo no grupo e enviado aos aparelhos que ativaram notificações.</div><div class="field"><label>Título</label><input name="title" required maxlength="80"></div><div class="field"><label>Mensagem</label><textarea name="body" required maxlength="500"></textarea></div><button class="btn btn-primary btn-block">Publicar e notificar</button></form>`, (root, close) => {
         $("#noticeForm", root).addEventListener("submit", async event => {
           event.preventDefault();
+          const button = $("button[type=submit]", event.currentTarget);
           const form = new FormData(event.currentTarget);
-          await this.repo.mutate("announcements", { id: uid(), group_id: this.state.currentGroupId, title: form.get("title"), body: form.get("body"), created_at: nowIso() });
-          this.state = this.repo.state;
-          close();
-          this.render();
-          this.toast("Aviso publicado.");
+          button.disabled = true; button.textContent = "Enviando…";
+          try {
+            const result = await this.repo.publishAnnouncement(this.state.currentGroupId, form.get("title"), form.get("body"));
+            this.state = this.repo.state;
+            close();
+            this.render();
+            const sent = Number(result.sent || 0);
+            this.toast(sent ? `Aviso publicado e enviado a ${sent} aparelho(s).` : "Aviso publicado. Nenhum integrante ativou notificações ainda.");
+          } catch (error) {
+            button.disabled = false; button.textContent = "Publicar e notificar";
+            this.toast(error.message || "Não foi possível publicar o aviso.", true);
+          }
         });
       });
     },
 
     async logout() {
       if (!confirm("Deseja sair da sua conta neste aparelho?")) return;
+      await this.disablePushNotifications(true);
       await this.repo.signOut();
       localStorage.removeItem("resenha-current-group");
       window.location.replace(appBaseUrl());
