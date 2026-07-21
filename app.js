@@ -1,6 +1,7 @@
 (() => {
   "use strict";
 
+  const APP_RELEASE = Object.freeze({ channel: "beta", version: "Beta 1.0", build: 100, database: 100, edge: 100 });
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
   const uid = () => crypto.randomUUID?.() || "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
@@ -25,7 +26,7 @@
   const avatarKey = value => /^badge-(0[1-9]|1[0-9]|20)$/.test(String(value || "")) ? String(value) : "badge-01";
   const groupAvatarUrl = key => {
     const normalized = avatarKey(key);
-    return window.RESENHA_GROUP_AVATARS?.[normalized] || assetUrl(`assets/group-avatars/${normalized}.png?v=0.3.4`);
+    return window.RESENHA_GROUP_AVATARS?.[normalized] || assetUrl(`assets/group-avatars/${normalized}.png?v=beta100`);
   };
   const positionOptions = ["Goleiro", "Zagueiro", "Lateral", "Volante", "Meia", "Atacante", "Coringa"];
   const roleLabels = { owner: "Administrador", admin: "Administrador", organizer: "Organizador", treasurer: "Tesoureiro", member: "Membro" };
@@ -97,7 +98,8 @@
         member_ratings: [],
         match_events: [],
         announcements: [],
-        push_subscriptions: []
+        push_subscriptions: [],
+        is_platform_admin: false
       };
       this.channel = null;
       this.subscribedGroupId = null;
@@ -158,6 +160,12 @@
         await this.loadGroup(this.state.currentGroupId);
       } else {
         ["members", "players", "matches", "attendance", "assignments", "charges", "payments", "expenses", "member_ratings", "match_events", "announcements", "push_subscriptions"].forEach(key => { this.state[key] = []; });
+      }
+      try {
+        const { data } = await this.client.rpc("is_platform_admin");
+        this.state.is_platform_admin = data === true;
+      } catch (error) {
+        console.warn("Não foi possível verificar a administração da plataforma.", error);
       }
       return this.state;
     }
@@ -475,6 +483,64 @@
       return this.loadGroup(groupId, { subscribe: false });
     }
 
+    async logEvent(eventType, metadata = {}, severity = "info") {
+      try {
+        await this.client.rpc("log_app_event", {
+          p_event_type: String(eventType || "event").slice(0, 80),
+          p_group_id: this.state.currentGroupId || null,
+          p_severity: severity,
+          p_metadata: {
+            ...metadata,
+            build: APP_RELEASE.build,
+            version: APP_RELEASE.version,
+            route: window.App?.route || "",
+            device: deviceLabel(),
+            userAgent: navigator.userAgent.slice(0, 500)
+          }
+        });
+      } catch (error) {
+        console.warn("Falha ao registrar evento de diagnóstico.", error);
+      }
+    }
+
+    async reportProblem(payload) {
+      const { data, error } = await this.client.rpc("submit_beta_feedback", {
+        p_group_id: this.state.currentGroupId || null,
+        p_category: payload.category,
+        p_title: payload.title,
+        p_description: payload.description,
+        p_contact_ok: payload.contactOk,
+        p_context: {
+          build: APP_RELEASE.build,
+          version: APP_RELEASE.version,
+          route: window.App?.route || "",
+          device: deviceLabel(),
+          standalone: isStandalone(),
+          notificationPermission: pushSupported() ? Notification.permission : "unsupported",
+          viewport: `${window.innerWidth}x${window.innerHeight}`,
+          userAgent: navigator.userAgent.slice(0, 500)
+        }
+      });
+      if (error) throw error;
+      return data;
+    }
+
+    async platformDashboard() {
+      const [summary, reports, logs] = await Promise.all([
+        this.client.rpc("platform_beta_summary"),
+        this.client.rpc("platform_recent_feedback", { p_limit: 30 }),
+        this.client.rpc("platform_recent_logs", { p_limit: 50 })
+      ]);
+      for (const result of [summary, reports, logs]) if (result.error) throw result.error;
+      return { summary: summary.data || {}, reports: reports.data || [], logs: logs.data || [] };
+    }
+
+    async appRelease() {
+      const { data, error } = await this.client.from("app_releases").select("*").eq("channel", "beta").eq("active", true).order("build", { ascending: false }).limit(1).maybeSingle();
+      if (error) throw error;
+      return data;
+    }
+
   }
 
   const App = {
@@ -487,6 +553,8 @@
     launchAnnouncementId: "",
     launchMatchId: "",
     swRegistration: null,
+    updateAvailable: null,
+    lastSyncAt: null,
 
     async init() {
       this.bindGlobal();
@@ -499,8 +567,11 @@
       try {
         this.state = await this.repo.init(this.launchGroupId || localStorage.getItem("resenha-current-group") || null);
         if (!this.state) return this.renderAuth();
+        this.lastSyncAt = nowIso();
         this.render();
-        this.registerServiceWorker();
+        await this.registerServiceWorker();
+        this.repo.logEvent("app_open", { groups: this.state.groups.length });
+        this.checkForUpdates();
         navigator.clearAppBadge?.().catch?.(() => {});
         if (this.pendingInvite) setTimeout(() => this.openJoinGroupModal(this.pendingInvite), 80);
         else if (this.launchAction === "rsvp") setTimeout(() => this.openRsvp(this.nextMatch()?.id), 80);
@@ -550,12 +621,21 @@
       });
       $("#notificationButton")?.addEventListener("click", () => this.openAnnouncementCenter());
       $("#profileButton")?.addEventListener("click", () => this.openProfileModal());
+      window.addEventListener("error", event => {
+        if (!this.repo || !event.error) return;
+        this.repo.logEvent("frontend_error", { message: event.message, source: event.filename?.split("/").pop() || "", line: event.lineno || 0 }, "error");
+      });
+      window.addEventListener("unhandledrejection", event => {
+        if (!this.repo) return;
+        const reason = event.reason;
+        this.repo.logEvent("unhandled_rejection", { message: reason?.message || String(reason || "Erro assíncrono") }, "error");
+      });
       document.addEventListener("error", event => {
         const image = event.target;
         if (!(image instanceof HTMLImageElement) || !image.matches("[data-group-avatar]")) return;
         if (image.dataset.fallbackApplied === "true") return;
         image.dataset.fallbackApplied = "true";
-        image.src = window.RESENHA_GROUP_AVATARS?.["badge-01"] || assetUrl("assets/group-avatars/badge-01.png?v=0.3.4");
+        image.src = window.RESENHA_GROUP_AVATARS?.["badge-01"] || assetUrl("assets/group-avatars/badge-01.png?v=beta100");
       }, true);
     },
 
@@ -563,10 +643,58 @@
       if (!("serviceWorker" in navigator) || !location.protocol.startsWith("http")) return null;
       try {
         this.swRegistration = await navigator.serviceWorker.register("service-worker.js");
+        this.swRegistration.addEventListener("updatefound", () => {
+          const worker = this.swRegistration.installing;
+          worker?.addEventListener("statechange", () => {
+            if (worker.state === "installed" && navigator.serviceWorker.controller) {
+              this.updateAvailable = { build: "novo", version: "Nova versão" };
+              this.renderUpdateBanner();
+            }
+          });
+        });
+        navigator.serviceWorker.addEventListener("controllerchange", () => location.reload());
         return this.swRegistration;
       } catch (error) {
         console.warn("Falha ao registrar o service worker.", error);
         return null;
+      }
+    },
+
+    async checkForUpdates(showCurrent = false) {
+      try {
+        const response = await fetch(`version.json?t=${Date.now()}`, { cache: "no-store" });
+        if (!response.ok) throw new Error("Não foi possível consultar a versão publicada.");
+        const release = await response.json();
+        if (Number(release.build || 0) > APP_RELEASE.build) {
+          this.updateAvailable = release;
+          this.renderUpdateBanner();
+          return true;
+        }
+        if (showCurrent) this.toast(`Você já está na versão mais recente: ${APP_RELEASE.version} Build ${APP_RELEASE.build}.`);
+        return false;
+      } catch (error) {
+        if (showCurrent) this.toast(error.message, true);
+        return false;
+      }
+    },
+
+    renderUpdateBanner() {
+      if (!this.updateAvailable || document.getElementById("updateBanner")) return;
+      const banner = document.createElement("div");
+      banner.id = "updateBanner";
+      banner.className = "update-banner";
+      banner.innerHTML = `<div><strong>Nova versão disponível</strong><small>Atualize para receber correções e melhorias.</small></div><button type="button" data-action="apply-update">Atualizar agora</button>`;
+      document.body.appendChild(banner);
+    },
+
+    async applyUpdate() {
+      const registration = await this.ensureServiceWorker();
+      await registration.update().catch(() => {});
+      if (registration.waiting) registration.waiting.postMessage({ type: "SKIP_WAITING" });
+      else {
+        const keys = await caches.keys();
+        await Promise.all(keys.filter(key => key.startsWith("resenha-fc-")).map(key => caches.delete(key)));
+        location.reload();
       }
     },
 
@@ -768,8 +896,9 @@
     morePage() {
       const group = this.currentGroup();
       const pushConfigured = Boolean(String(window.RESENHA_CONFIG?.vapidPublicKey || "").trim());
-      const pushText = !pushSupported() ? "Este navegador não oferece notificações push." : !pushConfigured ? "Conclua a configuração VAPID da v0.3.3." : "Receba avisos mesmo com o aplicativo fechado.";
-      return `<div class="page-head"><div><span class="page-kicker">CONFIGURAÇÕES</span><h1>Mais</h1><p>Administração e dados da conta.</p></div></div><div class="list"><button class="card menu-row" data-action="profile"><span class="menu-icon">⚽</span><div class="list-main"><strong>Meu perfil de jogador</strong><small>Nome, apelido e posição.</small></div><strong>›</strong></button><button class="card menu-row" data-action="notification-settings"><span class="menu-icon">🔔</span><div class="list-main"><strong>Notificações no celular</strong><small>${escapeHtml(pushText)}</small></div><strong>›</strong></button><button class="card menu-row" data-action="announcement-center"><span class="menu-icon">📣</span><div class="list-main"><strong>Central de avisos</strong><small>Consulte os comunicados do grupo.</small></div><strong>›</strong></button><button class="card menu-row" data-action="invite"><span class="menu-icon">↗</span><div class="list-main"><strong>Convidar pelo WhatsApp</strong><small>Código ${escapeHtml(group.invite_code)}</small></div><strong>›</strong></button>${this.canManageGroup() ? '<button class="card menu-row" data-action="group-settings"><span class="menu-icon">🛡</span><div class="list-main"><strong>Personalizar grupo</strong><small>Nome, escudo e administração.</small></div><strong>›</strong></button><button class="card menu-row" data-action="manage-roles"><span class="menu-icon">♟</span><div class="list-main"><strong>Gerenciar funções</strong><small>Administrador, organizador e tesoureiro.</small></div><strong>›</strong></button>' : ""}${this.canManageMatches() ? '<button class="card menu-row" data-action="announcement"><span class="menu-icon">!</span><div class="list-main"><strong>Publicar aviso</strong><small>Enviar comunicado e notificação ao elenco.</small></div><strong>›</strong></button><button class="card menu-row" data-action="players"><span class="menu-icon">+</span><div class="list-main"><strong>Jogadores sem acesso</strong><small>Cadastrar convidado eventual.</small></div><strong>›</strong></button>' : ""}<button class="card menu-row" data-action="export"><span class="menu-icon">⇩</span><div class="list-main"><strong>Exportar dados</strong><small>Backup em arquivo JSON.</small></div><strong>›</strong></button><button class="card menu-row danger-row" data-action="sign-out"><span class="menu-icon danger-avatar">↪</span><div class="list-main"><strong>Sair da conta</strong><small>Desconectar e escolher outra conta Google.</small></div><strong>›</strong></button></div><div class="version-card">Resenha FC v0.3.4 · avisos gerenciáveis, push de peladas e caixa revisado · Supabase · PWA</div>`;
+      const pushText = !pushSupported() ? "Este navegador não oferece notificações push." : !pushConfigured ? "Conclua a configuração VAPID." : "Receba avisos mesmo com o aplicativo fechado.";
+      const adminTools = this.state.is_platform_admin ? '<div class="section-title"><h2>Operação do beta</h2><small>Acesso exclusivo da plataforma.</small></div><button class="card menu-row admin-menu-row" data-action="platform-admin"><span class="menu-icon">◉</span><div class="list-main"><strong>Painel Beta</strong><small>Saúde, métricas, feedbacks e logs.</small></div><strong>›</strong></button>' : "";
+      return `<div class="page-head"><div><span class="page-kicker">CONFIGURAÇÕES</span><h1>Mais</h1><p>Administração, suporte e dados da conta.</p></div></div><div class="list"><button class="card menu-row" data-action="profile"><span class="menu-icon">⚽</span><div class="list-main"><strong>Meu perfil de jogador</strong><small>Nome, apelido e posição.</small></div><strong>›</strong></button><button class="card menu-row" data-action="notification-settings"><span class="menu-icon">🔔</span><div class="list-main"><strong>Notificações no celular</strong><small>${escapeHtml(pushText)}</small></div><strong>›</strong></button><button class="card menu-row" data-action="announcement-center"><span class="menu-icon">📣</span><div class="list-main"><strong>Central de avisos</strong><small>Consulte os comunicados do grupo.</small></div><strong>›</strong></button><button class="card menu-row" data-action="invite"><span class="menu-icon">↗</span><div class="list-main"><strong>Convidar pelo WhatsApp</strong><small>Código ${escapeHtml(group.invite_code)}</small></div><strong>›</strong></button>${this.canManageGroup() ? '<button class="card menu-row" data-action="group-settings"><span class="menu-icon">🛡</span><div class="list-main"><strong>Personalizar grupo</strong><small>Nome, escudo e administração.</small></div><strong>›</strong></button><button class="card menu-row" data-action="manage-roles"><span class="menu-icon">♟</span><div class="list-main"><strong>Gerenciar funções</strong><small>Administrador, organizador e tesoureiro.</small></div><strong>›</strong></button>' : ""}${this.canManageMatches() ? '<button class="card menu-row" data-action="announcement"><span class="menu-icon">!</span><div class="list-main"><strong>Publicar aviso</strong><small>Enviar comunicado e notificação ao elenco.</small></div><strong>›</strong></button><button class="card menu-row" data-action="players"><span class="menu-icon">+</span><div class="list-main"><strong>Jogadores sem acesso</strong><small>Cadastrar convidado eventual.</small></div><strong>›</strong></button>' : ""}<div class="section-title"><h2>Suporte do beta</h2></div><button class="card menu-row feedback-row" data-action="report-problem"><span class="menu-icon">⚑</span><div class="list-main"><strong>Reportar problema</strong><small>Envie o relato com diagnóstico automático.</small></div><strong>›</strong></button><button class="card menu-row" data-action="about-diagnostics"><span class="menu-icon">i</span><div class="list-main"><strong>Sobre e diagnóstico</strong><small>Versão, sincronização, push e atualização.</small></div><strong>›</strong></button>${adminTools}<button class="card menu-row" data-action="export"><span class="menu-icon">⇩</span><div class="list-main"><strong>Exportar dados do grupo</strong><small>Backup local em arquivo JSON.</small></div><strong>›</strong></button><button class="card menu-row danger-row" data-action="sign-out"><span class="menu-icon danger-avatar">↪</span><div class="list-main"><strong>Sair da conta</strong><small>Desconectar e escolher outra conta Google.</small></div><strong>›</strong></button></div><div class="version-card">Resenha FC ${APP_RELEASE.version} · Build ${APP_RELEASE.build} · Beta fechado</div>`;
     },
 
     async handleAction(action, data) {
@@ -794,9 +923,15 @@
           "notification-settings": () => this.openNotificationSettings(),
           profile: () => this.openProfileModal(),
           export: () => this.exportData(),
+          "report-problem": () => this.openProblemReport(),
+          "about-diagnostics": () => this.openDiagnostics(),
+          "platform-admin": () => this.openPlatformAdmin(),
+          "apply-update": () => this.applyUpdate(),
+          "check-update": () => this.checkForUpdates(true),
           "sign-out": () => this.logout(),
           reload: () => location.reload()
         };
+        if (["new-match", "rsvp", "new-finance", "create-group", "join-group", "announcement", "report-problem"].includes(action)) this.repo?.logEvent("ui_action", { action });
         if (actions[action]) await actions[action]();
       } catch (error) {
         console.error(error);
@@ -1330,6 +1465,58 @@
           this.toast("Convidado cadastrado.");
         });
       });
+    },
+
+    openProblemReport() {
+      this.modal("Reportar problema", `<form id="problemForm" class="form-grid"><div class="notice"><strong>Beta fechado</strong><br>O relatório inclui automaticamente versão, aparelho, tela atual e estado das notificações. Não inclua senhas ou dados sensíveis.</div><div class="field"><label>Categoria</label><select name="category"><option value="erro">Erro ou função que não respondeu</option><option value="visual">Problema visual</option><option value="notificacao">Notificação</option><option value="sugestao">Sugestão de melhoria</option></select></div><div class="field"><label>Resumo</label><input name="title" maxlength="100" required placeholder="Ex.: não consegui confirmar presença"></div><div class="field"><label>O que aconteceu?</label><textarea name="description" maxlength="1500" required placeholder="Descreva os passos, o resultado esperado e o que apareceu na tela."></textarea></div><label class="check-row"><input type="checkbox" name="contact_ok" checked><span>O suporte pode entrar em contato pelo e-mail da minha conta.</span></label><button type="submit" class="btn btn-primary btn-block">Enviar relatório</button></form>`, (root, close) => {
+        $("#problemForm", root).addEventListener("submit", async event => {
+          event.preventDefault();
+          const button = event.currentTarget.querySelector('button[type="submit"]');
+          const form = new FormData(event.currentTarget);
+          button.disabled = true; button.textContent = "Enviando…";
+          try {
+            await this.repo.reportProblem({ category: form.get("category"), title: form.get("title"), description: form.get("description"), contactOk: form.get("contact_ok") === "on" });
+            close();
+            this.toast("Relatório enviado. Obrigado por ajudar no beta.");
+          } catch (error) {
+            button.disabled = false; button.textContent = "Enviar relatório";
+            this.toast(error.message || "Não foi possível enviar o relatório.", true);
+          }
+        });
+      });
+    },
+
+    async openDiagnostics() {
+      const online = navigator.onLine;
+      const push = pushSupported() ? Notification.permission : "não suportado";
+      const subscription = pushSupported() ? await this.currentPushSubscription().catch(() => null) : null;
+      let dbStatus = "Disponível";
+      try { await this.repo.session(); } catch { dbStatus = "Falha"; }
+      const sync = this.lastSyncAt ? shortDate(this.lastSyncAt) : "Não registrada";
+      const updateText = this.updateAvailable ? "Atualização pendente" : "Sem atualização detectada";
+      this.modal("Sobre e diagnóstico", `<div class="diagnostic-grid"><div class="diagnostic-item ${online ? "ok" : "bad"}"><span></span><div><small>Internet</small><strong>${online ? "Conectado" : "Offline"}</strong></div></div><div class="diagnostic-item ${dbStatus === "Disponível" ? "ok" : "bad"}"><span></span><div><small>Banco e sessão</small><strong>${dbStatus}</strong></div></div><div class="diagnostic-item ${subscription ? "ok" : "warn"}"><span></span><div><small>Push deste aparelho</small><strong>${escapeHtml(subscription ? "Vinculado" : push)}</strong></div></div><div class="diagnostic-item ${this.updateAvailable ? "warn" : "ok"}"><span></span><div><small>Atualização</small><strong>${escapeHtml(updateText)}</strong></div></div></div><div class="system-info-card"><div><span>Aplicativo</span><strong>${APP_RELEASE.version}</strong></div><div><span>Build</span><strong>${APP_RELEASE.build}</strong></div><div><span>Banco esperado</span><strong>${APP_RELEASE.database}</strong></div><div><span>Última sincronização</span><strong>${escapeHtml(sync)}</strong></div><div><span>Modo</span><strong>${isStandalone() ? "Instalado" : "Navegador"}</strong></div><div><span>Dispositivo</span><strong>${escapeHtml(deviceLabel())}</strong></div></div><button class="btn btn-secondary btn-block" data-action="check-update">Verificar atualização</button><button class="btn btn-primary btn-block" data-action="report-problem">Reportar problema</button>`, () => {});
+    },
+
+    async openPlatformAdmin() {
+      if (!this.state.is_platform_admin) return this.toast("Acesso restrito à administração da plataforma.", true);
+      const loading = this.modal("Painel Beta", `<div class="admin-loading">Carregando indicadores…</div>`, () => {});
+      try {
+        const data = await this.repo.platformDashboard();
+        const s = data.summary || {};
+        document.querySelector(".modal-layer")?.remove();
+        const stat = (label, value, tone = "") => `<div class="admin-stat ${tone}"><small>${escapeHtml(label)}</small><strong>${escapeHtml(String(value ?? 0))}</strong></div>`;
+        const reports = (data.reports || []).map(item => `<article class="admin-feed-item"><div><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.category)} · ${escapeHtml(shortDate(item.created_at))}</small></div><p>${escapeHtml(item.description)}</p><span>${escapeHtml(item.reporter_name || item.reporter_email || "Usuário")}${item.group_name ? ` · ${escapeHtml(item.group_name)}` : ""}</span></article>`).join("") || '<div class="card empty">Nenhum relato recebido.</div>';
+        const logs = (data.logs || []).map(item => `<div class="admin-log-row"><span class="log-dot ${escapeHtml(item.severity)}"></span><div><strong>${escapeHtml(item.event_type)}</strong><small>${escapeHtml(shortDate(item.created_at))}${item.group_name ? ` · ${escapeHtml(item.group_name)}` : ""}</small></div></div>`).join("") || '<div class="card empty">Nenhum log recente.</div>';
+        this.modal("Painel Beta", `<div class="health-strip ${Number(s.errors_24h || 0) ? "warn" : "ok"}"><span></span><div><strong>${Number(s.errors_24h || 0) ? "Sistema requer atenção" : "Sistema operacional"}</strong><small>Indicadores das últimas 24 horas</small></div></div><div class="admin-stats">${stat("Usuários", s.users_total)}${stat("Grupos", s.groups_total)}${stat("Peladas futuras", s.matches_upcoming)}${stat("Confirmações", s.confirmations_total)}${stat("Push enviados", s.push_sent_total)}${stat("Falhas push", s.push_failed_total, Number(s.push_failed_total || 0) ? "danger" : "")}${stat("Relatos abertos", s.feedback_open, Number(s.feedback_open || 0) ? "warning" : "")}${stat("Erros 24h", s.errors_24h, Number(s.errors_24h || 0) ? "danger" : "")}</div><div class="section-title"><h2>Relatos recentes</h2></div><div class="admin-feed">${reports}</div><div class="section-title"><h2>Logs recentes</h2></div><div class="admin-logs">${logs}</div><button id="exportOperationalSnapshot" class="btn btn-secondary btn-block">Exportar snapshot operacional</button>`, (root) => {
+          $("#exportOperationalSnapshot", root)?.addEventListener("click", () => {
+            const blob = new Blob([JSON.stringify({ generated_at: nowIso(), release: APP_RELEASE, ...data }, null, 2)], { type: "application/json" });
+            const link = document.createElement("a"); link.href = URL.createObjectURL(blob); link.download = `resenha-fc-beta-snapshot-${new Date().toISOString().slice(0,10)}.json`; link.click(); URL.revokeObjectURL(link.href);
+          });
+        });
+      } catch (error) {
+        document.querySelector(".modal-layer")?.remove();
+        this.toast(error.message || "Não foi possível carregar o painel.", true);
+      }
     },
 
     openAnnouncementCenter(selectedId = "") {

@@ -1,4 +1,4 @@
-const CACHE = "resenha-fc-v0.3.4";
+const CACHE = "resenha-fc-beta-1.0-build-100";
 const ASSETS = [
   "./",
   "./index.html",
@@ -7,6 +7,7 @@ const ASSETS = [
   "./supabase-config.js",
   "./manifest.webmanifest",
   "./offline.html",
+  "./version.json",
   "./brand/brand-mark.png",
   "./brand/logo-resenha-fc.png",
   "./login-logo-transparent-v0311.png",
@@ -87,4 +88,8 @@ self.addEventListener("notificationclick", event => {
     }
     return self.clients.openWindow(target);
   })());
+});
+
+self.addEventListener("message", event => {
+  if (event.data?.type === "SKIP_WAITING") self.skipWaiting();
 });
