@@ -28,3 +28,12 @@
 - convite por WhatsApp;
 - perfil esportivo e posições;
 - exclusão de partidas somente antes do horário.
+
+## v0.3.2.1
+
+- cartão completo da pelada clicável;
+- administrador único por grupo;
+- migração do antigo proprietário para administrador;
+- transferência formal da administração;
+- churrasco configurado separadamente em cada pelada;
+- correção de largura do campo de data e hora em telas móveis.

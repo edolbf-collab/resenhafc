@@ -148,3 +148,37 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .destructive-warning{display:flex;align-items:flex-start;gap:11px;padding:14px;border:1px solid rgba(255,93,103,.42);border-radius:16px;background:rgba(255,93,103,.09)}
 .destructive-warning>span{width:34px;height:34px;flex:0 0 auto;border-radius:50%;display:grid;place-items:center;background:var(--danger);color:#260307;font-size:20px;font-weight:950}
 .destructive-warning strong{display:block;color:#ffabb0;font-size:13px}.destructive-warning p{margin:5px 0 0;color:#d2b3b7;font-size:10.5px;line-height:1.55}.destructive-warning b{color:#fff}
+
+/* v0.3.2.1 — administração única, pelada clicável e churrasco por evento */
+*,*::before,*::after{box-sizing:border-box}
+.match-card{cursor:pointer;max-width:100%;overflow:hidden;transition:transform .14s ease,border-color .14s ease,background .14s ease}
+.match-card:hover{border-color:rgba(92,210,61,.34);background:linear-gradient(145deg,rgba(18,47,55,.98),rgba(8,28,38,.98))}
+.match-card:active{transform:scale(.992)}
+.match-card:focus-visible{outline:3px solid rgba(92,210,61,.38);outline-offset:2px}
+.match-card .match-top{min-width:0}
+.match-card .match-date{width:50px;min-width:50px;flex:0 0 50px;height:58px}
+.match-open-label{display:inline-flex;align-items:center;gap:5px;color:#d9e9ee;font-size:10px;font-weight:850;white-space:nowrap}
+.match-open-label b{color:var(--lime);font-size:17px;line-height:1}
+.bbq-chip{display:inline-flex;align-items:center;margin:7px 0 0 5px;padding:4px 7px;border-radius:999px;background:rgba(255,170,54,.12);color:#ffc06a;font-size:8.5px;font-weight:900;letter-spacing:.25px}
+.admin-summary-single{grid-template-columns:1fr}
+.match-bbq-section{margin:13px 0}
+.match-bbq-section .section-title{margin-top:0}
+.bbq-status{display:flex;align-items:center;gap:10px;padding:12px;border:1px solid var(--line);border-radius:15px;background:rgba(255,255,255,.025)}
+.bbq-status>span{width:36px;height:36px;flex:0 0 auto;border-radius:12px;display:grid;place-items:center;background:rgba(255,170,54,.1);color:#ffc06a;font-size:19px}
+.bbq-status div{min-width:0}.bbq-status strong,.bbq-status small{display:block}.bbq-status strong{font-size:12px}.bbq-status small{margin-top:3px;color:var(--muted);font-size:9.5px;line-height:1.45}
+.bbq-status.enabled{border-color:rgba(255,170,54,.28);background:rgba(255,170,54,.055)}
+.match-bbq-form{display:grid;gap:10px;margin-top:10px;padding:12px;border:1px solid rgba(92,210,61,.2);border-radius:15px;background:rgba(92,210,61,.045)}
+.match-bbq-form .field{min-width:0}.match-bbq-form .field.is-disabled{opacity:.45}
+.field,.field-row>*{min-width:0}
+.field input,.field select,.field textarea{max-width:100%;min-width:0}
+.field input[type="datetime-local"]{display:block;width:100%;max-width:100%;min-width:0;-webkit-appearance:none;appearance:none;font-size:16px;padding-left:10px;padding-right:8px}
+.field input[type="datetime-local"]::-webkit-date-and-time-value{min-width:0;text-align:left}
+.modal,.modal-content{max-width:100%;overflow-x:hidden}
+@media(max-width:420px){
+  .match-card{padding:12px}
+  .match-top{gap:9px}
+  .match-card .match-date{width:46px;min-width:46px;flex-basis:46px;height:56px;border-radius:13px}
+  .match-date strong{font-size:21px}
+  .match-card .status-pill{font-size:8px;padding:5px 7px}
+  .match-footer{gap:8px}
+}

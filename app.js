@@ -25,10 +25,10 @@
   const avatarKey = value => /^badge-(0[1-9]|1[0-9]|20)$/.test(String(value || "")) ? String(value) : "badge-01";
   const groupAvatarUrl = key => {
     const normalized = avatarKey(key);
-    return window.RESENHA_GROUP_AVATARS?.[normalized] || assetUrl(`assets/group-avatars/${normalized}.png?v=0.3.2`);
+    return window.RESENHA_GROUP_AVATARS?.[normalized] || assetUrl(`assets/group-avatars/${normalized}.png?v=0.3.2.1`);
   };
   const positionOptions = ["Goleiro", "Zagueiro", "Lateral", "Volante", "Meia", "Atacante", "Coringa"];
-  const roleLabels = { owner: "Proprietário", admin: "Administrador", organizer: "Organizador", treasurer: "Tesoureiro", member: "Membro" };
+  const roleLabels = { owner: "Administrador", admin: "Administrador", organizer: "Organizador", treasurer: "Tesoureiro", member: "Membro" };
   const roleClass = role => `role-${role || "member"}`;
   const oauthErrorFromLocation = () => {
     const sources = [new URLSearchParams(location.search), new URLSearchParams(location.hash.replace(/^#/, ""))];
@@ -297,10 +297,20 @@
       return this.loadGroup(groupId, { subscribe: false });
     }
 
-    async transferOwnership(groupId, userId) {
-      const { error } = await this.client.rpc("transfer_group_ownership", { p_group_id: groupId, p_new_owner_user_id: userId });
+    async transferAdministration(groupId, userId) {
+      const { error } = await this.client.rpc("transfer_group_administration", { p_group_id: groupId, p_new_admin_user_id: userId });
       if (error) throw error;
       await this.init(groupId);
+    }
+
+    async updateMatchBbq(matchId, enabled, price) {
+      const { error } = await this.client.rpc("update_match_bbq_settings", {
+        p_match_id: matchId,
+        p_enabled: Boolean(enabled),
+        p_price: Number(price || 0)
+      });
+      if (error) throw error;
+      return this.loadGroup(this.state.currentGroupId, { subscribe: false });
     }
 
     async rateMember(groupId, playerId, score) {
@@ -390,6 +400,13 @@
         const action = event.target.closest("[data-action]");
         if (action) this.handleAction(action.dataset.action, action.dataset);
       });
+      document.addEventListener("keydown", event => {
+        if (!["Enter", " "].includes(event.key)) return;
+        const action = event.target.closest('.match-card[data-action="open-match"]');
+        if (!action) return;
+        event.preventDefault();
+        this.handleAction(action.dataset.action, action.dataset);
+      });
       $("#groupButton")?.addEventListener("click", () => this.openGroupModal());
       $("#groupAvatarButton")?.addEventListener("click", () => {
         if (this.currentGroup() && this.canManageGroup()) this.openGroupSettings();
@@ -401,7 +418,7 @@
         if (!(image instanceof HTMLImageElement) || !image.matches("[data-group-avatar]")) return;
         if (image.dataset.fallbackApplied === "true") return;
         image.dataset.fallbackApplied = "true";
-        image.src = window.RESENHA_GROUP_AVATARS?.["badge-01"] || assetUrl("assets/group-avatars/badge-01.png?v=0.3.2");
+        image.src = window.RESENHA_GROUP_AVATARS?.["badge-01"] || assetUrl("assets/group-avatars/badge-01.png?v=0.3.2.1");
       }, true);
     },
 
@@ -414,11 +431,14 @@
     currentGroup() {
       return this.state?.groups.find(group => group.id === this.state.currentGroupId) || this.state?.groups[0] || null;
     },
-    currentRole() { return this.currentGroup()?.role || "member"; },
-    canManageGroup() { return ["owner", "admin"].includes(this.currentRole()); },
-    canManageMatches() { return ["owner", "admin", "organizer"].includes(this.currentRole()); },
-    canManageFinance() { return ["owner", "admin", "treasurer"].includes(this.currentRole()); },
-    canSeeRatings() { return ["owner", "admin"].includes(this.currentRole()); },
+    currentRole() {
+      const role = this.currentGroup()?.role || "member";
+      return role === "owner" ? "admin" : role;
+    },
+    canManageGroup() { return this.currentRole() === "admin"; },
+    canManageMatches() { return ["admin", "organizer"].includes(this.currentRole()); },
+    canManageFinance() { return ["admin", "treasurer"].includes(this.currentRole()); },
+    canSeeRatings() { return this.currentRole() === "admin"; },
     activePlayers() { return (this.state?.players || []).filter(player => player.active !== false); },
     player(id) { return this.state?.players.find(player => player.id === id); },
     memberPlayer(member) { return this.player(member?.player_id) || this.state?.players.find(player => player.user_id === member?.user_id); },
@@ -426,7 +446,7 @@
       const group = this.currentGroup();
       return this.player(group?.player_id) || this.state?.players.find(player => player.user_id === this.state?.profile?.id) || null;
     },
-    ownerMember() { return this.state?.members.find(member => member.role === "owner") || null; },
+    adminMember() { return this.state?.members.find(member => ["admin", "owner"].includes(member.role)) || null; },
     attendanceFor(matchId) { return this.state?.attendance.filter(item => item.match_id === matchId) || []; },
     confirmedFor(matchId) { return this.attendanceFor(matchId).filter(item => item.status === "confirmed"); },
     upcomingMatches() {
@@ -500,21 +520,20 @@
       const match = this.nextMatch();
       const attendance = match ? this.attendanceFor(match.id) : [];
       const confirmed = attendance.filter(item => item.status === "confirmed");
-      const bbq = attendance.filter(item => item.bbq).reduce((sum, item) => sum + 1 + Number(item.bbq_guests || 0), 0);
       const notice = [...this.state.announcements].sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0];
-      const owner = this.memberPlayer(this.ownerMember());
+      const administrator = this.memberPlayer(this.adminMember());
       const emblem = this.canManageGroup()
         ? `<button class="hero-avatar-button" data-action="group-settings" aria-label="Personalizar grupo">${this.groupAvatar(group, "hero-group-avatar")}</button>`
         : this.groupAvatar(group, "hero-group-avatar");
       return `<section class="home-dashboard">
         <section class="stadium-hero home-hero">
           <div class="stadium-lights"></div>
-          <div class="group-identity">${emblem}<div><span class="eyebrow">${escapeHtml(roleLabels[this.currentRole()])}</span><h1>${escapeHtml(group.name)}</h1><p>Proprietário: ${escapeHtml(owner?.name || "Não identificado")}</p></div></div>
-          ${match ? `<div class="next-match-panel"><div class="next-match-heading"><div><span class="match-kicker">PRÓXIMA PELADA</span><h2>${escapeHtml(match.title)}</h2></div><button class="match-detail-link" data-action="open-match" data-id="${match.id}">Detalhes</button></div><p>${escapeHtml(shortDate(match.starts_at))} · ${escapeHtml(match.location)}</p><div class="hero-numbers"><div><strong>${confirmed.length}</strong><small>confirmados</small></div><div><strong>${match.max_players}</strong><small>vagas</small></div><div><strong>${bbq}</strong><small>churrasco</small></div></div><button class="btn btn-primary btn-block home-rsvp" data-action="rsvp" data-id="${match.id}">Confirmar presença</button></div>` : `<div class="next-match-panel empty-match-panel"><span class="match-kicker">AGENDA LIVRE</span><h2>Nenhuma pelada marcada</h2><p>Organizadores podem criar o próximo jogo.</p>${this.canManageMatches() ? '<button class="btn btn-primary btn-small" data-action="new-match">Agendar pelada</button>' : ""}</div>`}
+          <div class="group-identity">${emblem}<div><span class="eyebrow">${escapeHtml(roleLabels[this.currentRole()])}</span><h1>${escapeHtml(group.name)}</h1><p>Administrador: ${escapeHtml(administrator?.name || "Não identificado")}</p></div></div>
+          ${match ? `<div class="next-match-panel"><div class="next-match-heading"><div><span class="match-kicker">PRÓXIMA PELADA</span><h2>${escapeHtml(match.title)}</h2></div><button class="match-detail-link" data-action="open-match" data-id="${match.id}">Detalhes</button></div><p>${escapeHtml(shortDate(match.starts_at))} · ${escapeHtml(match.location)}</p><div class="hero-numbers"><div><strong>${confirmed.length}</strong><small>confirmados</small></div><div><strong>${match.max_players}</strong><small>vagas</small></div><div><strong>${Math.max(0, Number(match.max_players) - confirmed.length)}</strong><small>restantes</small></div></div><button class="btn btn-primary btn-block home-rsvp" data-action="rsvp" data-id="${match.id}">Confirmar presença</button></div>` : `<div class="next-match-panel empty-match-panel"><span class="match-kicker">AGENDA LIVRE</span><h2>Nenhuma pelada marcada</h2><p>Organizadores podem criar o próximo jogo.</p>${this.canManageMatches() ? '<button class="btn btn-primary btn-small" data-action="new-match">Agendar pelada</button>' : ""}</div>`}
         </section>
         ${notice ? `<button class="home-notice" data-route="more"><span>📣</span><div><strong>${escapeHtml(notice.title)}</strong><small>${escapeHtml(notice.body)}</small></div><b>›</b></button>` : ""}
         <div class="home-quick-grid">
-          <button class="quick-card" data-action="rsvp" data-id="${match?.id || ""}"><span class="quick-icon">✓</span><span><strong>Presença</strong><small>Jogo e churrasco</small></span></button>
+          <button class="quick-card" data-action="rsvp" data-id="${match?.id || ""}"><span class="quick-icon">✓</span><span><strong>Presença</strong><small>Confirme sua participação</small></span></button>
           <button class="quick-card" data-route="teams"><span class="quick-icon">⇄</span><span><strong>Times</strong><small>Equilíbrio do elenco</small></span></button>
           <button class="quick-card" data-route="members"><span class="quick-icon">★</span><span><strong>Membros</strong><small>Posições e notas</small></span></button>
           <button class="quick-card" data-action="invite"><span class="quick-icon">↗</span><span><strong>Convidar</strong><small>WhatsApp e código</small></span></button>
@@ -534,7 +553,7 @@
       const confirmed = this.confirmedFor(match.id);
       const future = date > new Date();
       const recurring = Number(match.recurrence_total || 1) > 1;
-      return `<article class="card match-card"><div class="match-top"><div class="match-date"><small>${date.toLocaleDateString("pt-BR", { month: "short" }).replace(".", "").toUpperCase()}</small><strong>${String(date.getDate()).padStart(2, "0")}</strong></div><div class="match-info"><h3>${escapeHtml(match.title)}</h3><p>${escapeHtml(shortDate(match.starts_at))}<br>${escapeHtml(match.location)}</p>${recurring ? '<span class="recurrence-chip">↻ Semanal</span>' : ""}</div><span class="status-pill ${future ? "status-maybe" : "status-confirmed"}">${future ? "Agendado" : "Histórico"}</span></div><div class="match-footer"><div class="avatar-stack">${confirmed.slice(0, 5).map(item => `<span>${initials(this.player(item.player_id)?.name)}</span>`).join("")}${confirmed.length > 5 ? `<span>+${confirmed.length - 5}</span>` : ""}</div><button class="btn btn-ghost btn-small" data-action="open-match" data-id="${match.id}">${confirmed.length}/${match.max_players} jogadores</button></div></article>`;
+      return `<article class="card match-card" data-action="open-match" data-id="${match.id}" role="button" tabindex="0" aria-label="Abrir detalhes de ${escapeHtml(match.title)}"><div class="match-top"><div class="match-date"><small>${date.toLocaleDateString("pt-BR", { month: "short" }).replace(".", "").toUpperCase()}</small><strong>${String(date.getDate()).padStart(2, "0")}</strong></div><div class="match-info"><h3>${escapeHtml(match.title)}</h3><p>${escapeHtml(shortDate(match.starts_at))}<br>${escapeHtml(match.location)}</p>${recurring ? '<span class="recurrence-chip">↻ Semanal</span>' : ""}${match.bbq_enabled ? '<span class="bbq-chip">Churrasco</span>' : ""}</div><span class="status-pill ${future ? "status-maybe" : "status-confirmed"}">${future ? "Agendado" : "Histórico"}</span></div><div class="match-footer"><div class="avatar-stack">${confirmed.slice(0, 5).map(item => `<span>${initials(this.player(item.player_id)?.name)}</span>`).join("")}${confirmed.length > 5 ? `<span>+${confirmed.length - 5}</span>` : ""}</div><span class="match-open-label">${confirmed.length}/${match.max_players} jogadores <b>›</b></span></div></article>`;
     },
 
     teamsPage() {
@@ -553,14 +572,13 @@
 
     membersPage() {
       const group = this.currentGroup();
-      const ownerMember = this.ownerMember();
-      const ownerPlayer = this.memberPlayer(ownerMember);
-      const admins = this.state.members.filter(member => member.role === "admin").map(member => this.memberPlayer(member)?.name).filter(Boolean);
+      const adminMember = this.adminMember();
+      const adminPlayer = this.memberPlayer(adminMember);
       const sortedMembers = [...this.state.members].sort((a, b) => {
-        const weight = { owner: 0, admin: 1, organizer: 2, treasurer: 3, member: 4 };
+        const weight = { owner: 0, admin: 0, organizer: 1, treasurer: 2, member: 3 };
         return (weight[a.role] - weight[b.role]) || String(this.memberPlayer(a)?.name).localeCompare(String(this.memberPlayer(b)?.name));
       });
-      return `<div class="page-head"><div><span class="page-kicker">ELENCO</span><h1>Membros do grupo</h1><p>Funções, posições e avaliações internas.</p></div><button class="btn btn-primary btn-small" data-action="invite">Convidar</button></div><section class="card group-summary-card"><div class="group-summary-main">${this.groupAvatar(group, "summary-group-avatar")}<div><h2>${escapeHtml(group.name)}</h2><p>Código ${escapeHtml(group.invite_code)}</p></div></div><div class="admin-summary"><div><small>Proprietário</small><strong>${escapeHtml(ownerPlayer?.name || "Não identificado")}</strong></div><div><small>Administradores</small><strong>${escapeHtml(admins.join(", ") || "Somente o proprietário")}</strong></div></div>${this.canManageGroup() ? '<button class="btn btn-secondary btn-block" data-action="manage-roles">Gerenciar funções</button>' : ""}</section><div class="members-actions"><button class="btn btn-primary" data-action="rate-members">Avaliar membros</button><button class="btn btn-secondary" data-action="profile">Minha posição</button></div><div class="section-title"><h2>Elenco (${sortedMembers.length})</h2>${this.canSeeRatings() ? '<small>As notas abaixo são visíveis somente à administração.</small>' : '<small>Suas avaliações são confidenciais.</small>'}</div><div class="list">${sortedMembers.map(member => this.memberRow(member)).join("")}</div>${this.canSeeRatings() ? this.privateRatingsPanel() : ""}`;
+      return `<div class="page-head"><div><span class="page-kicker">ELENCO</span><h1>Membros do grupo</h1><p>Funções, posições e avaliações internas.</p></div><button class="btn btn-primary btn-small" data-action="invite">Convidar</button></div><section class="card group-summary-card"><div class="group-summary-main">${this.groupAvatar(group, "summary-group-avatar")}<div><h2>${escapeHtml(group.name)}</h2><p>Código ${escapeHtml(group.invite_code)}</p></div></div><div class="admin-summary admin-summary-single"><div><small>Administrador</small><strong>${escapeHtml(adminPlayer?.name || "Não identificado")}</strong></div></div>${this.canManageGroup() ? '<button class="btn btn-secondary btn-block" data-action="manage-roles">Gerenciar funções</button>' : ""}</section><div class="members-actions"><button class="btn btn-primary" data-action="rate-members">Avaliar membros</button><button class="btn btn-secondary" data-action="profile">Minha posição</button></div><div class="section-title"><h2>Elenco (${sortedMembers.length})</h2>${this.canSeeRatings() ? '<small>As notas abaixo são visíveis somente ao administrador.</small>' : '<small>Suas avaliações são confidenciais.</small>'}</div><div class="list">${sortedMembers.map(member => this.memberRow(member)).join("")}</div>${this.canSeeRatings() ? this.privateRatingsPanel() : ""}`;
     },
 
     memberRow(member) {
@@ -572,7 +590,7 @@
 
     privateRatingsPanel() {
       const rated = this.activePlayers().map(player => ({ player, summary: this.ratingSummary(player.id) })).filter(item => item.summary?.count).sort((a, b) => b.summary.average - a.summary.average);
-      return `<div class="section-title"><h2>Painel privado de notas</h2><span class="private-badge">🔒 Administração</span></div><section class="card private-panel">${rated.length ? rated.map((item, index) => `<div class="rating-summary-row"><span class="rank-pos">${index + 1}</span>${this.personAvatar(item.player)}<div class="list-main"><strong>${escapeHtml(item.player.name)}</strong><small>${escapeHtml(item.player.primary_position)} · ${item.summary.count} avaliação(ões)</small></div><strong>${item.summary.average.toFixed(2)}</strong></div>`).join("") : '<div class="empty"><strong>Nenhuma média disponível</strong><span>As notas aparecerão após os membros avaliarem o elenco.</span></div>'}</section>`;
+      return `<div class="section-title"><h2>Painel privado de notas</h2><span class="private-badge">🔒 Administrador</span></div><section class="card private-panel">${rated.length ? rated.map((item, index) => `<div class="rating-summary-row"><span class="rank-pos">${index + 1}</span>${this.personAvatar(item.player)}<div class="list-main"><strong>${escapeHtml(item.player.name)}</strong><small>${escapeHtml(item.player.primary_position)} · ${item.summary.count} avaliação(ões)</small></div><strong>${item.summary.average.toFixed(2)}</strong></div>`).join("") : '<div class="empty"><strong>Nenhuma média disponível</strong><span>As notas aparecerão após os membros avaliarem o elenco.</span></div>'}</section>`;
     },
 
     playerRow(player, options = {}) {
@@ -592,12 +610,12 @@
         ...payments.map(item => ({ ...item, type: "income", description: item.description || `Pagamento · ${this.player(item.player_id)?.nickname || "Jogador"}`, date: item.paid_at })),
         ...expenses.map(item => ({ ...item, type: "expense", date: item.occurred_at }))
       ].sort((a, b) => new Date(b.date) - new Date(a.date));
-      return `<div class="page-head"><div><span class="page-kicker">FINANCEIRO</span><h1>Caixa</h1><p>Mensalidades, quadra, materiais e churrasco.</p></div>${this.canManageFinance() ? '<button class="btn btn-primary btn-small" data-action="new-finance">+ Lançar</button>' : ""}</div>${!this.canManageFinance() ? '<div class="notice"><strong>Acesso de consulta</strong><br>Somente proprietário, administrador e tesoureiro podem alterar lançamentos.</div>' : '<div class="notice notice-success"><strong>Acesso autorizado</strong><br>Você pode registrar cobranças, pagamentos e despesas.</div>'}<section class="card balance-card"><small>Saldo atual</small><h2>${money(income - out)}</h2><div class="balance-grid"><div><small>Entradas</small><strong>${money(income)}</strong></div><div><small>Saídas</small><strong>${money(out)}</strong></div></div><div class="balance-track"><span style="width:${pct}%"></span></div><p>${paid} de ${charges.length} cobranças pagas · ${pct}%</p></section><div class="section-title"><h2>Movimentações</h2></div><div class="list">${movements.map(item => `<div class="card finance-row"><div class="finance-icon ${item.type === "income" ? "finance-income" : "finance-expense"}">${item.type === "income" ? "+" : "−"}</div><div class="list-main"><strong>${escapeHtml(item.description)}</strong><small>${escapeHtml(shortDate(item.date))}</small></div><strong class="money ${item.type === "income" ? "positive" : "negative"}">${item.type === "income" ? "+" : "−"}${money(item.amount)}</strong></div>`).join("") || '<div class="card empty">Sem movimentações.</div>'}</div><div class="section-title"><h2>Cobranças</h2></div><div class="list">${charges.map(charge => { const player = this.player(charge.player_id) || { name: "Grupo", primary_position: charge.description }; return `<div class="card list-row">${this.personAvatar(player)}<div class="list-main"><strong>${escapeHtml(player.name)}</strong><small>${escapeHtml(charge.description)} · ${money(charge.amount)}</small></div><span class="status-pill ${charge.status === "paid" ? "status-confirmed" : "status-out"}">${charge.status === "paid" ? "Pago" : "Pendente"}</span></div>`; }).join("") || '<div class="card empty">Nenhuma cobrança.</div>'}</div>`;
+      return `<div class="page-head"><div><span class="page-kicker">FINANCEIRO</span><h1>Caixa</h1><p>Mensalidades, quadra, materiais e churrasco.</p></div>${this.canManageFinance() ? '<button class="btn btn-primary btn-small" data-action="new-finance">+ Lançar</button>' : ""}</div>${!this.canManageFinance() ? '<div class="notice"><strong>Acesso de consulta</strong><br>Somente administrador e tesoureiro podem alterar lançamentos.</div>' : '<div class="notice notice-success"><strong>Acesso autorizado</strong><br>Você pode registrar cobranças, pagamentos e despesas.</div>'}<section class="card balance-card"><small>Saldo atual</small><h2>${money(income - out)}</h2><div class="balance-grid"><div><small>Entradas</small><strong>${money(income)}</strong></div><div><small>Saídas</small><strong>${money(out)}</strong></div></div><div class="balance-track"><span style="width:${pct}%"></span></div><p>${paid} de ${charges.length} cobranças pagas · ${pct}%</p></section><div class="section-title"><h2>Movimentações</h2></div><div class="list">${movements.map(item => `<div class="card finance-row"><div class="finance-icon ${item.type === "income" ? "finance-income" : "finance-expense"}">${item.type === "income" ? "+" : "−"}</div><div class="list-main"><strong>${escapeHtml(item.description)}</strong><small>${escapeHtml(shortDate(item.date))}</small></div><strong class="money ${item.type === "income" ? "positive" : "negative"}">${item.type === "income" ? "+" : "−"}${money(item.amount)}</strong></div>`).join("") || '<div class="card empty">Sem movimentações.</div>'}</div><div class="section-title"><h2>Cobranças</h2></div><div class="list">${charges.map(charge => { const player = this.player(charge.player_id) || { name: "Grupo", primary_position: charge.description }; return `<div class="card list-row">${this.personAvatar(player)}<div class="list-main"><strong>${escapeHtml(player.name)}</strong><small>${escapeHtml(charge.description)} · ${money(charge.amount)}</small></div><span class="status-pill ${charge.status === "paid" ? "status-confirmed" : "status-out"}">${charge.status === "paid" ? "Pago" : "Pendente"}</span></div>`; }).join("") || '<div class="card empty">Nenhuma cobrança.</div>'}</div>`;
     },
 
     morePage() {
       const group = this.currentGroup();
-      return `<div class="page-head"><div><span class="page-kicker">CONFIGURAÇÕES</span><h1>Mais</h1><p>Administração e dados da conta.</p></div></div><div class="list"><button class="card menu-row" data-action="profile"><span class="menu-icon">⚽</span><div class="list-main"><strong>Meu perfil de jogador</strong><small>Nome, apelido e posição.</small></div><strong>›</strong></button><button class="card menu-row" data-action="invite"><span class="menu-icon">↗</span><div class="list-main"><strong>Convidar pelo WhatsApp</strong><small>Código ${escapeHtml(group.invite_code)}</small></div><strong>›</strong></button>${this.canManageGroup() ? '<button class="card menu-row" data-action="group-settings"><span class="menu-icon">🛡</span><div class="list-main"><strong>Personalizar grupo</strong><small>Nome, escudo e administração.</small></div><strong>›</strong></button><button class="card menu-row" data-action="manage-roles"><span class="menu-icon">♟</span><div class="list-main"><strong>Gerenciar funções</strong><small>Administrador, organizador e tesoureiro.</small></div><strong>›</strong></button>' : ""}${this.canManageMatches() ? '<button class="card menu-row" data-action="announcement"><span class="menu-icon">!</span><div class="list-main"><strong>Avisos do grupo</strong><small>Publicar comunicado para o elenco.</small></div><strong>›</strong></button><button class="card menu-row" data-action="players"><span class="menu-icon">+</span><div class="list-main"><strong>Jogadores sem acesso</strong><small>Cadastrar convidado eventual.</small></div><strong>›</strong></button>' : ""}<button class="card menu-row" data-action="export"><span class="menu-icon">⇩</span><div class="list-main"><strong>Exportar dados</strong><small>Backup em arquivo JSON.</small></div><strong>›</strong></button><button class="card menu-row danger-row" data-action="sign-out"><span class="menu-icon danger-avatar">↪</span><div class="list-main"><strong>Sair da conta</strong><small>Desconectar e escolher outra conta Google.</small></div><strong>›</strong></button></div><div class="version-card">Resenha FC v0.3.2 · grupos e peladas recorrentes · Supabase · PWA</div>`;
+      return `<div class="page-head"><div><span class="page-kicker">CONFIGURAÇÕES</span><h1>Mais</h1><p>Administração e dados da conta.</p></div></div><div class="list"><button class="card menu-row" data-action="profile"><span class="menu-icon">⚽</span><div class="list-main"><strong>Meu perfil de jogador</strong><small>Nome, apelido e posição.</small></div><strong>›</strong></button><button class="card menu-row" data-action="invite"><span class="menu-icon">↗</span><div class="list-main"><strong>Convidar pelo WhatsApp</strong><small>Código ${escapeHtml(group.invite_code)}</small></div><strong>›</strong></button>${this.canManageGroup() ? '<button class="card menu-row" data-action="group-settings"><span class="menu-icon">🛡</span><div class="list-main"><strong>Personalizar grupo</strong><small>Nome, escudo e administração.</small></div><strong>›</strong></button><button class="card menu-row" data-action="manage-roles"><span class="menu-icon">♟</span><div class="list-main"><strong>Gerenciar funções</strong><small>Administrador, organizador e tesoureiro.</small></div><strong>›</strong></button>' : ""}${this.canManageMatches() ? '<button class="card menu-row" data-action="announcement"><span class="menu-icon">!</span><div class="list-main"><strong>Avisos do grupo</strong><small>Publicar comunicado para o elenco.</small></div><strong>›</strong></button><button class="card menu-row" data-action="players"><span class="menu-icon">+</span><div class="list-main"><strong>Jogadores sem acesso</strong><small>Cadastrar convidado eventual.</small></div><strong>›</strong></button>' : ""}<button class="card menu-row" data-action="export"><span class="menu-icon">⇩</span><div class="list-main"><strong>Exportar dados</strong><small>Backup em arquivo JSON.</small></div><strong>›</strong></button><button class="card menu-row danger-row" data-action="sign-out"><span class="menu-icon danger-avatar">↪</span><div class="list-main"><strong>Sair da conta</strong><small>Desconectar e escolher outra conta Google.</small></div><strong>›</strong></button></div><div class="version-card">Resenha FC v0.3.2.1 · administração única e churrasco por pelada · Supabase · PWA</div>`;
     },
 
     async handleAction(action, data) {
@@ -719,7 +737,7 @@
     },
 
     openCreateGroupModal() {
-      this.modal("Criar grupo", `<form id="createGroupForm" class="form-grid create-group-form"><div class="notice notice-success"><strong>Seu grupo, sua identidade</strong><br>Escolha um nome e um escudo. Você será o proprietário e administrador inicial.</div><div class="field"><label>Nome do grupo</label><input name="name" required minlength="2" maxlength="80" placeholder="Ex.: Resenha de quinta" autocomplete="off"></div><div class="field"><label>Escolha o escudo</label>${this.avatarPicker()}</div><button class="btn btn-primary btn-block">Criar grupo</button></form>`, (root, close) => {
+      this.modal("Criar grupo", `<form id="createGroupForm" class="form-grid create-group-form"><div class="notice notice-success"><strong>Seu grupo, sua identidade</strong><br>Escolha um nome e um escudo. Você será o administrador do grupo.</div><div class="field"><label>Nome do grupo</label><input name="name" required minlength="2" maxlength="80" placeholder="Ex.: Resenha de quinta" autocomplete="off"></div><div class="field"><label>Escolha o escudo</label>${this.avatarPicker()}</div><button class="btn btn-primary btn-block">Criar grupo</button></form>`, (root, close) => {
         $("#createGroupForm", root).addEventListener("submit", async event => {
           event.preventDefault();
           const form = new FormData(event.currentTarget);
@@ -729,7 +747,7 @@
           close();
           this.route = "home";
           this.render();
-          this.toast("Grupo criado. Você é o proprietário e administrador.");
+          this.toast("Grupo criado. Você é o administrador.");
         });
       });
     },
@@ -753,9 +771,9 @@
     },
 
     openGroupSettings() {
-      if (!this.canManageGroup()) return this.toast("Apenas proprietário e administrador podem personalizar o grupo.", true);
+      if (!this.canManageGroup()) return this.toast("Apenas o administrador pode personalizar o grupo.", true);
       const group = this.currentGroup();
-      const deleteArea = this.currentRole() === "owner" ? `<div class="danger-zone"><div><strong>Excluir grupo permanentemente</strong><p>Apaga jogos, histórico, caixa, avaliações, avisos e todos os vínculos. Não existe recuperação.</p></div><button type="button" class="btn btn-danger btn-block" id="openDeleteGroup">Excluir grupo</button></div>` : "";
+      const deleteArea = `<div class="danger-zone"><div><strong>Excluir grupo permanentemente</strong><p>Apaga jogos, histórico, caixa, avaliações, avisos e todos os vínculos. Não existe recuperação.</p></div><button type="button" class="btn btn-danger btn-block" id="openDeleteGroup">Excluir grupo</button></div>`;
       this.modal("Personalizar grupo", `<form id="groupSettingsForm" class="form-grid"><div class="field"><label>Nome</label><input name="name" value="${escapeHtml(group.name)}" required></div><div class="field"><label>Escudo</label>${this.avatarPicker(group.avatar_key)}</div><button class="btn btn-primary btn-block">Salvar alterações</button></form>${deleteArea}`, (root, close) => {
         $("#groupSettingsForm", root).addEventListener("submit", async event => {
           event.preventDefault();
@@ -774,7 +792,7 @@
     },
 
     openDeleteGroupConfirmation(group) {
-      if (this.currentRole() !== "owner") return this.toast("Somente o proprietário pode excluir o grupo.", true);
+      if (this.currentRole() !== "admin") return this.toast("Somente o administrador pode excluir o grupo.", true);
       this.modal("Excluir grupo", `<form id="deleteGroupForm" class="form-grid"><div class="destructive-warning"><span>!</span><div><strong>Exclusão permanente e irreversível</strong><p>O grupo <b>${escapeHtml(group.name)}</b> e todos os seus jogos, históricos, membros, avaliações, avisos e dados financeiros serão apagados definitivamente.</p></div></div><div class="field"><label>Digite EXCLUIR para confirmar</label><input name="confirmation" required autocomplete="off" autocapitalize="characters" placeholder="EXCLUIR"></div><button class="btn btn-danger btn-block" disabled id="confirmDeleteGroup">Excluir definitivamente</button></form>`, (root, close) => {
         const input = $('[name="confirmation"]', root);
         const button = $("#confirmDeleteGroup", root);
@@ -819,15 +837,16 @@
     },
 
     openRoleManager() {
-      if (!this.canManageGroup()) return this.toast("Sem permissão para gerenciar funções.", true);
-      const actorRole = this.currentRole();
+      if (!this.canManageGroup()) return this.toast("Somente o administrador pode gerenciar funções.", true);
       const group = this.currentGroup();
-      this.modal("Gerenciar funções", `<div class="notice"><strong>Proprietário</strong><br>Possui todas as permissões e pode transferir a propriedade. Administradores delegam organizador, tesoureiro ou membro.</div><div class="list">${this.state.members.map(member => {
+      this.modal("Gerenciar funções", `<div class="notice"><strong>Administrador único</strong><br>O administrador possui todos os privilégios do grupo. Ele pode delegar organizador, tesoureiro ou membro e transferir a administração para outro integrante.</div><div class="list">${this.state.members.map(member => {
         const player = this.memberPlayer(member) || { name: "Membro" };
         const isMe = member.user_id === this.state.profile.id;
-        const canEdit = !isMe && member.role !== "owner" && (actorRole === "owner" || (actorRole === "admin" && member.role !== "admin"));
-        const allowedRoles = actorRole === "owner" ? ["admin", "organizer", "treasurer", "member"] : ["organizer", "treasurer", "member"];
-        return `<div class="card role-row">${this.personAvatar(player)}<div class="list-main"><strong>${escapeHtml(player.name)}</strong><small>${escapeHtml(roleLabels[member.role])}</small></div>${canEdit ? `<select class="role-select" data-role-user="${member.user_id}">${allowedRoles.map(role => `<option value="${role}" ${role === member.role ? "selected" : ""}>${roleLabels[role]}</option>`).join("")}</select>` : `<span class="role-pill ${roleClass(member.role)}">${roleLabels[member.role]}</span>`}${actorRole === "owner" && !isMe && member.role !== "owner" ? `<button class="transfer-button" data-transfer-owner="${member.user_id}" title="Transferir propriedade">♛</button>` : ""}</div>`;
+        const isAdmin = ["admin", "owner"].includes(member.role);
+        const normalizedRole = isAdmin ? "admin" : member.role;
+        const canEditRole = !isMe && !isAdmin;
+        const transferButton = !isMe && !isAdmin ? `<button class="transfer-button" data-transfer-admin="${member.user_id}" title="Transferir administração">♛</button>` : "";
+        return `<div class="card role-row">${this.personAvatar(player)}<div class="list-main"><strong>${escapeHtml(player.name)}</strong><small>${escapeHtml(roleLabels[normalizedRole])}</small></div>${canEditRole ? `<select class="role-select" data-role-user="${member.user_id}">${["organizer", "treasurer", "member"].map(role => `<option value="${role}" ${role === normalizedRole ? "selected" : ""}>${roleLabels[role]}</option>`).join("")}</select>` : `<span class="role-pill ${roleClass(normalizedRole)}">${roleLabels[normalizedRole]}</span>`}${transferButton}</div>`;
       }).join("")}</div>`, (root, close) => {
         $$('[data-role-user]', root).forEach(select => select.addEventListener("change", async event => {
           event.currentTarget.disabled = true;
@@ -837,15 +856,15 @@
           this.render();
           this.toast("Função atualizada.");
         }));
-        $$('[data-transfer-owner]', root).forEach(button => button.addEventListener("click", async () => {
-          const userId = button.dataset.transferOwner;
+        $$('[data-transfer-admin]', root).forEach(button => button.addEventListener("click", async () => {
+          const userId = button.dataset.transferAdmin;
           const player = this.memberPlayer(this.state.members.find(member => member.user_id === userId));
-          if (!confirm(`Transferir a propriedade do grupo para ${player?.name || "este membro"}? Você passará a administrador.`)) return;
-          await this.repo.transferOwnership(group.id, userId);
+          if (!confirm(`Transferir a administração do grupo para ${player?.name || "este membro"}? Você passará a membro.`)) return;
+          await this.repo.transferAdministration(group.id, userId);
           this.state = this.repo.state;
           close();
           this.render();
-          this.toast("Propriedade transferida.");
+          this.toast("Administração transferida.");
         }));
       });
     },
@@ -854,7 +873,7 @@
       const me = this.myPlayer();
       const players = this.activePlayers().filter(player => player.id !== me?.id && player.user_id);
       if (!players.length) return this.toast("Ainda não há outros membros para avaliar.", true);
-      this.modal("Avaliar membros", `<div class="notice"><strong>Avaliação confidencial</strong><br>Dê uma nota de 1 a 10 considerando o desempenho geral no futebol. Somente proprietário e administradores visualizam médias e quantidade de avaliações.</div><form id="memberRatingsForm" class="ratings-form">${players.map(player => {
+      this.modal("Avaliar membros", `<div class="notice"><strong>Avaliação confidencial</strong><br>Dê uma nota de 1 a 10 considerando o desempenho geral no futebol. Somente o administrador visualiza médias e quantidade de avaliações.</div><form id="memberRatingsForm" class="ratings-form">${players.map(player => {
         const existing = this.myRating(player.id);
         const value = existing?.score || 7;
         return `<div class="rating-input-row">${this.personAvatar(player)}<div class="rating-control"><div><strong>${escapeHtml(player.name)}</strong><span data-rating-value="${player.id}">${Number(value).toFixed(1)}</span></div><small>${escapeHtml(player.primary_position || "Sem posição")}</small><input type="range" min="1" max="10" step="0.5" value="${value}" name="rating_${player.id}" data-rating-slider="${player.id}"></div></div>`;
@@ -907,7 +926,7 @@
       const date = new Date(Date.now() + 7 * 86400000);
       date.setHours(20, 0, 0, 0);
       const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
-      this.modal("Agendar pelada", `<form id="matchForm" class="form-grid"><div class="field"><label>Título</label><input name="title" required value="Pelada semanal"></div><div class="field"><label>Data e hora da primeira pelada</label><input name="starts_at" type="datetime-local" min="${new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)}" required value="${local}"></div><div class="field"><label>Local</label><input name="location" required placeholder="Arena e número da quadra"></div><div class="field-row"><div class="field"><label>Máximo de jogadores</label><input name="max_players" type="number" min="4" max="60" value="12"></div><div class="field"><label>Jogadores por time</label><input name="players_per_team" type="number" min="2" max="11" value="6"></div></div><label class="check-row recurrence-toggle"><input name="repeat_weekly" type="checkbox"> Repetir esta pelada toda semana</label><div class="recurrence-panel" id="recurrencePanel" hidden><div class="field"><label>Quantidade total de peladas</label><input name="occurrences" type="number" min="2" max="52" value="8" inputmode="numeric"><small>Será criada uma ocorrência a cada 7 dias, sempre no mesmo horário.</small></div><div class="recurrence-preview" id="recurrencePreview">8 peladas semanais serão agendadas.</div></div><label class="check-row"><input name="bbq_enabled" type="checkbox" checked> Organizar churrasco após o jogo</label><div class="field"><label>Valor do churrasco por pessoa</label><input name="bbq_price" type="number" min="0" step="0.01" value="25"></div><div class="field"><label>Observações</label><textarea name="notes" placeholder="Uniforme, prazo, regras..."></textarea></div><button class="btn btn-primary btn-block">Criar programação</button></form>`, (root, close) => {
+      this.modal("Agendar pelada", `<form id="matchForm" class="form-grid"><div class="field"><label>Título</label><input name="title" required value="Pelada semanal"></div><div class="field"><label>Data e hora da primeira pelada</label><input name="starts_at" type="datetime-local" min="${new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)}" required value="${local}"></div><div class="field"><label>Local</label><input name="location" required placeholder="Arena e número da quadra"></div><div class="field-row"><div class="field"><label>Máximo de jogadores</label><input name="max_players" type="number" min="4" max="60" value="12"></div><div class="field"><label>Jogadores por time</label><input name="players_per_team" type="number" min="2" max="11" value="6"></div></div><label class="check-row recurrence-toggle"><input name="repeat_weekly" type="checkbox"> Repetir esta pelada toda semana</label><div class="recurrence-panel" id="recurrencePanel" hidden><div class="field"><label>Quantidade total de peladas</label><input name="occurrences" type="number" min="2" max="52" value="8" inputmode="numeric"><small>Será criada uma ocorrência a cada 7 dias, sempre no mesmo horário.</small></div><div class="recurrence-preview" id="recurrencePreview">8 peladas semanais serão agendadas.</div></div><div class="field"><label>Observações</label><textarea name="notes" placeholder="Uniforme, prazo, regras..."></textarea></div><button class="btn btn-primary btn-block">Criar programação</button></form>`, (root, close) => {
         const repeat = $('[name="repeat_weekly"]', root);
         const panel = $("#recurrencePanel", root);
         const occurrencesInput = $('[name="occurrences"]', root);
@@ -936,8 +955,8 @@
             location: form.get("location"),
             maxPlayers: Number(form.get("max_players")),
             playersPerTeam: Number(form.get("players_per_team")),
-            bbqEnabled: form.get("bbq_enabled") === "on",
-            bbqPrice: Number(form.get("bbq_price") || 0),
+            bbqEnabled: false,
+            bbqPrice: 0,
             notes: form.get("notes") || "",
             occurrences
           });
@@ -956,12 +975,45 @@
       const recurring = Number(match.recurrence_total || 1) > 1;
       const grouped = { confirmed: [], maybe: [], waitlist: [], out: [] };
       this.attendanceFor(id).forEach(item => grouped[item.status]?.push(item));
+      const barbecueParticipants = this.attendanceFor(id).filter(item => item.bbq);
+      const barbecueTotal = barbecueParticipants.reduce((sum, item) => sum + 1 + Number(item.bbq_guests || 0), 0);
       const groupHtml = (title, key) => `<div class="section-title"><h2>${title} (${grouped[key].length})</h2></div><div class="list">${grouped[key].map(item => this.playerRow(this.player(item.player_id) || { name: "Jogador" })).join("") || '<div class="card empty">Nenhum.</div>'}</div>`;
       const recurringInfo = recurring ? `<div class="recurrence-detail"><span>↻</span><div><strong>Pelada semanal recorrente</strong><small>Esta data pertence a uma série criada automaticamente.</small></div></div>` : "";
+      const barbecueStatus = match.bbq_enabled
+        ? `<div class="bbq-status enabled"><span>♨</span><div><strong>Churrasco confirmado</strong><small>${barbecueTotal} participante(s) · ${money(match.bbq_price || 0)} por pessoa</small></div></div>`
+        : `<div class="bbq-status"><span>♨</span><div><strong>Churrasco não definido</strong><small>O administrador pode ativar separadamente para esta pelada.</small></div></div>`;
+      const barbecueControls = future && this.canManageGroup()
+        ? `<form id="matchBbqForm" class="match-bbq-form"><label class="check-row"><input name="bbq_enabled" type="checkbox" ${match.bbq_enabled ? "checked" : ""}> Haverá churrasco nesta pelada</label><div class="field" id="matchBbqPriceField"><label>Valor por pessoa</label><input name="bbq_price" type="number" min="0" step="0.01" value="${Number(match.bbq_price || 0)}" inputmode="decimal"></div><button class="btn btn-secondary btn-block">Salvar churrasco</button></form>`
+        : "";
       const deleteControls = future && this.canManageMatches() ? `<div class="delete-match-actions"><button class="btn btn-danger btn-block delete-match-button" data-delete-match="${match.id}">${recurring ? "Excluir somente esta data" : "Excluir jogo agendado"}</button>${recurring ? `<button class="btn btn-danger-outline btn-block" data-delete-series="${match.id}">Excluir esta e as próximas</button>` : ""}<p class="danger-help">A exclusão só é permitida antes do horário. Peladas realizadas permanecem no histórico.</p></div>` : "";
-      this.modal(match.title, `<div class="match-detail-banner"><span class="status-pill ${future ? "status-maybe" : "status-confirmed"}">${future ? "Agendado" : "Histórico"}</span><strong>${escapeHtml(shortDate(match.starts_at))}</strong><p>${escapeHtml(match.location)}</p>${match.notes ? `<small>${escapeHtml(match.notes)}</small>` : ""}</div>${recurringInfo}<div class="actions"><button class="btn btn-primary" data-modal-rsvp="${match.id}">${future ? "Minha presença" : "Ver minha resposta"}</button>${this.canManageMatches() ? `<button class="btn btn-secondary" data-modal-teams="${match.id}">Separar times</button>` : ""}</div>${deleteControls}${groupHtml("Confirmados", "confirmed")}${groupHtml("Talvez", "maybe")}${groupHtml("Lista de espera", "waitlist")}${groupHtml("Não vão", "out")}`, (root, close) => {
-        $("[data-modal-rsvp]", root).addEventListener("click", () => { close(); this.openRsvp(match.id); });
+      this.modal(match.title, `<div class="match-detail-banner"><span class="status-pill ${future ? "status-maybe" : "status-confirmed"}">${future ? "Agendado" : "Histórico"}</span><strong>${escapeHtml(shortDate(match.starts_at))}</strong><p>${escapeHtml(match.location)}</p>${match.notes ? `<small>${escapeHtml(match.notes)}</small>` : ""}</div>${recurringInfo}<section class="match-bbq-section"><div class="section-title"><h2>Confraternização</h2><small>Configuração exclusiva desta pelada.</small></div>${barbecueStatus}${barbecueControls}</section><div class="actions">${future ? `<button class="btn btn-primary" data-modal-rsvp="${match.id}">Minha presença</button>` : ""}${this.canManageMatches() ? `<button class="btn btn-secondary" data-modal-teams="${match.id}">Separar times</button>` : ""}</div>${deleteControls}${groupHtml("Confirmados", "confirmed")}${groupHtml("Talvez", "maybe")}${groupHtml("Lista de espera", "waitlist")}${groupHtml("Não vão", "out")}`, (root, close) => {
+        $("[data-modal-rsvp]", root)?.addEventListener("click", () => {
+          close();
+          this.openRsvp(match.id);
+        });
         $("[data-modal-teams]", root)?.addEventListener("click", async () => { close(); await this.drawTeams(match.id); });
+        const bbqForm = $("#matchBbqForm", root);
+        if (bbqForm) {
+          const enabled = $('[name="bbq_enabled"]', bbqForm);
+          const price = $('[name="bbq_price"]', bbqForm);
+          const refreshBbq = () => {
+            price.disabled = !enabled.checked;
+            $("#matchBbqPriceField", bbqForm).classList.toggle("is-disabled", !enabled.checked);
+          };
+          enabled.addEventListener("change", refreshBbq);
+          refreshBbq();
+          bbqForm.addEventListener("submit", async event => {
+            event.preventDefault();
+            const submit = event.submitter;
+            submit.disabled = true;
+            submit.textContent = "Salvando...";
+            await this.repo.updateMatchBbq(match.id, enabled.checked, Number(price.value || 0));
+            this.state = this.repo.state;
+            close();
+            this.render();
+            this.toast(enabled.checked ? "Churrasco ativado para esta pelada." : "Churrasco removido desta pelada.");
+          });
+        }
         $("[data-delete-match]", root)?.addEventListener("click", async () => {
           const message = recurring ? "Excluir somente esta ocorrência da pelada semanal? As demais datas serão mantidas." : "Excluir definitivamente este jogo agendado?";
           if (!confirm(message)) return;
