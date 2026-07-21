@@ -25,7 +25,7 @@
   const avatarKey = value => /^badge-(0[1-9]|1[0-9]|20)$/.test(String(value || "")) ? String(value) : "badge-01";
   const groupAvatarUrl = key => {
     const normalized = avatarKey(key);
-    return window.RESENHA_GROUP_AVATARS?.[normalized] || assetUrl(`assets/group-avatars/${normalized}.png?v=0.3.1.3`);
+    return window.RESENHA_GROUP_AVATARS?.[normalized] || assetUrl(`assets/group-avatars/${normalized}.png?v=0.3.1.6`);
   };
   const positionOptions = ["Goleiro", "Zagueiro", "Lateral", "Volante", "Meia", "Atacante", "Coringa"];
   const roleLabels = { owner: "Proprietário", admin: "Administrador", organizer: "Organizador", treasurer: "Tesoureiro", member: "Membro" };
@@ -99,6 +99,19 @@
 
     async signInWithGoogleIdToken(token, nonce) {
       return this.client.auth.signInWithIdToken({ provider: "google", token, nonce });
+    }
+
+    async signInWithGoogleOAuth() {
+      const configuredRedirect = String(this.config.authRedirectUrl || "").trim();
+      const redirectTo = configuredRedirect || appBaseUrl();
+      return this.client.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo,
+          skipBrowserRedirect: true,
+          queryParams: { prompt: "select_account" }
+        }
+      });
     }
 
     async signOut() {
@@ -295,7 +308,7 @@
       this.bindGlobal();
       this.captureInviteIntent();
       const config = window.RESENHA_CONFIG || {};
-      if (!(config.supabaseUrl && config.supabasePublishableKey && config.googleClientId)) return this.renderConfigurationError();
+      if (!(config.supabaseUrl && config.supabasePublishableKey)) return this.renderConfigurationError();
       if (!window.supabase) return this.renderBackendError(window.RESENHA_CLOUD_LOAD_ERROR || new Error("Não foi possível carregar o cliente Supabase."));
 
       this.repo = new SupabaseRepository(config);
@@ -573,74 +586,40 @@
 
     renderAuth() {
       const error = oauthErrorFromLocation();
-      document.body.innerHTML = `<main class="auth-screen"><section class="auth-panel"><div class="auth-stadium"><div class="auth-lights"></div><img class="auth-logo" src="login-logo-transparent-v0311.png" alt="Resenha FC" width="178" height="178"><span class="auth-kicker">SUA PELADA. SEU GRUPO. SEU APP.</span></div><div class="auth-copy"><h1>Entre em campo</h1><p>Presença, times equilibrados, membros, caixa e churrasco em um único lugar.</p>${error ? `<div class="notice auth-error"><strong>Falha no login</strong><br>${escapeHtml(error)}</div>` : ""}<div class="google-card"><div id="googleIdentityButton" class="google-identity-button" aria-label="Continuar com Google"></div><p id="googleLoginMessage">Use sua conta Google para continuar. Não há cadastro por e-mail ou senha.</p></div><div class="auth-features"><span>✓ Acesso seguro</span><span>✓ Dados em nuvem</span><span>✓ Sincronização entre celulares</span></div></div></section></main><div id="toastRoot" class="toast-root"></div>`;
+      document.body.innerHTML = `<main class="auth-screen"><section class="auth-panel"><div class="auth-stadium"><div class="auth-lights"></div><img class="auth-logo" src="login-logo-transparent-v0311.png" alt="Resenha FC" width="178" height="178"><span class="auth-kicker">SUA PELADA. SEU GRUPO. SEU APP.</span></div><div class="auth-copy"><h1>Entre em campo</h1><p>Presença, times equilibrados, membros, caixa e churrasco em um único lugar.</p>${error ? `<div class="notice auth-error"><strong>Falha no login</strong><br>${escapeHtml(error)}</div>` : ""}<div class="google-card"><button id="googleLoginButton" class="google-oauth-button" type="button" aria-label="Continuar com Google"><svg class="google-g" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M21.6 12.23c0-.71-.06-1.4-.18-2.07H12v3.92h5.38a4.6 4.6 0 0 1-2 3.02v2.54h3.23c1.89-1.74 2.99-4.3 2.99-7.41Z"/><path fill="#34A853" d="M12 22c2.7 0 4.96-.9 6.61-2.36l-3.23-2.54c-.9.6-2.04.96-3.38.96-2.6 0-4.81-1.76-5.6-4.13H3.07v2.62A9.99 9.99 0 0 0 12 22Z"/><path fill="#FBBC05" d="M6.4 13.93A6.02 6.02 0 0 1 6.08 12c0-.67.12-1.32.32-1.93V7.45H3.07A10 10 0 0 0 2 12c0 1.61.38 3.14 1.07 4.55l3.33-2.62Z"/><path fill="#EA4335" d="M12 5.94c1.47 0 2.79.51 3.83 1.5l2.87-2.88A9.64 9.64 0 0 0 12 2a9.99 9.99 0 0 0-8.93 5.45l3.33 2.62C7.19 7.7 9.4 5.94 12 5.94Z"/></svg><span>Continuar com Google</span><span class="google-login-spinner" aria-hidden="true"></span></button><p id="googleLoginMessage">Use sua conta Google para continuar. Não há cadastro por e-mail ou senha.</p></div><div class="auth-features"><span>✓ Acesso seguro</span><span>✓ Dados em nuvem</span><span>✓ Sincronização entre celulares</span></div></div></section></main><div id="toastRoot" class="toast-root"></div>`;
       this.setupGoogleLogin();
       if (error && history.replaceState) history.replaceState({}, document.title, location.pathname);
     },
 
-    async setupGoogleLogin() {
-      const container = $("#googleIdentityButton");
+    setupGoogleLogin() {
+      const button = $("#googleLoginButton");
       const message = $("#googleLoginMessage");
-      const clientId = String(window.RESENHA_CONFIG?.googleClientId || "").trim();
-      if (!/^[0-9a-z-]+\.apps\.googleusercontent\.com$/i.test(clientId)) {
-        message.textContent = "Client ID do Google inválido no supabase-config.js.";
-        message.classList.add("error-text");
-        return;
-      }
-      try {
-        await loadScriptOnce("google-identity-script", "https://accounts.google.com/gsi/client");
-        const nonce = randomNonce();
-        const hashedNonce = await sha256Hex(nonce);
-        window.google.accounts.id.initialize({
-          client_id: clientId,
-          callback: async response => {
-            if (!response?.credential) return this.toast("O Google não retornou a credencial de acesso.", true);
-            container.classList.add("is-loading");
-            const { error } = await this.repo.signInWithGoogleIdToken(response.credential, nonce);
-            if (error) {
-              container.classList.remove("is-loading");
-              return this.toast(error.message || "Não foi possível entrar com Google.", true);
-            }
-            window.location.replace(appBaseUrl());
-          },
-          nonce: hashedNonce,
-          ux_mode: "popup",
-          context: "signin",
-          auto_select: false,
-          cancel_on_tap_outside: true,
-          itp_support: true,
-          use_fedcm_for_prompt: true
-        });
-        container.innerHTML = "";
-        const buttonWidth = Math.min(420, Math.max(260, container.parentElement?.clientWidth || container.clientWidth || 350));
-        window.google.accounts.id.renderButton(container, {
-          type: "standard",
-          theme: "filled_black",
-          size: "large",
-          text: "continue_with",
-          shape: "pill",
-          logo_alignment: "left",
-          width: buttonWidth
-        });
-        requestAnimationFrame(() => {
-          const iframe = container.querySelector("iframe");
-          if (iframe) {
-            iframe.setAttribute("title", "Continuar com Google");
-            container.classList.add("is-ready");
-          } else {
-            message.textContent = "O botão do Google não foi carregado. Atualize a página e tente novamente.";
-            message.classList.add("error-text");
-          }
-        });
-      } catch (error) {
-        console.error(error);
-        message.innerHTML = `Não foi possível carregar o acesso Google. <button class="link-button" data-action="reload">Tentar novamente</button>`;
-        message.classList.add("error-text");
-      }
+      if (!button) return;
+
+      button.addEventListener("click", async () => {
+        if (button.disabled) return;
+        button.disabled = true;
+        button.classList.add("is-loading");
+        message.textContent = "Abrindo o acesso seguro do Google…";
+        message.classList.remove("error-text");
+
+        try {
+          const { data, error } = await this.repo.signInWithGoogleOAuth();
+          if (error) throw error;
+          if (!data?.url) throw new Error("O endereço de autenticação não foi gerado.");
+          window.location.assign(data.url);
+        } catch (error) {
+          console.error(error);
+          button.disabled = false;
+          button.classList.remove("is-loading");
+          message.textContent = error?.message || "Não foi possível iniciar o login Google.";
+          message.classList.add("error-text");
+        }
+      });
     },
 
     renderConfigurationError() {
-      document.body.innerHTML = `<main class="auth-screen"><section class="auth-panel simple-auth"><img class="auth-logo" src="login-logo-transparent-v0311.png" alt="Resenha FC"><h1>Configuração necessária</h1><p>Preencha Supabase URL, Publishable key e Google Client ID no arquivo <code>supabase-config.js</code>.</p><button class="btn btn-primary" data-action="reload">Verificar novamente</button></section></main>`;
+      document.body.innerHTML = `<main class="auth-screen"><section class="auth-panel simple-auth"><img class="auth-logo" src="login-logo-transparent-v0311.png" alt="Resenha FC"><h1>Configuração necessária</h1><p>Preencha Supabase URL e Publishable key no arquivo <code>supabase-config.js</code>.</p><button class="btn btn-primary" data-action="reload">Verificar novamente</button></section></main>`;
     },
 
     renderBackendError(error) {

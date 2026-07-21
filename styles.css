@@ -84,100 +84,51 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .app-shell.home-shell{height:100svh;min-height:100svh;overflow:hidden}.home-hero .next-match-panel{position:relative;overflow:hidden}.home-hero .next-match-panel:after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent 49.7%,rgba(255,255,255,.08) 49.8% 50.2%,transparent 50.3%),radial-gradient(circle at 50% 72%,transparent 0 39px,rgba(255,255,255,.08) 40px 41px,transparent 42px);pointer-events:none}.home-hero .next-match-panel>*{position:relative;z-index:1}
 
 
-/* v0.3.1.2 — correção de acionamento do login Google */
+/* v0.3.1.6 — login Google sem iframe, máscara, recorte ou fundo branco */
 .auth-logo,.welcome-mark,.top-group-avatar,.hero-group-avatar,.summary-group-avatar,.invite-avatar,.group-avatar,.avatar-option img{
   background:transparent!important;
   box-shadow:none;
 }
-.auth-logo{
-  filter:drop-shadow(0 14px 18px rgba(0,0,0,.5));
-}
+.auth-logo{filter:drop-shadow(0 14px 18px rgba(0,0,0,.5))}
 .google-card{
   background:transparent;
   border:0;
   box-shadow:none;
   padding:0;
 }
-.google-identity-button{
+.google-oauth-button{
+  appearance:none;
+  -webkit-appearance:none;
   width:100%;
-  min-height:52px;
-  display:flex;
+  min-height:54px;
+  border:1px solid rgba(168,239,79,.55);
+  border-radius:999px;
+  background:linear-gradient(180deg,rgba(28,49,61,.92),rgba(19,39,51,.92));
+  color:#f7fbf9;
+  display:grid;
+  grid-template-columns:28px minmax(0,auto) 28px;
   align-items:center;
   justify-content:center;
-  overflow:visible;
+  gap:12px;
+  padding:11px 18px;
+  font-size:15px;
+  font-weight:760;
+  letter-spacing:.01em;
   cursor:pointer;
   touch-action:manipulation;
+  -webkit-tap-highlight-color:transparent;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.05),0 12px 28px rgba(0,0,0,.22);
+  transition:transform .15s ease,border-color .15s ease,background .15s ease,opacity .15s ease;
 }
-.google-identity-button.is-loading{opacity:.58;pointer-events:none}
-.google-identity-button>div{
-  width:100%!important;
-  max-width:420px!important;
-  margin:0 auto!important;
+.google-oauth-button:hover{border-color:rgba(168,239,79,.82);background:linear-gradient(180deg,rgba(31,57,67,.96),rgba(19,45,50,.96))}
+.google-oauth-button:active{transform:scale(.987)}
+.google-oauth-button:disabled{cursor:wait;opacity:.68}
+.google-g{width:24px;height:24px;display:block;background:transparent;filter:drop-shadow(0 1px 2px rgba(0,0,0,.22))}
+.google-login-spinner{
+  width:18px;height:18px;border-radius:50%;border:2px solid rgba(255,255,255,.2);border-top-color:var(--lime);
+  opacity:0;
 }
-.google-identity-button iframe{
-  display:block!important;
-  max-width:100%!important;
-  min-height:44px!important;
-  pointer-events:auto!important;
-}
+.google-oauth-button.is-loading .google-login-spinner{opacity:1;animation:google-login-spin .7s linear infinite}
+.google-oauth-button.is-loading .google-g{opacity:.55}
+@keyframes google-login-spin{to{transform:rotate(360deg)}}
 .google-card p{margin-top:9px}
-.avatar-option img,.group-avatar,.top-group-avatar,.hero-group-avatar,.summary-group-avatar,.invite-avatar{
-  object-fit:contain;
-}
-.avatar-option img{display:block}
-
-
-
-/* v0.3.1.4 — botão Google funcional com fundo visualmente transparente.
-   O iframe oficial continua sendo o alvo direto do clique. O modo screen
-   elimina os pixels pretos do tema filled_black sobre o fundo escuro,
-   preservando o logotipo colorido e o texto branco. */
-.google-identity-button iframe{
-  mix-blend-mode:screen!important;
-  background:transparent!important;
-  border-radius:999px!important;
-}
-
-/* v0.3.1.5 — remove somente o disco branco do símbolo Google.
-   O iframe oficial continua acima e recebe o toque diretamente. A área
-   interna do logotipo oficial é deslocada para fora do recorte, enquanto
-   um G vetorial transparente fica por baixo do iframe. */
-.google-identity-button{
-  position:relative;
-  isolation:isolate;
-  overflow:hidden;
-  border-radius:999px;
-}
-.google-identity-button::before{
-  content:"";
-  position:absolute;
-  left:24px;
-  top:50%;
-  width:24px;
-  height:24px;
-  transform:translateY(-50%);
-  z-index:1;
-  pointer-events:none;
-  background:center/contain no-repeat url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%234285F4' d='M21.6 12.23c0-.71-.06-1.4-.18-2.07H12v3.92h5.38a4.6 4.6 0 0 1-2 3.02v2.54h3.23c1.89-1.74 2.99-4.3 2.99-7.41Z'/%3E%3Cpath fill='%2334A853' d='M12 22c2.7 0 4.96-.9 6.61-2.36l-3.23-2.54c-.9.6-2.04.96-3.38.96-2.6 0-4.81-1.76-5.6-4.13H3.07v2.62A9.99 9.99 0 0 0 12 22Z'/%3E%3Cpath fill='%23FBBC05' d='M6.4 13.93A6.02 6.02 0 0 1 6.08 12c0-.67.12-1.32.32-1.93V7.45H3.07A10 10 0 0 0 2 12c0 1.61.38 3.14 1.07 4.55l3.33-2.62Z'/%3E%3Cpath fill='%23EA4335' d='M12 5.94c1.47 0 2.79.51 3.83 1.5l2.87-2.88A9.64 9.64 0 0 0 12 2a9.99 9.99 0 0 0-8.93 5.45l3.33 2.62C7.19 7.7 9.4 5.94 12 5.94Z'/%3E%3C/svg%3E");
-  filter:drop-shadow(0 1px 2px rgba(0,0,0,.22));
-}
-.google-identity-button>div{
-  position:absolute!important;
-  top:0!important;
-  bottom:0!important;
-  left:-52px!important;
-  width:calc(100% + 104px)!important;
-  max-width:none!important;
-  height:100%!important;
-  z-index:2!important;
-}
-.google-identity-button iframe{
-  width:100%!important;
-  max-width:none!important;
-  height:100%!important;
-  min-height:52px!important;
-  mix-blend-mode:screen!important;
-  background:transparent!important;
-  border-radius:999px!important;
-  pointer-events:auto!important;
-}
