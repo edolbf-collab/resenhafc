@@ -25,7 +25,7 @@
   const avatarKey = value => /^badge-(0[1-9]|1[0-9]|20)$/.test(String(value || "")) ? String(value) : "badge-01";
   const groupAvatarUrl = key => {
     const normalized = avatarKey(key);
-    return window.RESENHA_GROUP_AVATARS?.[normalized] || assetUrl(`assets/group-avatars/${normalized}.png?v=0.3.3`);
+    return window.RESENHA_GROUP_AVATARS?.[normalized] || assetUrl(`assets/group-avatars/${normalized}.png?v=0.3.4`);
   };
   const positionOptions = ["Goleiro", "Zagueiro", "Lateral", "Volante", "Meia", "Atacante", "Coringa"];
   const roleLabels = { owner: "Administrador", admin: "Administrador", organizer: "Organizador", treasurer: "Tesoureiro", member: "Membro" };
@@ -398,20 +398,15 @@
       this.state.push_subscriptions = this.state.push_subscriptions.filter(item => item.endpoint !== endpoint);
     }
 
-    async publishAnnouncement(groupId, title, body) {
-      const { data, error } = await this.client.functions.invoke("publish-announcement", {
-        body: { groupId, title, body }
-      });
-
+    async invokeNotification(payload) {
+      const { data, error } = await this.client.functions.invoke("publish-announcement", { body: payload });
       if (error) {
-        let message = error?.message || "A Edge Function recusou a publicação do aviso.";
+        let message = error?.message || "A Edge Function recusou o envio da notificação.";
         let details = null;
-
         try {
           const response = error?.context;
           if (response && typeof response.clone === "function") {
-            const cloned = response.clone();
-            details = await cloned.json().catch(async () => {
+            details = await response.clone().json().catch(async () => {
               const text = await response.text().catch(() => "");
               return text ? { error: text } : null;
             });
@@ -419,22 +414,67 @@
         } catch (parseError) {
           console.warn("Não foi possível ler o retorno da Edge Function:", parseError);
         }
-
         if (details?.error || details?.message) {
           message = details.error || details.message;
           if (details.stage) message += ` [etapa: ${details.stage}]`;
         }
-
         const wrapped = new Error(message);
         wrapped.cause = error;
         wrapped.details = details;
         throw wrapped;
       }
+      if (data?.error) throw new Error(data.error);
+      return data || {};
+    }
 
-      if (!data?.announcement) throw new Error(data?.error || "O aviso não foi criado.");
+    async publishAnnouncement(groupId, title, body) {
+      const data = await this.invokeNotification({ action: "publish", groupId, title, body });
+      if (!data?.announcement) throw new Error("O aviso não foi criado.");
       await this.loadGroup(groupId, { subscribe: false });
       return data;
     }
+
+    async resendAnnouncement(groupId, announcementId) {
+      const data = await this.invokeNotification({ action: "resend", groupId, announcementId });
+      await this.loadGroup(groupId, { subscribe: false });
+      return data;
+    }
+
+    async deleteAnnouncement(announcementId) {
+      const { error } = await this.client.rpc("delete_announcement", { p_announcement_id: announcementId });
+      if (error) throw error;
+      return this.loadGroup(this.state.currentGroupId, { subscribe: false });
+    }
+
+    async notifyMatchCreated(groupId, matchId) {
+      return this.invokeNotification({
+        action: "match-created",
+        groupId,
+        matchId,
+        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Sao_Paulo"
+      });
+    }
+
+    async notifyAttendanceConfirmed(groupId, matchId, playerId) {
+      return this.invokeNotification({
+        action: "attendance-confirmed",
+        groupId,
+        matchId,
+        playerId,
+        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Sao_Paulo"
+      });
+    }
+
+    async deleteFinanceEntry(groupId, entryType, entryId) {
+      const { error } = await this.client.rpc("delete_finance_entry", {
+        p_group_id: groupId,
+        p_entry_type: entryType,
+        p_entry_id: entryId
+      });
+      if (error) throw error;
+      return this.loadGroup(groupId, { subscribe: false });
+    }
+
   }
 
   const App = {
@@ -445,6 +485,7 @@
     launchAction: "",
     launchGroupId: "",
     launchAnnouncementId: "",
+    launchMatchId: "",
     swRegistration: null,
 
     async init() {
@@ -464,6 +505,7 @@
         if (this.pendingInvite) setTimeout(() => this.openJoinGroupModal(this.pendingInvite), 80);
         else if (this.launchAction === "rsvp") setTimeout(() => this.openRsvp(this.nextMatch()?.id), 80);
         else if (this.launchAnnouncementId) setTimeout(() => this.openAnnouncementCenter(this.launchAnnouncementId), 120);
+        else if (this.launchMatchId) setTimeout(() => this.openMatchDetails(this.launchMatchId), 120);
       } catch (error) {
         console.error(error);
         this.renderBackendError(error);
@@ -480,6 +522,7 @@
       this.launchAction = params.get("action") || "";
       this.launchGroupId = String(params.get("group") || "").trim();
       this.launchAnnouncementId = String(params.get("announcement") || "").trim();
+      this.launchMatchId = String(params.get("match") || "").trim();
     },
 
     bindGlobal() {
@@ -512,7 +555,7 @@
         if (!(image instanceof HTMLImageElement) || !image.matches("[data-group-avatar]")) return;
         if (image.dataset.fallbackApplied === "true") return;
         image.dataset.fallbackApplied = "true";
-        image.src = window.RESENHA_GROUP_AVATARS?.["badge-01"] || assetUrl("assets/group-avatars/badge-01.png?v=0.3.3");
+        image.src = window.RESENHA_GROUP_AVATARS?.["badge-01"] || assetUrl("assets/group-avatars/badge-01.png?v=0.3.4");
       }, true);
     },
 
@@ -681,21 +724,18 @@
     },
 
     membersPage() {
-      const group = this.currentGroup();
-      const adminMember = this.adminMember();
-      const adminPlayer = this.memberPlayer(adminMember);
       const sortedMembers = [...this.state.members].sort((a, b) => {
         const weight = { owner: 0, admin: 0, organizer: 1, treasurer: 2, member: 3 };
         return (weight[a.role] - weight[b.role]) || String(this.memberPlayer(a)?.name).localeCompare(String(this.memberPlayer(b)?.name));
       });
-      return `<div class="page-head"><div><span class="page-kicker">ELENCO</span><h1>Membros do grupo</h1><p>Funções, posições e avaliações internas.</p></div><button class="btn btn-primary btn-small" data-action="invite">Convidar</button></div><section class="card group-summary-card"><div class="group-summary-main">${this.groupAvatar(group, "summary-group-avatar")}<div><h2>${escapeHtml(group.name)}</h2><p>Código ${escapeHtml(group.invite_code)}</p></div></div><div class="admin-summary admin-summary-single"><div><small>Administrador</small><strong>${escapeHtml(adminPlayer?.name || "Não identificado")}</strong></div></div>${this.canManageGroup() ? '<button class="btn btn-secondary btn-block" data-action="manage-roles">Gerenciar funções</button>' : ""}</section><div class="members-actions"><button class="btn btn-primary" data-action="rate-members">Avaliar membros</button><button class="btn btn-secondary" data-action="profile">Minha posição</button></div><div class="section-title"><h2>Elenco (${sortedMembers.length})</h2>${this.canSeeRatings() ? '<small>As notas abaixo são visíveis somente ao administrador.</small>' : '<small>Suas avaliações são confidenciais.</small>'}</div><div class="list">${sortedMembers.map(member => this.memberRow(member)).join("")}</div>${this.canSeeRatings() ? this.privateRatingsPanel() : ""}`;
+      return `<div class="page-head members-page-head"><div><span class="page-kicker">ELENCO</span><h1>Membros do grupo</h1><p>Funções, posições e avaliações internas.</p></div><button class="btn btn-primary btn-small" data-action="invite">Convidar</button></div><div class="members-primary-action"><button class="btn btn-primary btn-block" data-action="rate-members">★ Avaliar membros</button></div><div class="section-title members-list-title"><h2>Elenco (${sortedMembers.length})</h2>${this.canSeeRatings() ? '<small>Notas visíveis somente ao administrador.</small>' : '<small>Avaliações confidenciais.</small>'}</div><div class="list members-list">${sortedMembers.map(member => this.memberRow(member)).join("")}</div>${this.canSeeRatings() ? this.privateRatingsPanel() : ""}`;
     },
 
     memberRow(member) {
       const player = this.memberPlayer(member) || { name: "Membro", primary_position: "Sem posição" };
       const summary = this.ratingSummary(player.id);
       const isMe = member.user_id === this.state.profile.id;
-      return `<article class="card member-row">${this.personAvatar(player)}<div class="list-main"><strong>${escapeHtml(player.name)}${isMe ? ' <span class="you-label">você</span>' : ""}</strong><small>${escapeHtml(player.primary_position || "Sem posição")}${player.nickname ? ` · ${escapeHtml(player.nickname)}` : ""}</small></div><div class="member-trailing"><span class="role-pill ${roleClass(member.role)}">${escapeHtml(roleLabels[member.role] || "Membro")}</span>${this.canSeeRatings() ? `<small class="private-score">${summary?.average ? `★ ${summary.average.toFixed(1)} (${summary.count})` : "Sem notas"}</small>` : ""}</div></article>`;
+      return `<article class="card member-row member-row-compact">${this.personAvatar(player)}<div class="list-main"><strong>${escapeHtml(player.name)}${isMe ? ' <span class="you-label">você</span>' : ""}</strong><small>${escapeHtml(player.primary_position || "Sem posição")}${player.nickname ? ` · ${escapeHtml(player.nickname)}` : ""}</small></div><div class="member-trailing"><span class="role-pill ${roleClass(member.role)}">${escapeHtml(roleLabels[member.role] || "Membro")}</span>${this.canSeeRatings() ? `<small class="private-score">${summary?.average ? `★ ${summary.average.toFixed(1)} (${summary.count})` : "Sem notas"}</small>` : ""}</div></article>`;
     },
 
     privateRatingsPanel() {
@@ -716,18 +756,20 @@
       const charges = this.state.charges;
       const paid = charges.filter(item => item.status === "paid").length;
       const pct = charges.length ? Math.round(paid / charges.length * 100) : 0;
+      const canDelete = this.canManageFinance();
       const movements = [
-        ...payments.map(item => ({ ...item, type: "income", description: item.description || `Pagamento · ${this.player(item.player_id)?.nickname || "Jogador"}`, date: item.paid_at })),
-        ...expenses.map(item => ({ ...item, type: "expense", date: item.occurred_at }))
+        ...payments.map(item => ({ ...item, entryType: "payment", type: "income", description: item.description || `Pagamento · ${this.player(item.player_id)?.nickname || "Jogador"}`, date: item.paid_at })),
+        ...expenses.map(item => ({ ...item, entryType: "expense", type: "expense", date: item.occurred_at }))
       ].sort((a, b) => new Date(b.date) - new Date(a.date));
-      return `<div class="page-head"><div><span class="page-kicker">FINANCEIRO</span><h1>Caixa</h1><p>Mensalidades, quadra, materiais e churrasco.</p></div>${this.canManageFinance() ? '<button class="btn btn-primary btn-small" data-action="new-finance">+ Lançar</button>' : ""}</div>${!this.canManageFinance() ? '<div class="notice"><strong>Acesso de consulta</strong><br>Somente administrador e tesoureiro podem alterar lançamentos.</div>' : '<div class="notice notice-success"><strong>Acesso autorizado</strong><br>Você pode registrar cobranças, pagamentos e despesas.</div>'}<section class="card balance-card"><small>Saldo atual</small><h2>${money(income - out)}</h2><div class="balance-grid"><div><small>Entradas</small><strong>${money(income)}</strong></div><div><small>Saídas</small><strong>${money(out)}</strong></div></div><div class="balance-track"><span style="width:${pct}%"></span></div><p>${paid} de ${charges.length} cobranças pagas · ${pct}%</p></section><div class="section-title"><h2>Movimentações</h2></div><div class="list">${movements.map(item => `<div class="card finance-row"><div class="finance-icon ${item.type === "income" ? "finance-income" : "finance-expense"}">${item.type === "income" ? "+" : "−"}</div><div class="list-main"><strong>${escapeHtml(item.description)}</strong><small>${escapeHtml(shortDate(item.date))}</small></div><strong class="money ${item.type === "income" ? "positive" : "negative"}">${item.type === "income" ? "+" : "−"}${money(item.amount)}</strong></div>`).join("") || '<div class="card empty">Sem movimentações.</div>'}</div><div class="section-title"><h2>Cobranças</h2></div><div class="list">${charges.map(charge => { const player = this.player(charge.player_id) || { name: "Grupo", primary_position: charge.description }; return `<div class="card list-row">${this.personAvatar(player)}<div class="list-main"><strong>${escapeHtml(player.name)}</strong><small>${escapeHtml(charge.description)} · ${money(charge.amount)}</small></div><span class="status-pill ${charge.status === "paid" ? "status-confirmed" : "status-out"}">${charge.status === "paid" ? "Pago" : "Pendente"}</span></div>`; }).join("") || '<div class="card empty">Nenhuma cobrança.</div>'}</div>`;
+      return `<div class="page-head"><div><span class="page-kicker">FINANCEIRO</span><h1>Caixa</h1><p>Mensalidades, quadra, materiais e churrasco.</p></div>${canDelete ? '<button class="btn btn-primary btn-small" data-action="new-finance">+ Lançar</button>' : ""}</div>${!canDelete ? '<div class="notice"><strong>Acesso de consulta</strong><br>Somente administrador e tesoureiro podem alterar lançamentos.</div>' : '<div class="notice notice-success"><strong>Acesso autorizado</strong><br>Você pode registrar e excluir cobranças, pagamentos e despesas.</div>'}<section class="card balance-card"><small>Saldo atual</small><h2>${money(income - out)}</h2><div class="balance-grid"><div><small>Entradas</small><strong>${money(income)}</strong></div><div><small>Saídas</small><strong>${money(out)}</strong></div></div><div class="balance-track"><span style="width:${pct}%"></span></div><p>${paid} de ${charges.length} cobranças pagas · ${pct}%</p></section><div class="section-title"><h2>Movimentações</h2></div><div class="list">${movements.map(item => `<div class="card finance-row"><div class="finance-icon ${item.type === "income" ? "finance-income" : "finance-expense"}">${item.type === "income" ? "+" : "−"}</div><div class="list-main"><strong>${escapeHtml(item.description)}</strong><small>${escapeHtml(shortDate(item.date))}</small></div><strong class="money ${item.type === "income" ? "positive" : "negative"}">${item.type === "income" ? "+" : "−"}${money(item.amount)}</strong>${canDelete ? `<button class="row-delete-button" data-action="delete-finance" data-type="${item.entryType}" data-id="${item.id}" aria-label="Excluir lançamento">×</button>` : ""}</div>`).join("") || '<div class="card empty">Sem movimentações.</div>'}</div><div class="section-title"><h2>Cobranças</h2></div><div class="list">${charges.map(charge => { const player = this.player(charge.player_id) || { name: "Grupo", primary_position: charge.description }; return `<div class="card list-row finance-charge-row">${this.personAvatar(player)}<div class="list-main"><strong>${escapeHtml(player.name)}</strong><small>${escapeHtml(charge.description)} · ${money(charge.amount)}</small></div><span class="status-pill ${charge.status === "paid" ? "status-confirmed" : "status-out"}">${charge.status === "paid" ? "Pago" : "Pendente"}</span>${canDelete ? `<button class="row-delete-button" data-action="delete-finance" data-type="charge" data-id="${charge.id}" aria-label="Excluir cobrança">×</button>` : ""}</div>`; }).join("") || '<div class="card empty">Nenhuma cobrança.</div>'}</div>`;
     },
+
 
     morePage() {
       const group = this.currentGroup();
       const pushConfigured = Boolean(String(window.RESENHA_CONFIG?.vapidPublicKey || "").trim());
       const pushText = !pushSupported() ? "Este navegador não oferece notificações push." : !pushConfigured ? "Conclua a configuração VAPID da v0.3.3." : "Receba avisos mesmo com o aplicativo fechado.";
-      return `<div class="page-head"><div><span class="page-kicker">CONFIGURAÇÕES</span><h1>Mais</h1><p>Administração e dados da conta.</p></div></div><div class="list"><button class="card menu-row" data-action="profile"><span class="menu-icon">⚽</span><div class="list-main"><strong>Meu perfil de jogador</strong><small>Nome, apelido e posição.</small></div><strong>›</strong></button><button class="card menu-row" data-action="notification-settings"><span class="menu-icon">🔔</span><div class="list-main"><strong>Notificações no celular</strong><small>${escapeHtml(pushText)}</small></div><strong>›</strong></button><button class="card menu-row" data-action="announcement-center"><span class="menu-icon">📣</span><div class="list-main"><strong>Central de avisos</strong><small>Consulte os comunicados do grupo.</small></div><strong>›</strong></button><button class="card menu-row" data-action="invite"><span class="menu-icon">↗</span><div class="list-main"><strong>Convidar pelo WhatsApp</strong><small>Código ${escapeHtml(group.invite_code)}</small></div><strong>›</strong></button>${this.canManageGroup() ? '<button class="card menu-row" data-action="group-settings"><span class="menu-icon">🛡</span><div class="list-main"><strong>Personalizar grupo</strong><small>Nome, escudo e administração.</small></div><strong>›</strong></button><button class="card menu-row" data-action="manage-roles"><span class="menu-icon">♟</span><div class="list-main"><strong>Gerenciar funções</strong><small>Administrador, organizador e tesoureiro.</small></div><strong>›</strong></button>' : ""}${this.canManageMatches() ? '<button class="card menu-row" data-action="announcement"><span class="menu-icon">!</span><div class="list-main"><strong>Publicar aviso</strong><small>Enviar comunicado e notificação ao elenco.</small></div><strong>›</strong></button><button class="card menu-row" data-action="players"><span class="menu-icon">+</span><div class="list-main"><strong>Jogadores sem acesso</strong><small>Cadastrar convidado eventual.</small></div><strong>›</strong></button>' : ""}<button class="card menu-row" data-action="export"><span class="menu-icon">⇩</span><div class="list-main"><strong>Exportar dados</strong><small>Backup em arquivo JSON.</small></div><strong>›</strong></button><button class="card menu-row danger-row" data-action="sign-out"><span class="menu-icon danger-avatar">↪</span><div class="list-main"><strong>Sair da conta</strong><small>Desconectar e escolher outra conta Google.</small></div><strong>›</strong></button></div><div class="version-card">Resenha FC v0.3.3.3 · correção do vínculo e envio push · Supabase · PWA</div>`;
+      return `<div class="page-head"><div><span class="page-kicker">CONFIGURAÇÕES</span><h1>Mais</h1><p>Administração e dados da conta.</p></div></div><div class="list"><button class="card menu-row" data-action="profile"><span class="menu-icon">⚽</span><div class="list-main"><strong>Meu perfil de jogador</strong><small>Nome, apelido e posição.</small></div><strong>›</strong></button><button class="card menu-row" data-action="notification-settings"><span class="menu-icon">🔔</span><div class="list-main"><strong>Notificações no celular</strong><small>${escapeHtml(pushText)}</small></div><strong>›</strong></button><button class="card menu-row" data-action="announcement-center"><span class="menu-icon">📣</span><div class="list-main"><strong>Central de avisos</strong><small>Consulte os comunicados do grupo.</small></div><strong>›</strong></button><button class="card menu-row" data-action="invite"><span class="menu-icon">↗</span><div class="list-main"><strong>Convidar pelo WhatsApp</strong><small>Código ${escapeHtml(group.invite_code)}</small></div><strong>›</strong></button>${this.canManageGroup() ? '<button class="card menu-row" data-action="group-settings"><span class="menu-icon">🛡</span><div class="list-main"><strong>Personalizar grupo</strong><small>Nome, escudo e administração.</small></div><strong>›</strong></button><button class="card menu-row" data-action="manage-roles"><span class="menu-icon">♟</span><div class="list-main"><strong>Gerenciar funções</strong><small>Administrador, organizador e tesoureiro.</small></div><strong>›</strong></button>' : ""}${this.canManageMatches() ? '<button class="card menu-row" data-action="announcement"><span class="menu-icon">!</span><div class="list-main"><strong>Publicar aviso</strong><small>Enviar comunicado e notificação ao elenco.</small></div><strong>›</strong></button><button class="card menu-row" data-action="players"><span class="menu-icon">+</span><div class="list-main"><strong>Jogadores sem acesso</strong><small>Cadastrar convidado eventual.</small></div><strong>›</strong></button>' : ""}<button class="card menu-row" data-action="export"><span class="menu-icon">⇩</span><div class="list-main"><strong>Exportar dados</strong><small>Backup em arquivo JSON.</small></div><strong>›</strong></button><button class="card menu-row danger-row" data-action="sign-out"><span class="menu-icon danger-avatar">↪</span><div class="list-main"><strong>Sair da conta</strong><small>Desconectar e escolher outra conta Google.</small></div><strong>›</strong></button></div><div class="version-card">Resenha FC v0.3.4 · avisos gerenciáveis, push de peladas e caixa revisado · Supabase · PWA</div>`;
     },
 
     async handleAction(action, data) {
@@ -738,6 +780,7 @@
           rsvp: () => this.openRsvp(data.id || this.nextMatch()?.id),
           "draw-teams": () => this.drawTeams(data.id),
           "new-finance": () => this.openFinanceForm(),
+          "delete-finance": () => this.deleteFinanceEntry(data.type, data.id),
           "rate-members": () => this.openMemberRatings(),
           players: () => this.openPlayers(),
           group: () => this.openGroupModal(),
@@ -1062,7 +1105,7 @@
           const submit = event.submitter;
           submit.disabled = true;
           submit.textContent = occurrences > 1 ? "Criando série..." : "Criando...";
-          await this.repo.createMatchSchedule({
+          const createdIds = await this.repo.createMatchSchedule({
             groupId: this.state.currentGroupId,
             title: form.get("title"),
             startsAt: startsAt.toISOString(),
@@ -1077,7 +1120,15 @@
           this.state = this.repo.state;
           close();
           this.render();
-          this.toast(occurrences > 1 ? `${occurrences} peladas semanais agendadas.` : "Pelada agendada.");
+          let notificationText = "";
+          try {
+            const result = await this.repo.notifyMatchCreated(this.state.currentGroupId, createdIds?.[0]);
+            notificationText = Number(result.sent || 0) > 0 ? ` Aviso enviado a ${result.sent} aparelho(s).` : " Nenhum aparelho vinculado recebeu push.";
+          } catch (error) {
+            console.warn("Pelada criada, mas a notificação falhou:", error);
+            notificationText = " A pelada foi salva, mas o push não pôde ser enviado.";
+          }
+          this.toast((occurrences > 1 ? `${occurrences} peladas semanais agendadas.` : "Pelada agendada.") + notificationText);
         });
       });
     },
@@ -1146,6 +1197,10 @@
           this.toast("Esta ocorrência e as próximas foram excluídas.");
         });
       });
+      if (this.launchMatchId && history.replaceState) {
+        this.launchMatchId = "";
+        history.replaceState({}, document.title, appBaseUrl());
+      }
     },
 
     openRsvp(matchId) {
@@ -1179,6 +1234,13 @@
           this.state = this.repo.state;
           close();
           this.render();
+          if (!waitlisted && status === "confirmed" && current.status !== "confirmed") {
+            try {
+              await this.repo.notifyAttendanceConfirmed(this.state.currentGroupId, matchId, player.id);
+            } catch (error) {
+              console.warn("Presença confirmada, mas a notificação falhou:", error);
+            }
+          }
           this.toast(waitlisted ? "Vagas preenchidas. Você entrou na lista de espera." : "Presença atualizada.");
         });
       });
@@ -1217,6 +1279,18 @@
           this.toast("Lançamento salvo.");
         });
       });
+    },
+
+    async deleteFinanceEntry(entryType, entryId) {
+      if (!this.canManageFinance()) return this.toast("Somente administrador e tesoureiro podem excluir lançamentos.", true);
+      const labels = { payment: "pagamento", expense: "despesa", charge: "cobrança" };
+      const label = labels[entryType] || "lançamento";
+      const complement = entryType === "payment" ? " Se estiver vinculado a uma cobrança, ela poderá voltar ao status pendente." : "";
+      if (!confirm(`Excluir este ${label} definitivamente?${complement}`)) return;
+      await this.repo.deleteFinanceEntry(this.state.currentGroupId, entryType, entryId);
+      this.state = this.repo.state;
+      this.render();
+      this.toast(`${label.charAt(0).toUpperCase() + label.slice(1)} excluído(a).`);
     },
 
     openPlayers() {
@@ -1260,9 +1334,43 @@
 
     openAnnouncementCenter(selectedId = "") {
       const announcements = [...(this.state.announcements || [])].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-      const list = announcements.length ? announcements.map(item => `<article class="announcement-card ${item.id === selectedId ? "is-selected" : ""}"><div class="announcement-icon">📣</div><div><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(shortDate(item.created_at))}</small><p>${escapeHtml(item.body)}</p></div></article>`).join("") : '<div class="card empty"><strong>Nenhum aviso publicado</strong><span>Os comunicados do grupo aparecerão aqui.</span></div>';
-      this.modal("Avisos do grupo", `<div class="announcement-list">${list}</div>`, root => {
+      const canManage = this.canManageMatches();
+      const list = announcements.length ? announcements.map(item => `<article class="announcement-card ${item.id === selectedId ? "is-selected" : ""}"><div class="announcement-icon">📣</div><div class="announcement-content"><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(shortDate(item.created_at))}${item.push_sent_count || item.push_failed_count ? ` · ${Number(item.push_sent_count || 0)} enviado(s)` : ""}</small><p>${escapeHtml(item.body)}</p>${canManage ? `<div class="announcement-actions"><button class="announcement-action resend" data-resend-announcement="${item.id}">↻ Reenviar</button><button class="announcement-action delete" data-delete-announcement="${item.id}">Excluir</button></div>` : ""}</div></article>`).join("") : '<div class="card empty"><strong>Nenhum aviso publicado</strong><span>Os comunicados do grupo aparecerão aqui.</span></div>';
+      this.modal("Avisos do grupo", `<div class="announcement-list">${list}</div>`, (root, close) => {
         if (selectedId) root.querySelector(".announcement-card.is-selected")?.scrollIntoView({ block: "center" });
+        $$('[data-resend-announcement]', root).forEach(button => button.addEventListener("click", async event => {
+          const target = event.currentTarget;
+          target.disabled = true;
+          target.textContent = "Reenviando…";
+          try {
+            const result = await this.repo.resendAnnouncement(this.state.currentGroupId, target.dataset.resendAnnouncement);
+            this.state = this.repo.state;
+            const sent = Number(result.sent || 0);
+            const failed = Number(result.failed || 0);
+            close();
+            this.render();
+            this.toast(sent ? `Aviso reenviado a ${sent} aparelho(s)${failed ? `; ${failed} falharam` : ""}.` : "Aviso mantido, mas nenhum aparelho recebeu o push.", !sent);
+          } catch (error) {
+            target.disabled = false;
+            target.textContent = "↻ Reenviar";
+            this.toast(error.message || "Não foi possível reenviar o aviso.", true);
+          }
+        }));
+        $$('[data-delete-announcement]', root).forEach(button => button.addEventListener("click", async event => {
+          if (!confirm("Excluir este aviso definitivamente? Ele será removido da Central de avisos, mas notificações já entregues não podem ser apagadas do celular.")) return;
+          const target = event.currentTarget;
+          target.disabled = true;
+          try {
+            await this.repo.deleteAnnouncement(target.dataset.deleteAnnouncement);
+            this.state = this.repo.state;
+            close();
+            this.render();
+            this.toast("Aviso excluído.");
+          } catch (error) {
+            target.disabled = false;
+            this.toast(error.message || "Não foi possível excluir o aviso.", true);
+          }
+        }));
       });
       navigator.clearAppBadge?.().catch?.(() => {});
       if (this.launchAnnouncementId && history.replaceState) {
