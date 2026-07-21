@@ -9,25 +9,29 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Resenha FC">
   <meta name="description" content="Organização completa de peladas: membros, presença, times, caixa, churrasco e avaliações confidenciais.">
-  <link rel="manifest" href="manifest.webmanifest?v=0.3.0">
+  <link rel="manifest" href="manifest.webmanifest?v=0.3.1">
   <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon-180x180-v023.png?v=0.3.0">
   <link rel="apple-touch-icon" sizes="167x167" href="apple-touch-icon-167x167-v023.png?v=0.3.0">
   <link rel="apple-touch-icon" sizes="152x152" href="apple-touch-icon-152x152-v023.png?v=0.3.0">
   <link rel="apple-touch-icon" sizes="120x120" href="apple-touch-icon-120x120-v023.png?v=0.3.0">
   <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32x32.png">
   <link rel="icon" type="image/png" sizes="192x192" href="icons/android-chrome-192x192.png">
-  <link rel="preload" as="image" href="login-logo-v024.png" type="image/png">
-  <link rel="stylesheet" href="styles.css?v=0.3.0">
+  <link rel="preload" as="image" href="login-logo-transparent-v031.png" type="image/png">
+  <link rel="stylesheet" href="styles.css?v=0.3.1">
   <title>Resenha FC</title>
 </head>
 <body>
   <div id="app" class="app-shell" aria-live="polite">
     <header class="topbar">
-      <button id="groupButton" class="group-button" type="button" aria-label="Selecionar grupo">
-        <img id="groupAvatar" class="top-group-avatar" src="brand/brand-mark.png" alt="Resenha FC" width="46" height="46">
-        <span class="group-copy"><strong id="groupName">Resenha FC</strong><small id="syncLabel">Conectando à nuvem</small></span>
-        <span class="chevron" aria-hidden="true">⌄</span>
-      </button>
+      <div class="group-switcher">
+        <button id="groupAvatarButton" class="group-emblem-button" type="button" aria-label="Personalizar grupo">
+          <img id="groupAvatar" class="top-group-avatar" src="brand/brand-mark-transparent-v031.png" alt="Resenha FC" width="46" height="46" data-group-avatar>
+        </button>
+        <button id="groupButton" class="group-button" type="button" aria-label="Selecionar grupo">
+          <span class="group-copy"><strong id="groupName">Resenha FC</strong><small id="syncLabel">Conectando à nuvem</small></span>
+          <span class="chevron" aria-hidden="true">⌄</span>
+        </button>
+      </div>
       <button id="profileButton" class="avatar-button" type="button" aria-label="Abrir perfil">?</button>
     </header>
 
@@ -46,7 +50,7 @@
   <div id="modalRoot"></div>
   <div id="toastRoot" class="toast-root" aria-live="assertive"></div>
 
-  <script src="supabase-config.js?v=0.3.0"></script>
-  <script src="app.js?v=0.3.0"></script>
+  <script src="supabase-config.js?v=0.3.1"></script>
+  <script src="app.js?v=0.3.1"></script>
 </body>
 </html>

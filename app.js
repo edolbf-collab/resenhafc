@@ -23,7 +23,7 @@
   const appBaseUrl = () => new URL("./", document.baseURI).href;
   const assetUrl = path => new URL(path, document.baseURI).href;
   const avatarKey = value => /^badge-(0[1-9]|1[0-9]|20)$/.test(String(value || "")) ? String(value) : "badge-01";
-  const groupAvatarUrl = key => assetUrl(`assets/group-avatars/${avatarKey(key)}.svg`);
+  const groupAvatarUrl = key => assetUrl(`assets/group-avatars/${avatarKey(key)}.png?v=0.3.1`);
   const positionOptions = ["Goleiro", "Zagueiro", "Lateral", "Volante", "Meia", "Atacante", "Coringa"];
   const roleLabels = { owner: "Proprietário", admin: "Administrador", organizer: "Organizador", treasurer: "Tesoureiro", member: "Membro" };
   const roleClass = role => `role-${role || "member"}`;
@@ -301,7 +301,7 @@
         if (!this.state) return this.renderAuth();
         this.render();
         this.registerServiceWorker();
-        if (this.pendingInvite) setTimeout(() => this.openGroupModal(this.pendingInvite), 80);
+        if (this.pendingInvite) setTimeout(() => this.openJoinGroupModal(this.pendingInvite), 80);
         else if (this.launchAction === "rsvp") setTimeout(() => this.openRsvp(this.nextMatch()?.id), 80);
       } catch (error) {
         console.error(error);
@@ -331,7 +331,18 @@
         if (action) this.handleAction(action.dataset.action, action.dataset);
       });
       $("#groupButton")?.addEventListener("click", () => this.openGroupModal());
+      $("#groupAvatarButton")?.addEventListener("click", () => {
+        if (this.currentGroup() && this.canManageGroup()) this.openGroupSettings();
+        else this.openGroupModal();
+      });
       $("#profileButton")?.addEventListener("click", () => this.openProfileModal());
+      document.addEventListener("error", event => {
+        const image = event.target;
+        if (!(image instanceof HTMLImageElement) || !image.matches("[data-group-avatar]")) return;
+        if (image.dataset.fallbackApplied === "true") return;
+        image.dataset.fallbackApplied = "true";
+        image.src = assetUrl("assets/group-avatars/badge-01.png?v=0.3.1");
+      }, true);
     },
 
     registerServiceWorker() {
@@ -376,7 +387,7 @@
     },
 
     groupAvatar(group, className = "group-avatar") {
-      return `<img class="${className}" src="${groupAvatarUrl(group?.avatar_key)}" alt="Escudo de ${escapeHtml(group?.name || "grupo")}">`;
+      return `<img class="${className}" src="${groupAvatarUrl(group?.avatar_key)}" alt="Escudo de ${escapeHtml(group?.name || "grupo")}" data-group-avatar>`;
     },
 
     personAvatar(player, className = "player-avatar") {
@@ -391,7 +402,8 @@
       const group = this.currentGroup();
       const groupImg = $("#groupAvatar");
       if (groupImg) {
-        groupImg.src = groupAvatarUrl(group?.avatar_key);
+        groupImg.dataset.fallbackApplied = "false";
+        groupImg.src = group ? groupAvatarUrl(group.avatar_key) : assetUrl("brand/brand-mark-transparent-v031.png");
         groupImg.alt = group ? `Escudo de ${group.name}` : "Resenha FC";
       }
       $("#groupName").textContent = group?.name || "Crie ou entre em um grupo";
@@ -400,6 +412,9 @@
       const profilePhoto = safeImageUrl(this.state.profile?.avatar_url);
       profileButton.innerHTML = profilePhoto ? `<img src="${escapeHtml(profilePhoto)}" alt="Meu perfil" referrerpolicy="no-referrer">` : initials(this.state.profile?.name || "Usuário");
       $$(".nav-item").forEach(button => button.classList.toggle("active", button.dataset.route === this.route));
+      const compactHome = Boolean(group && this.route === "home");
+      $("#mainContent")?.classList.toggle("home-compact", compactHome);
+      $(".app-shell")?.classList.toggle("home-shell", compactHome);
 
       if (!group) {
         $("#mainContent").innerHTML = this.emptyGroupPage();
@@ -417,7 +432,7 @@
     },
 
     emptyGroupPage() {
-      return `<section class="welcome-field"><div class="welcome-overlay"><img src="brand/brand-mark.png" alt="" class="welcome-mark"><span class="eyebrow">CONTA GOOGLE CONECTADA</span><h1>Monte sua resenha</h1><p>Crie um grupo com escudo próprio ou use um código de convite.</p><button class="btn btn-primary" data-action="group">Criar ou entrar em grupo</button></div></section>`;
+      return `<section class="welcome-field"><div class="welcome-overlay"><img src="brand/brand-mark-transparent-v031.png" alt="" class="welcome-mark"><span class="eyebrow">CONTA GOOGLE CONECTADA</span><h1>Monte sua resenha</h1><p>Crie um grupo com escudo próprio ou entre usando um código de convite.</p><div class="welcome-actions"><button class="btn btn-primary btn-small" data-action="create-group">+ Criar grupo</button><button class="btn btn-secondary btn-small" data-action="join-group">Inserir código</button></div></div></section>`;
     },
 
     homePage() {
@@ -426,26 +441,25 @@
       const attendance = match ? this.attendanceFor(match.id) : [];
       const confirmed = attendance.filter(item => item.status === "confirmed");
       const bbq = attendance.filter(item => item.bbq).reduce((sum, item) => sum + 1 + Number(item.bbq_guests || 0), 0);
-      const payments = this.state.payments.reduce((sum, item) => sum + Number(item.amount), 0);
-      const expenses = this.state.expenses.reduce((sum, item) => sum + Number(item.amount), 0);
       const notice = [...this.state.announcements].sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0];
       const owner = this.memberPlayer(this.ownerMember());
-      return `
-        <section class="stadium-hero">
+      const emblem = this.canManageGroup()
+        ? `<button class="hero-avatar-button" data-action="group-settings" aria-label="Personalizar grupo">${this.groupAvatar(group, "hero-group-avatar")}</button>`
+        : this.groupAvatar(group, "hero-group-avatar");
+      return `<section class="home-dashboard">
+        <section class="stadium-hero home-hero">
           <div class="stadium-lights"></div>
-          <div class="group-identity">${this.groupAvatar(group, "hero-group-avatar")}<div><span class="eyebrow">${escapeHtml(roleLabels[this.currentRole()])}</span><h1>${escapeHtml(group.name)}</h1><p>Proprietário: ${escapeHtml(owner?.name || "Não identificado")}</p></div></div>
-          ${match ? `<div class="next-match-panel"><span class="match-kicker">PRÓXIMA PELADA</span><h2>${escapeHtml(match.title)}</h2><p>${escapeHtml(shortDate(match.starts_at))} · ${escapeHtml(match.location)}</p><div class="hero-numbers"><div><strong>${confirmed.length}</strong><small>confirmados</small></div><div><strong>${match.max_players}</strong><small>vagas</small></div><div><strong>${bbq}</strong><small>churrasco</small></div></div><div class="actions"><button class="btn btn-primary" data-action="rsvp" data-id="${match.id}">Confirmar presença</button><button class="btn btn-glass" data-action="open-match" data-id="${match.id}">Detalhes</button></div></div>` : `<div class="next-match-panel"><span class="match-kicker">AGENDA LIVRE</span><h2>Nenhuma pelada marcada</h2><p>Organizadores podem criar o próximo jogo.</p>${this.canManageMatches() ? '<button class="btn btn-primary" data-action="new-match">Agendar pelada</button>' : ""}</div>`}
+          <div class="group-identity">${emblem}<div><span class="eyebrow">${escapeHtml(roleLabels[this.currentRole()])}</span><h1>${escapeHtml(group.name)}</h1><p>Proprietário: ${escapeHtml(owner?.name || "Não identificado")}</p></div></div>
+          ${match ? `<div class="next-match-panel"><div class="next-match-heading"><div><span class="match-kicker">PRÓXIMA PELADA</span><h2>${escapeHtml(match.title)}</h2></div><button class="match-detail-link" data-action="open-match" data-id="${match.id}">Detalhes</button></div><p>${escapeHtml(shortDate(match.starts_at))} · ${escapeHtml(match.location)}</p><div class="hero-numbers"><div><strong>${confirmed.length}</strong><small>confirmados</small></div><div><strong>${match.max_players}</strong><small>vagas</small></div><div><strong>${bbq}</strong><small>churrasco</small></div></div><button class="btn btn-primary btn-block home-rsvp" data-action="rsvp" data-id="${match.id}">Confirmar presença</button></div>` : `<div class="next-match-panel empty-match-panel"><span class="match-kicker">AGENDA LIVRE</span><h2>Nenhuma pelada marcada</h2><p>Organizadores podem criar o próximo jogo.</p>${this.canManageMatches() ? '<button class="btn btn-primary btn-small" data-action="new-match">Agendar pelada</button>' : ""}</div>`}
         </section>
-        ${notice ? `<section class="notice notice-highlight"><strong>📣 ${escapeHtml(notice.title)}</strong><p>${escapeHtml(notice.body)}</p></section>` : ""}
-        <div class="section-title"><h2>Atalhos do vestiário</h2></div>
-        <div class="quick-grid">
-          <button class="quick-card" data-action="rsvp" data-id="${match?.id || ""}"><span class="quick-icon">✓</span><strong>Presença</strong><small>Jogo e churrasco</small></button>
-          <button class="quick-card" data-route="teams"><span class="quick-icon">⇄</span><strong>Times</strong><small>Posição e equilíbrio</small></button>
-          <button class="quick-card" data-route="members"><span class="quick-icon">★</span><strong>Avaliar</strong><small>Notas confidenciais</small></button>
-          <button class="quick-card" data-action="invite"><span class="quick-icon">↗</span><strong>Convidar</strong><small>WhatsApp e código</small></button>
+        ${notice ? `<button class="home-notice" data-route="more"><span>📣</span><div><strong>${escapeHtml(notice.title)}</strong><small>${escapeHtml(notice.body)}</small></div><b>›</b></button>` : ""}
+        <div class="home-quick-grid">
+          <button class="quick-card" data-action="rsvp" data-id="${match?.id || ""}"><span class="quick-icon">✓</span><span><strong>Presença</strong><small>Jogo e churrasco</small></span></button>
+          <button class="quick-card" data-route="teams"><span class="quick-icon">⇄</span><span><strong>Times</strong><small>Equilíbrio do elenco</small></span></button>
+          <button class="quick-card" data-route="members"><span class="quick-icon">★</span><span><strong>Membros</strong><small>Posições e notas</small></span></button>
+          <button class="quick-card" data-action="invite"><span class="quick-icon">↗</span><span><strong>Convidar</strong><small>WhatsApp e código</small></span></button>
         </div>
-        <div class="section-title"><h2>Placar do grupo</h2></div>
-        <div class="metrics"><div class="card metric"><strong>${this.state.members.length}</strong><small>membros</small></div><div class="card metric"><strong>${this.pastMatches().length}</strong><small>jogos</small></div><div class="card metric"><strong class="money">${money(payments - expenses)}</strong><small>caixa</small></div></div>`;
+      </section>`;
     },
 
     matchesPage() {
@@ -522,7 +536,7 @@
 
     morePage() {
       const group = this.currentGroup();
-      return `<div class="page-head"><div><span class="page-kicker">CONFIGURAÇÕES</span><h1>Mais</h1><p>Administração e dados da conta.</p></div></div><div class="list"><button class="card menu-row" data-action="profile"><span class="menu-icon">⚽</span><div class="list-main"><strong>Meu perfil de jogador</strong><small>Nome, apelido e posição.</small></div><strong>›</strong></button><button class="card menu-row" data-action="invite"><span class="menu-icon">↗</span><div class="list-main"><strong>Convidar pelo WhatsApp</strong><small>Código ${escapeHtml(group.invite_code)}</small></div><strong>›</strong></button>${this.canManageGroup() ? '<button class="card menu-row" data-action="group-settings"><span class="menu-icon">🛡</span><div class="list-main"><strong>Personalizar grupo</strong><small>Nome, escudo e administração.</small></div><strong>›</strong></button><button class="card menu-row" data-action="manage-roles"><span class="menu-icon">♟</span><div class="list-main"><strong>Gerenciar funções</strong><small>Administrador, organizador e tesoureiro.</small></div><strong>›</strong></button>' : ""}${this.canManageMatches() ? '<button class="card menu-row" data-action="announcement"><span class="menu-icon">!</span><div class="list-main"><strong>Avisos do grupo</strong><small>Publicar comunicado para o elenco.</small></div><strong>›</strong></button><button class="card menu-row" data-action="players"><span class="menu-icon">+</span><div class="list-main"><strong>Jogadores sem acesso</strong><small>Cadastrar convidado eventual.</small></div><strong>›</strong></button>' : ""}<button class="card menu-row" data-action="export"><span class="menu-icon">⇩</span><div class="list-main"><strong>Exportar dados</strong><small>Backup em arquivo JSON.</small></div><strong>›</strong></button><button class="card menu-row danger-row" data-action="sign-out"><span class="menu-icon danger-avatar">↪</span><div class="list-main"><strong>Sair da conta</strong><small>Desconectar e escolher outra conta Google.</small></div><strong>›</strong></button></div><div class="version-card">Resenha FC v0.3.0 · login exclusivo Google · Supabase · PWA</div>`;
+      return `<div class="page-head"><div><span class="page-kicker">CONFIGURAÇÕES</span><h1>Mais</h1><p>Administração e dados da conta.</p></div></div><div class="list"><button class="card menu-row" data-action="profile"><span class="menu-icon">⚽</span><div class="list-main"><strong>Meu perfil de jogador</strong><small>Nome, apelido e posição.</small></div><strong>›</strong></button><button class="card menu-row" data-action="invite"><span class="menu-icon">↗</span><div class="list-main"><strong>Convidar pelo WhatsApp</strong><small>Código ${escapeHtml(group.invite_code)}</small></div><strong>›</strong></button>${this.canManageGroup() ? '<button class="card menu-row" data-action="group-settings"><span class="menu-icon">🛡</span><div class="list-main"><strong>Personalizar grupo</strong><small>Nome, escudo e administração.</small></div><strong>›</strong></button><button class="card menu-row" data-action="manage-roles"><span class="menu-icon">♟</span><div class="list-main"><strong>Gerenciar funções</strong><small>Administrador, organizador e tesoureiro.</small></div><strong>›</strong></button>' : ""}${this.canManageMatches() ? '<button class="card menu-row" data-action="announcement"><span class="menu-icon">!</span><div class="list-main"><strong>Avisos do grupo</strong><small>Publicar comunicado para o elenco.</small></div><strong>›</strong></button><button class="card menu-row" data-action="players"><span class="menu-icon">+</span><div class="list-main"><strong>Jogadores sem acesso</strong><small>Cadastrar convidado eventual.</small></div><strong>›</strong></button>' : ""}<button class="card menu-row" data-action="export"><span class="menu-icon">⇩</span><div class="list-main"><strong>Exportar dados</strong><small>Backup em arquivo JSON.</small></div><strong>›</strong></button><button class="card menu-row danger-row" data-action="sign-out"><span class="menu-icon danger-avatar">↪</span><div class="list-main"><strong>Sair da conta</strong><small>Desconectar e escolher outra conta Google.</small></div><strong>›</strong></button></div><div class="version-card">Resenha FC v0.3.1 · experiência visual e fluxo de grupos · Supabase · PWA</div>`;
     },
 
     async handleAction(action, data) {
@@ -536,13 +550,16 @@
           "rate-members": () => this.openMemberRatings(),
           players: () => this.openPlayers(),
           group: () => this.openGroupModal(),
+          "create-group": () => this.openCreateGroupModal(),
+          "join-group": () => this.openJoinGroupModal(),
           invite: () => this.openInviteModal(),
           "group-settings": () => this.openGroupSettings(),
           "manage-roles": () => this.openRoleManager(),
           announcement: () => this.openAnnouncementForm(),
           profile: () => this.openProfileModal(),
           export: () => this.exportData(),
-          "sign-out": () => this.logout()
+          "sign-out": () => this.logout(),
+          reload: () => location.reload()
         };
         if (actions[action]) await actions[action]();
       } catch (error) {
@@ -553,7 +570,7 @@
 
     renderAuth() {
       const error = oauthErrorFromLocation();
-      document.body.innerHTML = `<main class="auth-screen"><section class="auth-panel"><div class="auth-stadium"><div class="auth-lights"></div><img class="auth-logo" src="login-logo-v024.png" alt="Resenha FC" width="178" height="178"><span class="auth-kicker">SUA PELADA. SEU GRUPO. SEU APP.</span></div><div class="auth-copy"><h1>Entre em campo</h1><p>Presença, times equilibrados, membros, caixa e churrasco em um único lugar.</p>${error ? `<div class="notice auth-error"><strong>Falha no login</strong><br>${escapeHtml(error)}</div>` : ""}<div class="google-card"><div id="googleIdentityButton" class="google-identity-button" aria-label="Continuar com Google"></div><p id="googleLoginMessage">Use sua conta Google para continuar. Não há cadastro por e-mail ou senha.</p></div><div class="auth-features"><span>✓ Acesso seguro</span><span>✓ Dados em nuvem</span><span>✓ Sincronização entre celulares</span></div></div></section></main><div id="toastRoot" class="toast-root"></div>`;
+      document.body.innerHTML = `<main class="auth-screen"><section class="auth-panel"><div class="auth-stadium"><div class="auth-lights"></div><img class="auth-logo" src="login-logo-transparent-v031.png" alt="Resenha FC" width="178" height="178"><span class="auth-kicker">SUA PELADA. SEU GRUPO. SEU APP.</span></div><div class="auth-copy"><h1>Entre em campo</h1><p>Presença, times equilibrados, membros, caixa e churrasco em um único lugar.</p>${error ? `<div class="notice auth-error"><strong>Falha no login</strong><br>${escapeHtml(error)}</div>` : ""}<div class="google-card"><div id="googleIdentityButton" class="google-identity-button" aria-label="Continuar com Google"></div><p id="googleLoginMessage">Use sua conta Google para continuar. Não há cadastro por e-mail ou senha.</p></div><div class="auth-features"><span>✓ Acesso seguro</span><span>✓ Dados em nuvem</span><span>✓ Sincronização entre celulares</span></div></div></section></main><div id="toastRoot" class="toast-root"></div>`;
       this.setupGoogleLogin();
       if (error && history.replaceState) history.replaceState({}, document.title, location.pathname);
     },
@@ -594,7 +611,7 @@
         container.innerHTML = "";
         window.google.accounts.id.renderButton(container, {
           type: "standard",
-          theme: "outline",
+          theme: "filled_black",
           size: "large",
           text: "continue_with",
           shape: "pill",
@@ -603,17 +620,17 @@
         });
       } catch (error) {
         console.error(error);
-        message.innerHTML = `Não foi possível carregar o acesso Google. <button class="link-button" onclick="location.reload()">Tentar novamente</button>`;
+        message.innerHTML = `Não foi possível carregar o acesso Google. <button class="link-button" data-action="reload">Tentar novamente</button>`;
         message.classList.add("error-text");
       }
     },
 
     renderConfigurationError() {
-      document.body.innerHTML = `<main class="auth-screen"><section class="auth-panel simple-auth"><img class="auth-logo" src="login-logo-v024.png" alt="Resenha FC"><h1>Configuração necessária</h1><p>Preencha Supabase URL, Publishable key e Google Client ID no arquivo <code>supabase-config.js</code>.</p><button class="btn btn-primary" onclick="location.reload()">Verificar novamente</button></section></main>`;
+      document.body.innerHTML = `<main class="auth-screen"><section class="auth-panel simple-auth"><img class="auth-logo" src="login-logo-transparent-v031.png" alt="Resenha FC"><h1>Configuração necessária</h1><p>Preencha Supabase URL, Publishable key e Google Client ID no arquivo <code>supabase-config.js</code>.</p><button class="btn btn-primary" data-action="reload">Verificar novamente</button></section></main>`;
     },
 
     renderBackendError(error) {
-      document.body.innerHTML = `<main class="auth-screen"><section class="auth-panel simple-auth"><img class="auth-logo" src="login-logo-v024.png" alt="Resenha FC"><h1>Falha na conexão</h1><p>${escapeHtml(error?.message || "Não foi possível acessar o backend.")}</p><button class="btn btn-primary" onclick="location.reload()">Tentar novamente</button></section></main>`;
+      document.body.innerHTML = `<main class="auth-screen"><section class="auth-panel simple-auth"><img class="auth-logo" src="login-logo-transparent-v031.png" alt="Resenha FC"><h1>Falha na conexão</h1><p>${escapeHtml(error?.message || "Não foi possível acessar o backend.")}</p><button class="btn btn-primary" data-action="reload">Tentar novamente</button></section></main>`;
     },
 
     modal(title, content, onReady) {
@@ -635,14 +652,36 @@
     openGroupModal(prefillCode = "") {
       const groups = this.state.groups || [];
       const current = this.currentGroup();
-      this.modal("Grupos", `${groups.length ? `<div class="section-title"><h2>Meus grupos</h2></div><div class="list">${groups.map(group => `<button class="card group-list-row" data-group-id="${group.id}">${this.groupAvatar(group)}<div class="list-main"><strong>${escapeHtml(group.name)}</strong><small>${escapeHtml(roleLabels[group.role])} · ${escapeHtml(group.invite_code)}</small></div>${group.id === current?.id ? '<span class="score-pill">Atual</span>' : '<strong>›</strong>'}</button>`).join("")}</div>` : ""}<div class="section-title"><h2>Criar novo grupo</h2></div><form id="createGroupForm" class="form-grid"><div class="field"><label>Nome do grupo</label><input name="name" required minlength="2" maxlength="80" placeholder="Ex.: Resenha de quinta"></div><div class="field"><label>Escolha o escudo</label>${this.avatarPicker()}</div><button class="btn btn-primary btn-block">Criar grupo</button></form><div class="divider">OU</div><form id="joinGroupForm" class="form-grid"><div class="field"><label>Código de convite</label><input name="code" required value="${escapeHtml(prefillCode || this.pendingInvite)}" placeholder="Ex.: A1B2C3D4"></div><button class="btn btn-secondary btn-block">Entrar no grupo</button></form>`, (root, close) => {
-        $$('[data-group-id]', root).forEach(button => button.addEventListener("click", async () => {
+      const list = groups.length
+        ? `<div class="list group-list">${groups.map(group => {
+            const editable = ["owner", "admin"].includes(group.role);
+            return `<article class="card group-list-card"><button class="group-icon-action" data-edit-group="${group.id}" aria-label="${editable ? "Personalizar" : "Abrir"} ${escapeHtml(group.name)}">${this.groupAvatar(group)}</button><button class="group-select-action" data-group-id="${group.id}"><span class="list-main"><strong>${escapeHtml(group.name)}</strong><small>${escapeHtml(roleLabels[group.role])} · ${escapeHtml(group.invite_code)}</small></span>${group.id === current?.id ? '<span class="score-pill">Atual</span>' : '<strong>›</strong>'}</button></article>`;
+          }).join("")}</div>`
+        : `<div class="card empty compact-empty"><strong>Nenhum grupo ainda</strong><span>Crie o primeiro grupo ou entre com um código.</span></div>`;
+      this.modal("Meus grupos", `<div class="group-modal-actions"><button class="btn btn-primary btn-small" id="openCreateGroup">+ Criar grupo</button><button class="btn btn-secondary btn-small" id="openJoinGroup">Inserir código</button></div>${list}`, (root, close) => {
+        $("#openCreateGroup", root).addEventListener("click", () => { close(); setTimeout(() => this.openCreateGroupModal(), 0); });
+        $("#openJoinGroup", root).addEventListener("click", () => { close(); setTimeout(() => this.openJoinGroupModal(prefillCode || this.pendingInvite), 0); });
+        $$("[data-group-id]", root).forEach(button => button.addEventListener("click", async () => {
           await this.repo.loadGroup(button.dataset.groupId);
           this.state = this.repo.state;
           localStorage.setItem("resenha-current-group", button.dataset.groupId);
           close();
           this.render();
         }));
+        $$("[data-edit-group]", root).forEach(button => button.addEventListener("click", async () => {
+          const group = groups.find(item => item.id === button.dataset.editGroup);
+          await this.repo.loadGroup(button.dataset.editGroup);
+          this.state = this.repo.state;
+          localStorage.setItem("resenha-current-group", button.dataset.editGroup);
+          close();
+          this.render();
+          if (["owner", "admin"].includes(group?.role)) setTimeout(() => this.openGroupSettings(), 0);
+        }));
+      });
+    },
+
+    openCreateGroupModal() {
+      this.modal("Criar grupo", `<form id="createGroupForm" class="form-grid create-group-form"><div class="notice notice-success"><strong>Seu grupo, sua identidade</strong><br>Escolha um nome e um escudo. Você será o proprietário e administrador inicial.</div><div class="field"><label>Nome do grupo</label><input name="name" required minlength="2" maxlength="80" placeholder="Ex.: Resenha de quinta" autocomplete="off"></div><div class="field"><label>Escolha o escudo</label>${this.avatarPicker()}</div><button class="btn btn-primary btn-block">Criar grupo</button></form>`, (root, close) => {
         $("#createGroupForm", root).addEventListener("submit", async event => {
           event.preventDefault();
           const form = new FormData(event.currentTarget);
@@ -650,9 +689,15 @@
           this.state = this.repo.state;
           localStorage.setItem("resenha-current-group", this.state.currentGroupId);
           close();
+          this.route = "home";
           this.render();
           this.toast("Grupo criado. Você é o proprietário e administrador.");
         });
+      });
+    },
+
+    openJoinGroupModal(prefillCode = "") {
+      this.modal("Entrar em um grupo", `<form id="joinGroupForm" class="form-grid"><div class="notice"><strong>Código de convite</strong><br>Peça o código ao administrador do grupo.</div><div class="field"><label>Código</label><input name="code" required value="${escapeHtml(prefillCode || this.pendingInvite)}" placeholder="Ex.: A1B2C3D4" autocapitalize="characters" autocomplete="off"></div><button class="btn btn-primary btn-block">Entrar no grupo</button></form>`, (root, close) => {
         $("#joinGroupForm", root).addEventListener("submit", async event => {
           event.preventDefault();
           const form = new FormData(event.currentTarget);
@@ -662,6 +707,7 @@
           this.pendingInvite = "";
           localStorage.setItem("resenha-current-group", this.state.currentGroupId);
           close();
+          this.route = "home";
           this.render();
           this.toast("Você entrou no grupo como membro.");
         });

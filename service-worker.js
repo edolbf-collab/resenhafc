@@ -1,4 +1,4 @@
-const CACHE = "resenha-fc-v0.3.0";
+const CACHE = "resenha-fc-v0.3.1";
 const ASSETS = [
   "./",
   "./index.html",
@@ -9,7 +9,8 @@ const ASSETS = [
   "./offline.html",
   "./brand/brand-mark.png",
   "./brand/logo-resenha-fc.png",
-  "./login-logo-v024.png",
+  "./login-logo-transparent-v031.png",
+  "./brand/brand-mark-transparent-v031.png",
   "./icons/favicon-16x16.png",
   "./icons/favicon-32x32.png",
   "./icons/icon-192-v023.png",
@@ -18,26 +19,26 @@ const ASSETS = [
   "./icons/maskable-icon-512.png",
   "./apple-touch-icon.png",
   "./apple-touch-icon-180x180-v023.png",
-  "./assets/group-avatars/badge-01.svg",
-  "./assets/group-avatars/badge-02.svg",
-  "./assets/group-avatars/badge-03.svg",
-  "./assets/group-avatars/badge-04.svg",
-  "./assets/group-avatars/badge-05.svg",
-  "./assets/group-avatars/badge-06.svg",
-  "./assets/group-avatars/badge-07.svg",
-  "./assets/group-avatars/badge-08.svg",
-  "./assets/group-avatars/badge-09.svg",
-  "./assets/group-avatars/badge-10.svg",
-  "./assets/group-avatars/badge-11.svg",
-  "./assets/group-avatars/badge-12.svg",
-  "./assets/group-avatars/badge-13.svg",
-  "./assets/group-avatars/badge-14.svg",
-  "./assets/group-avatars/badge-15.svg",
-  "./assets/group-avatars/badge-16.svg",
-  "./assets/group-avatars/badge-17.svg",
-  "./assets/group-avatars/badge-18.svg",
-  "./assets/group-avatars/badge-19.svg",
-  "./assets/group-avatars/badge-20.svg"
+  "./assets/group-avatars/badge-01.png",
+  "./assets/group-avatars/badge-02.png",
+  "./assets/group-avatars/badge-03.png",
+  "./assets/group-avatars/badge-04.png",
+  "./assets/group-avatars/badge-05.png",
+  "./assets/group-avatars/badge-06.png",
+  "./assets/group-avatars/badge-07.png",
+  "./assets/group-avatars/badge-08.png",
+  "./assets/group-avatars/badge-09.png",
+  "./assets/group-avatars/badge-10.png",
+  "./assets/group-avatars/badge-11.png",
+  "./assets/group-avatars/badge-12.png",
+  "./assets/group-avatars/badge-13.png",
+  "./assets/group-avatars/badge-14.png",
+  "./assets/group-avatars/badge-15.png",
+  "./assets/group-avatars/badge-16.png",
+  "./assets/group-avatars/badge-17.png",
+  "./assets/group-avatars/badge-18.png",
+  "./assets/group-avatars/badge-19.png",
+  "./assets/group-avatars/badge-20.png"
 ];
 
 self.addEventListener("install", event => event.waitUntil(
@@ -60,6 +61,6 @@ self.addEventListener("fetch", event => {
         if (response?.ok) caches.open(CACHE).then(cache => cache.put(event.request, response.clone()));
         return response;
       })
-      .catch(() => caches.match(event.request).then(hit => hit || (navigation ? caches.match("./index.html") : caches.match("./offline.html"))))
+      .catch(() => caches.match(event.request, { ignoreSearch: true }).then(hit => hit || (navigation ? caches.match("./index.html", { ignoreSearch: true }) : caches.match("./offline.html", { ignoreSearch: true }))))
   );
 });

@@ -1,24 +1,22 @@
-# Resenha FC v0.3.0
+# Resenha FC v0.3.1
 
 PWA para organização de futebol entre amigos, com backend Supabase e login exclusivo por conta Google.
 
-## Recursos
+## Recursos principais
 
 - grupos personalizados com 20 escudos;
 - proprietário, administrador, organizador, tesoureiro e membro;
-- transferência de propriedade e delegação de funções;
-- agenda, confirmação de presença, lista de espera e churrasco;
+- agenda, presença, lista de espera e confraternização;
 - histórico permanente das partidas realizadas;
 - times equilibrados por posição, goleiros e avaliações confidenciais;
-- membros e perfil esportivo com posições;
-- Caixa com permissão restrita;
+- caixa com permissões restritas;
 - convite por WhatsApp, link e código;
-- PWA para Android e iOS.
+- instalação como PWA no Android e no iOS.
 
-## Atualização de projeto existente
+## Atualização da v0.3.0
 
-Execute primeiro `backend/migration-v0.3.0.sql`. Depois publique o pacote de frontend, preservando seu `supabase-config.js`.
+A v0.3.1 altera somente o frontend. Não execute nenhum SQL. Publique os arquivos da atualização preservando o seu `supabase-config.js`.
 
 ## Projeto novo
 
-Execute `backend/supabase-schema.sql` integralmente e configure `supabase-config.js` com Project URL, Publishable key e Google Client ID.
+Execute `backend/supabase-schema.sql` e configure `supabase-config.js` com Project URL, Publishable key e Google Client ID.
