@@ -686,7 +686,7 @@
       const group = this.currentGroup();
       const pushConfigured = Boolean(String(window.RESENHA_CONFIG?.vapidPublicKey || "").trim());
       const pushText = !pushSupported() ? "Este navegador não oferece notificações push." : !pushConfigured ? "Conclua a configuração VAPID da v0.3.3." : "Receba avisos mesmo com o aplicativo fechado.";
-      return `<div class="page-head"><div><span class="page-kicker">CONFIGURAÇÕES</span><h1>Mais</h1><p>Administração e dados da conta.</p></div></div><div class="list"><button class="card menu-row" data-action="profile"><span class="menu-icon">⚽</span><div class="list-main"><strong>Meu perfil de jogador</strong><small>Nome, apelido e posição.</small></div><strong>›</strong></button><button class="card menu-row" data-action="notification-settings"><span class="menu-icon">🔔</span><div class="list-main"><strong>Notificações no celular</strong><small>${escapeHtml(pushText)}</small></div><strong>›</strong></button><button class="card menu-row" data-action="announcement-center"><span class="menu-icon">📣</span><div class="list-main"><strong>Central de avisos</strong><small>Consulte os comunicados do grupo.</small></div><strong>›</strong></button><button class="card menu-row" data-action="invite"><span class="menu-icon">↗</span><div class="list-main"><strong>Convidar pelo WhatsApp</strong><small>Código ${escapeHtml(group.invite_code)}</small></div><strong>›</strong></button>${this.canManageGroup() ? '<button class="card menu-row" data-action="group-settings"><span class="menu-icon">🛡</span><div class="list-main"><strong>Personalizar grupo</strong><small>Nome, escudo e administração.</small></div><strong>›</strong></button><button class="card menu-row" data-action="manage-roles"><span class="menu-icon">♟</span><div class="list-main"><strong>Gerenciar funções</strong><small>Administrador, organizador e tesoureiro.</small></div><strong>›</strong></button>' : ""}${this.canManageMatches() ? '<button class="card menu-row" data-action="announcement"><span class="menu-icon">!</span><div class="list-main"><strong>Publicar aviso</strong><small>Enviar comunicado e notificação ao elenco.</small></div><strong>›</strong></button><button class="card menu-row" data-action="players"><span class="menu-icon">+</span><div class="list-main"><strong>Jogadores sem acesso</strong><small>Cadastrar convidado eventual.</small></div><strong>›</strong></button>' : ""}<button class="card menu-row" data-action="export"><span class="menu-icon">⇩</span><div class="list-main"><strong>Exportar dados</strong><small>Backup em arquivo JSON.</small></div><strong>›</strong></button><button class="card menu-row danger-row" data-action="sign-out"><span class="menu-icon danger-avatar">↪</span><div class="list-main"><strong>Sair da conta</strong><small>Desconectar e escolher outra conta Google.</small></div><strong>›</strong></button></div><div class="version-card">Resenha FC v0.3.3 · avisos com notificações push · Supabase · PWA</div>`;
+      return `<div class="page-head"><div><span class="page-kicker">CONFIGURAÇÕES</span><h1>Mais</h1><p>Administração e dados da conta.</p></div></div><div class="list"><button class="card menu-row" data-action="profile"><span class="menu-icon">⚽</span><div class="list-main"><strong>Meu perfil de jogador</strong><small>Nome, apelido e posição.</small></div><strong>›</strong></button><button class="card menu-row" data-action="notification-settings"><span class="menu-icon">🔔</span><div class="list-main"><strong>Notificações no celular</strong><small>${escapeHtml(pushText)}</small></div><strong>›</strong></button><button class="card menu-row" data-action="announcement-center"><span class="menu-icon">📣</span><div class="list-main"><strong>Central de avisos</strong><small>Consulte os comunicados do grupo.</small></div><strong>›</strong></button><button class="card menu-row" data-action="invite"><span class="menu-icon">↗</span><div class="list-main"><strong>Convidar pelo WhatsApp</strong><small>Código ${escapeHtml(group.invite_code)}</small></div><strong>›</strong></button>${this.canManageGroup() ? '<button class="card menu-row" data-action="group-settings"><span class="menu-icon">🛡</span><div class="list-main"><strong>Personalizar grupo</strong><small>Nome, escudo e administração.</small></div><strong>›</strong></button><button class="card menu-row" data-action="manage-roles"><span class="menu-icon">♟</span><div class="list-main"><strong>Gerenciar funções</strong><small>Administrador, organizador e tesoureiro.</small></div><strong>›</strong></button>' : ""}${this.canManageMatches() ? '<button class="card menu-row" data-action="announcement"><span class="menu-icon">!</span><div class="list-main"><strong>Publicar aviso</strong><small>Enviar comunicado e notificação ao elenco.</small></div><strong>›</strong></button><button class="card menu-row" data-action="players"><span class="menu-icon">+</span><div class="list-main"><strong>Jogadores sem acesso</strong><small>Cadastrar convidado eventual.</small></div><strong>›</strong></button>' : ""}<button class="card menu-row" data-action="export"><span class="menu-icon">⇩</span><div class="list-main"><strong>Exportar dados</strong><small>Backup em arquivo JSON.</small></div><strong>›</strong></button><button class="card menu-row danger-row" data-action="sign-out"><span class="menu-icon danger-avatar">↪</span><div class="list-main"><strong>Sair da conta</strong><small>Desconectar e escolher outra conta Google.</small></div><strong>›</strong></button></div><div class="version-card">Resenha FC v0.3.3.1 · correção da publicação de avisos · Supabase · PWA</div>`;
     },
 
     async handleAction(action, data) {
@@ -1295,22 +1295,35 @@
 
     openAnnouncementForm() {
       if (!this.canManageMatches()) return this.toast("Sem permissão para publicar avisos.", true);
-      this.modal("Publicar aviso", `<form id="noticeForm" class="form-grid"><div class="notice notice-success"><strong>Aviso com notificação</strong><br>O comunicado será salvo no grupo e enviado aos aparelhos que ativaram notificações.</div><div class="field"><label>Título</label><input name="title" required maxlength="80"></div><div class="field"><label>Mensagem</label><textarea name="body" required maxlength="500"></textarea></div><button class="btn btn-primary btn-block">Publicar e notificar</button></form>`, (root, close) => {
-        $("#noticeForm", root).addEventListener("submit", async event => {
+      this.modal("Publicar aviso", `<form id="noticeForm" class="form-grid"><div class="notice notice-success"><strong>Aviso com notificação</strong><br>O comunicado será salvo no grupo e enviado aos aparelhos que ativaram notificações.</div><div class="field"><label>Título</label><input name="title" required maxlength="80" autocomplete="off"></div><div class="field"><label>Mensagem</label><textarea name="body" required maxlength="500"></textarea></div><button id="publishNoticeButton" type="submit" class="btn btn-primary btn-block">Publicar e notificar</button></form>`, (root, close) => {
+        const noticeForm = $("#noticeForm", root);
+        const button = $("#publishNoticeButton", root);
+        noticeForm?.addEventListener("submit", async event => {
           event.preventDefault();
-          const button = $("button[type=submit]", event.currentTarget);
+          if (!button || button.disabled) return;
+
           const form = new FormData(event.currentTarget);
-          button.disabled = true; button.textContent = "Enviando…";
+          const title = String(form.get("title") || "").trim();
+          const body = String(form.get("body") || "").trim();
+          if (title.length < 2 || body.length < 2) {
+            this.toast("Informe um título e uma mensagem válidos.", true);
+            return;
+          }
+
+          button.disabled = true;
+          button.textContent = "Publicando…";
           try {
-            const result = await this.repo.publishAnnouncement(this.state.currentGroupId, form.get("title"), form.get("body"));
+            const result = await this.repo.publishAnnouncement(this.state.currentGroupId, title, body);
             this.state = this.repo.state;
             close();
             this.render();
             const sent = Number(result.sent || 0);
             this.toast(sent ? `Aviso publicado e enviado a ${sent} aparelho(s).` : "Aviso publicado. Nenhum integrante ativou notificações ainda.");
           } catch (error) {
-            button.disabled = false; button.textContent = "Publicar e notificar";
-            this.toast(error.message || "Não foi possível publicar o aviso.", true);
+            button.disabled = false;
+            button.textContent = "Publicar e notificar";
+            console.error("Falha ao publicar aviso:", error);
+            this.toast(error?.message || "Não foi possível publicar o aviso.", true);
           }
         });
       });
