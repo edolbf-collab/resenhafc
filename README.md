@@ -1,7 +1,16 @@
-# Resenha FC — Beta 1.0 Build 105
+# Resenha FC — Beta 1.0 Build 106
 
 PWA para organização de grupos esportivos, com backend Supabase e login por conta Google.
 
+
+## Novidade da Build 106
+
+- O Cloudflare Web Analytics passa a usar instalação manual do beacon no `index.html`.
+- A coleta deixa de depender da injeção automática do Cloudflare Pages.
+- A CSP permanece liberada para carregar o beacon e enviar métricas.
+- No painel da Cloudflare, o site deve ficar em **Enable with JS Snippet installation** para não haver duplicação.
+- Banco permanece na Build 104 e Edge Function na Build 102.
+- Consulte `ATUALIZACAO-BETA-1.0-BUILD-106.md`.
 
 ## Novidade da Build 105
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## Beta 1.0 Build 106
+
+- Inserido manualmente o beacon oficial do Cloudflare Web Analytics no `index.html`.
+- Eliminada a dependência da injeção automática do Pages.
+- Ajustada a CSP para instalação manual.
+- Banco permanece na Build 104; Edge Function permanece na Build 102.
+
 ## Beta 1.0 Build 105
 
 - Corrigida a CSP para liberar `static.cloudflareinsights.com` e `cloudflareinsights.com`.
