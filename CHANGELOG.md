@@ -1,5 +1,12 @@
 # Changelog
 
+## Beta 1.0 Build 105
+
+- Corrigida a CSP para liberar `static.cloudflareinsights.com` e `cloudflareinsights.com`.
+- Mantida a instalação automática do Cloudflare Web Analytics, sem snippet manual no `index.html`.
+- Banco mantido na Build 104 e Edge Function mantida na Build 102.
+
+
 ## v0.3.2
 
 - exclusão permanente de grupo restrita ao proprietário;
@@ -37,3 +44,19 @@
 - transferência formal da administração;
 - churrasco configurado separadamente em cada pelada;
 - correção de largura do campo de data e hora em telas móveis.
+
+## v0.3.4
+
+- Avisos podem ser reenviados ou excluídos por administrador e organizador.
+- Push automático para nova pelada e nova confirmação de presença.
+- Exclusão de pagamentos, despesas e cobranças no Caixa.
+- Aba Membros simplificada e compactada.
+
+## Beta 1.0 Build 104
+
+- administrador e organizador podem gerenciar a presença de membros em peladas futuras;
+- respostas em lote são gravadas de forma transacional;
+- confirmados excedentes podem ser sorteados para a espera inicial;
+- ordem da espera é persistente e novas confirmações entram no final após o sorteio;
+- primeira pessoa da espera é promovida automaticamente quando surge uma vaga;
+- separação de times exige que os excedentes tenham sido sorteados.

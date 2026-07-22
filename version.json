@@ -1,9 +1,9 @@
 {
   "channel": "beta",
   "version": "Beta 1.0",
-  "build": 104,
+  "build": 105,
   "database": 104,
   "edge": 102,
   "mandatory": false,
-  "notes": "Administrador e organizador podem gerenciar presenças; excedentes podem ser sorteados para a espera inicial com ordem persistente e promoção automática."
+  "notes": "Corrige a integração do Cloudflare Web Analytics no CSP. O beacon continua sendo injetado automaticamente pelo Cloudflare Pages, sem duplicação manual no index.html."
 }
