@@ -269,3 +269,5 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .notification-onboarding-card p{margin:0 0 20px;color:var(--muted,#a9bbc2);line-height:1.5}
 .notification-onboarding-card small{display:block;margin-top:14px;color:var(--muted,#8fa4ac);line-height:1.4}
 .notification-onboarding-later{width:100%;margin-top:8px;padding:12px;border:0;background:transparent;color:#c4d3d8;font:inherit;font-weight:700}
+
+.admin-primary-action{margin:12px 0 14px}

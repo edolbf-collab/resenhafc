@@ -1,9 +1,9 @@
 {
   "channel": "beta",
   "version": "Beta 1.0",
-  "build": 102,
+  "build": 103,
   "database": 102,
   "edge": 102,
   "mandatory": false,
-  "notes": "Convite inicial para ativar notificações e envio de notificações gerais pela administração da plataforma."
+  "notes": "Botão de notificação do sistema reposicionado no topo do Painel Beta, logo abaixo do status operacional."
 }
