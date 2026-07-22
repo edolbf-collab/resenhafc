@@ -271,3 +271,22 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .notification-onboarding-later{width:100%;margin-top:8px;padding:12px;border:0;background:transparent;color:#c4d3d8;font:inherit;font-weight:700}
 
 .admin-primary-action{margin:12px 0 14px}
+
+/* Beta 1.0 Build 104 — gestão de presenças e espera inicial */
+.attendance-manager-section{margin:14px 0 16px;padding:13px;border:1px solid rgba(92,210,61,.22);border-radius:18px;background:linear-gradient(145deg,rgba(92,210,61,.07),rgba(7,27,38,.78))}
+.attendance-manager-section .section-title{margin:0 0 10px}
+.attendance-capacity-card{display:flex;align-items:flex-start;gap:11px;padding:12px;border:1px solid var(--line);border-radius:15px;background:rgba(255,255,255,.035)}
+.attendance-capacity-card>span{width:36px;height:36px;flex:0 0 36px;display:grid;place-items:center;border-radius:12px;background:rgba(255,255,255,.06);font-size:18px}
+.attendance-capacity-card div{min-width:0}.attendance-capacity-card strong,.attendance-capacity-card small{display:block}.attendance-capacity-card strong{font-size:12.5px}.attendance-capacity-card small{margin-top:4px;color:var(--muted);font-size:9.5px;line-height:1.45}
+.attendance-capacity-card.warning{border-color:rgba(244,189,62,.42);background:rgba(244,189,62,.08)}.attendance-capacity-card.warning>span{background:rgba(244,189,62,.14);color:#ffd47a}
+.attendance-capacity-card.ready{border-color:rgba(92,210,61,.36);background:rgba(92,210,61,.08)}.attendance-capacity-card.ready>span{background:rgba(92,210,61,.14);color:var(--lime)}
+.attendance-manager-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}.attendance-manager-actions .btn{min-height:42px;padding:10px 9px;font-size:10.5px}
+.attendance-manager-list{display:grid;gap:7px;max-height:min(56vh,520px);overflow:auto;padding-right:2px}
+.attendance-manager-row{display:grid;grid-template-columns:38px minmax(0,1fr) minmax(112px,132px);align-items:center;gap:9px;padding:9px;border:1px solid var(--line);border-radius:14px;background:rgba(255,255,255,.03)}
+.attendance-manager-avatar{width:38px;height:38px;border-radius:13px;display:grid;place-items:center;object-fit:cover;background:linear-gradient(145deg,#235064,#102f3f);border:1px solid rgba(255,255,255,.1);font-size:10px;font-weight:900}
+.attendance-manager-row>span{min-width:0}.attendance-manager-row strong,.attendance-manager-row small{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.attendance-manager-row strong{font-size:11.5px}.attendance-manager-row small{margin-top:2px;color:var(--muted);font-size:8.5px}
+.attendance-manager-row select{width:100%;min-height:38px;border:1px solid rgba(255,255,255,.13);border-radius:11px;background:#0b2733;color:#f4f8f9;padding:8px 27px 8px 9px;font:inherit;font-size:9.5px;font-weight:800}
+.attendance-list-row{padding:9px 10px}.attendance-list-row .list-main small{font-size:9px}.attendance-managed-note{color:#79d5ff!important;font-size:7.8px!important;text-transform:uppercase;letter-spacing:.2px}
+.waitlist-position{min-width:38px;height:30px;padding:0 9px;border-radius:10px;display:grid;place-items:center;background:rgba(244,189,62,.12);border:1px solid rgba(244,189,62,.28);color:#ffd47a;font-size:10px;font-weight:900}
+.attendance-waitlist-notice{border-color:rgba(244,189,62,.34);background:rgba(244,189,62,.07)}
+@media(max-width:390px){.attendance-manager-actions{grid-template-columns:1fr}.attendance-manager-row{grid-template-columns:34px minmax(0,1fr) 106px;padding:8px;gap:7px}.attendance-manager-avatar{width:34px;height:34px;border-radius:11px}.attendance-manager-row select{font-size:8.5px;padding-left:7px}.attendance-manager-list{max-height:52vh}}

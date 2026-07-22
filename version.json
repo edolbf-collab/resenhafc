@@ -1,9 +1,9 @@
 {
   "channel": "beta",
   "version": "Beta 1.0",
-  "build": 103,
-  "database": 102,
+  "build": 104,
+  "database": 104,
   "edge": 102,
   "mandatory": false,
-  "notes": "Botão de notificação do sistema reposicionado no topo do Painel Beta, logo abaixo do status operacional."
+  "notes": "Administrador e organizador podem gerenciar presenças; excedentes podem ser sorteados para a espera inicial com ordem persistente e promoção automática."
 }

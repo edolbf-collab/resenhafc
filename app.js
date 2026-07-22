@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const APP_RELEASE = Object.freeze({ channel: "beta", version: "Beta 1.0", build: 103, database: 102, edge: 102 });
+  const APP_RELEASE = Object.freeze({ channel: "beta", version: "Beta 1.0", build: 104, database: 104, edge: 102 });
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
   const uid = () => crypto.randomUUID?.() || "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
@@ -343,6 +343,36 @@
       });
       if (error) throw error;
       return this.loadGroup(this.state.currentGroupId, { subscribe: false });
+    }
+
+    async setMyAttendance(matchId, payload) {
+      const { data, error } = await this.client.rpc("set_my_match_attendance", {
+        p_match_id: matchId,
+        p_status: payload.status,
+        p_bbq: Boolean(payload.bbq),
+        p_bbq_guests: Number(payload.bbqGuests || 0),
+        p_bbq_note: payload.bbqNote || ""
+      });
+      if (error) throw error;
+      await this.loadGroup(this.state.currentGroupId, { subscribe: false });
+      return data || {};
+    }
+
+    async manageAttendances(matchId, changes) {
+      const { data, error } = await this.client.rpc("manage_match_attendance_batch", {
+        p_match_id: matchId,
+        p_changes: changes.map(change => ({ player_id: change.playerId, status: change.status }))
+      });
+      if (error) throw error;
+      await this.loadGroup(this.state.currentGroupId, { subscribe: false });
+      return data || {};
+    }
+
+    async drawMatchWaitlist(matchId) {
+      const { data, error } = await this.client.rpc("draw_match_waitlist", { p_match_id: matchId });
+      if (error) throw error;
+      await this.loadGroup(this.state.currentGroupId, { subscribe: false });
+      return data || {};
     }
 
     async rateMember(groupId, playerId, score) {
@@ -739,6 +769,11 @@
     adminMember() { return this.state?.members.find(member => ["admin", "owner"].includes(member.role)) || null; },
     attendanceFor(matchId) { return this.state?.attendance.filter(item => item.match_id === matchId) || []; },
     confirmedFor(matchId) { return this.attendanceFor(matchId).filter(item => item.status === "confirmed"); },
+    waitlistFor(matchId) {
+      return this.attendanceFor(matchId)
+        .filter(item => item.status === "waitlist")
+        .sort((a, b) => Number(a.waitlist_position || 9999) - Number(b.waitlist_position || 9999) || new Date(a.responded_at) - new Date(b.responded_at));
+    },
     upcomingMatches() {
       return (this.state?.matches || []).filter(match => new Date(match.starts_at) > new Date() && match.status !== "cancelled").sort((a, b) => new Date(a.starts_at) - new Date(b.starts_at));
     },
@@ -815,6 +850,8 @@
       const match = this.nextMatch();
       const attendance = match ? this.attendanceFor(match.id) : [];
       const confirmed = attendance.filter(item => item.status === "confirmed");
+      const waitlist = attendance.filter(item => item.status === "waitlist");
+      const overflow = Math.max(0, confirmed.length - Number(match?.max_players || 0));
       const notice = [...this.state.announcements].sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0];
       const administrator = this.memberPlayer(this.adminMember());
       const emblem = this.canManageGroup()
@@ -824,7 +861,7 @@
         <section class="stadium-hero home-hero">
           <div class="stadium-lights"></div>
           <div class="group-identity">${emblem}<div><span class="eyebrow">${escapeHtml(roleLabels[this.currentRole()])}</span><h1>${escapeHtml(group.name)}</h1><p>Administrador: ${escapeHtml(administrator?.name || "Não identificado")}</p></div></div>
-          ${match ? `<div class="next-match-panel"><div class="next-match-heading"><div><span class="match-kicker">PRÓXIMA PELADA</span><h2>${escapeHtml(match.title)}</h2></div><button class="match-detail-link" data-action="open-match" data-id="${match.id}">Detalhes</button></div><p>${escapeHtml(shortDate(match.starts_at))} · ${escapeHtml(match.location)}</p><div class="hero-numbers"><div><strong>${confirmed.length}</strong><small>confirmados</small></div><div><strong>${match.max_players}</strong><small>vagas</small></div><div><strong>${Math.max(0, Number(match.max_players) - confirmed.length)}</strong><small>restantes</small></div></div><button class="btn btn-primary btn-block home-rsvp" data-action="rsvp" data-id="${match.id}">Confirmar presença</button></div>` : `<div class="next-match-panel empty-match-panel"><span class="match-kicker">AGENDA LIVRE</span><h2>Nenhuma pelada marcada</h2><p>Organizadores podem criar o próximo jogo.</p>${this.canManageMatches() ? '<button class="btn btn-primary btn-small" data-action="new-match">Agendar pelada</button>' : ""}</div>`}
+          ${match ? `<div class="next-match-panel"><div class="next-match-heading"><div><span class="match-kicker">PRÓXIMA PELADA</span><h2>${escapeHtml(match.title)}</h2></div><button class="match-detail-link" data-action="open-match" data-id="${match.id}">Detalhes</button></div><p>${escapeHtml(shortDate(match.starts_at))} · ${escapeHtml(match.location)}</p><div class="hero-numbers"><div><strong>${confirmed.length}</strong><small>confirmados</small></div><div><strong>${match.max_players}</strong><small>começam</small></div><div><strong>${overflow || waitlist.length || Math.max(0, Number(match.max_players) - confirmed.length)}</strong><small>${overflow ? "excedentes" : waitlist.length ? "em espera" : "restantes"}</small></div></div><button class="btn btn-primary btn-block home-rsvp" data-action="rsvp" data-id="${match.id}">Confirmar presença</button></div>` : `<div class="next-match-panel empty-match-panel"><span class="match-kicker">AGENDA LIVRE</span><h2>Nenhuma pelada marcada</h2><p>Organizadores podem criar o próximo jogo.</p>${this.canManageMatches() ? '<button class="btn btn-primary btn-small" data-action="new-match">Agendar pelada</button>' : ""}</div>`}
         </section>
         ${notice ? `<button class="home-notice" data-action="announcement-center" data-id="${notice.id}"><span>📣</span><div><strong>${escapeHtml(notice.title)}</strong><small>${escapeHtml(notice.body)}</small></div><b>›</b></button>` : ""}
         <div class="home-quick-grid">
@@ -846,9 +883,10 @@
     matchCard(match) {
       const date = new Date(match.starts_at);
       const confirmed = this.confirmedFor(match.id);
+      const waitlist = this.waitlistFor(match.id);
       const future = date > new Date();
       const recurring = Number(match.recurrence_total || 1) > 1;
-      return `<article class="card match-card" data-action="open-match" data-id="${match.id}" role="button" tabindex="0" aria-label="Abrir detalhes de ${escapeHtml(match.title)}"><div class="match-top"><div class="match-date"><small>${date.toLocaleDateString("pt-BR", { month: "short" }).replace(".", "").toUpperCase()}</small><strong>${String(date.getDate()).padStart(2, "0")}</strong></div><div class="match-info"><h3>${escapeHtml(match.title)}</h3><p>${escapeHtml(shortDate(match.starts_at))}<br>${escapeHtml(match.location)}</p>${recurring ? '<span class="recurrence-chip">↻ Semanal</span>' : ""}${match.bbq_enabled ? '<span class="bbq-chip">Churrasco</span>' : ""}</div><span class="status-pill ${future ? "status-maybe" : "status-confirmed"}">${future ? "Agendado" : "Histórico"}</span></div><div class="match-footer"><div class="avatar-stack">${confirmed.slice(0, 5).map(item => `<span>${initials(this.player(item.player_id)?.name)}</span>`).join("")}${confirmed.length > 5 ? `<span>+${confirmed.length - 5}</span>` : ""}</div><span class="match-open-label">${confirmed.length}/${match.max_players} jogadores <b>›</b></span></div></article>`;
+      return `<article class="card match-card" data-action="open-match" data-id="${match.id}" role="button" tabindex="0" aria-label="Abrir detalhes de ${escapeHtml(match.title)}"><div class="match-top"><div class="match-date"><small>${date.toLocaleDateString("pt-BR", { month: "short" }).replace(".", "").toUpperCase()}</small><strong>${String(date.getDate()).padStart(2, "0")}</strong></div><div class="match-info"><h3>${escapeHtml(match.title)}</h3><p>${escapeHtml(shortDate(match.starts_at))}<br>${escapeHtml(match.location)}</p>${recurring ? '<span class="recurrence-chip">↻ Semanal</span>' : ""}${match.bbq_enabled ? '<span class="bbq-chip">Churrasco</span>' : ""}</div><span class="status-pill ${future ? "status-maybe" : "status-confirmed"}">${future ? "Agendado" : "Histórico"}</span></div><div class="match-footer"><div class="avatar-stack">${confirmed.slice(0, 5).map(item => `<span>${initials(this.player(item.player_id)?.name)}</span>`).join("")}${confirmed.length > 5 ? `<span>+${confirmed.length - 5}</span>` : ""}</div><span class="match-open-label">${confirmed.length}/${match.max_players} começam${waitlist.length ? ` · ${waitlist.length} espera` : ""} <b>›</b></span></div></article>`;
     },
 
     teamsPage() {
@@ -1320,9 +1358,20 @@
       const recurring = Number(match.recurrence_total || 1) > 1;
       const grouped = { confirmed: [], maybe: [], waitlist: [], out: [] };
       this.attendanceFor(id).forEach(item => grouped[item.status]?.push(item));
+      grouped.waitlist.sort((a, b) => Number(a.waitlist_position || 9999) - Number(b.waitlist_position || 9999));
+      const pendingPlayers = this.activePlayers().filter(player => !this.attendanceFor(id).some(item => item.player_id === player.id));
+      const confirmedCount = grouped.confirmed.length;
+      const totalPlayingIntent = confirmedCount + grouped.waitlist.length;
+      const overflow = Math.max(0, confirmedCount - Number(match.max_players));
       const barbecueParticipants = this.attendanceFor(id).filter(item => item.bbq);
       const barbecueTotal = barbecueParticipants.reduce((sum, item) => sum + 1 + Number(item.bbq_guests || 0), 0);
-      const groupHtml = (title, key) => `<div class="section-title"><h2>${title} (${grouped[key].length})</h2></div><div class="list">${grouped[key].map(item => this.playerRow(this.player(item.player_id) || { name: "Jogador" })).join("") || '<div class="card empty">Nenhum.</div>'}</div>`;
+      const attendanceRow = (item, key) => {
+        const player = this.player(item.player_id) || { name: "Jogador" };
+        const trailing = key === "waitlist" ? `<span class="waitlist-position">#${Number(item.waitlist_position || 0) || "–"}</span>` : "";
+        const managerNote = item.status_change_source === "manager" ? '<small class="attendance-managed-note">ajustado pela organização</small>' : "";
+        return `<div class="card list-row attendance-list-row">${this.personAvatar(player)}<div class="list-main"><strong>${escapeHtml(player.name)}</strong><small>${escapeHtml(player.primary_position || "Sem posição")}</small>${managerNote}</div>${trailing}</div>`;
+      };
+      const groupHtml = (title, key) => `<div class="section-title"><h2>${title} (${grouped[key].length})</h2></div><div class="list">${grouped[key].map(item => attendanceRow(item, key)).join("") || '<div class="card empty">Nenhum.</div>'}</div>`;
       const recurringInfo = recurring ? `<div class="recurrence-detail"><span>↻</span><div><strong>Pelada semanal recorrente</strong><small>Esta data pertence a uma série criada automaticamente.</small></div></div>` : "";
       const barbecueStatus = match.bbq_enabled
         ? `<div class="bbq-status enabled"><span>♨</span><div><strong>Churrasco confirmado</strong><small>${barbecueTotal} participante(s) · ${money(match.bbq_price || 0)} por pessoa</small></div></div>`
@@ -1330,13 +1379,37 @@
       const barbecueControls = future && this.canManageGroup()
         ? `<form id="matchBbqForm" class="match-bbq-form"><label class="check-row"><input name="bbq_enabled" type="checkbox" ${match.bbq_enabled ? "checked" : ""}> Haverá churrasco nesta pelada</label><div class="field" id="matchBbqPriceField"><label>Valor por pessoa</label><input name="bbq_price" type="number" min="0" step="0.01" value="${Number(match.bbq_price || 0)}" inputmode="decimal"></div><button class="btn btn-secondary btn-block">Salvar churrasco</button></form>`
         : "";
+      const drawInfo = !future ? "" : overflow > 0
+        ? `<div class="attendance-capacity-card warning"><span>⇅</span><div><strong>Sorteio necessário</strong><small>${confirmedCount} confirmados para ${match.max_players} lugares iniciais. ${overflow} membro(s) devem começar na espera.</small></div></div>`
+        : grouped.waitlist.length
+          ? `<div class="attendance-capacity-card ready"><span>✓</span><div><strong>Espera inicial definida</strong><small>${confirmedCount} começam jogando e ${grouped.waitlist.length} aguardam, em ordem.</small></div></div>`
+          : `<div class="attendance-capacity-card"><span>◎</span><div><strong>${confirmedCount} de ${match.max_players} lugares iniciais</strong><small>${Math.max(0, Number(match.max_players) - confirmedCount)} lugar(es) ainda disponível(is).</small></div></div>`;
+      const managerControls = future && this.canManageMatches()
+        ? `<section class="attendance-manager-section"><div class="section-title"><h2>Gestão da escala</h2><small>${pendingPlayers.length} sem resposta.</small></div>${drawInfo}<div class="attendance-manager-actions"><button class="btn btn-secondary" data-manage-attendance="${match.id}">Gerenciar presenças</button>${totalPlayingIntent > Number(match.max_players) ? `<button class="btn btn-primary" data-draw-waitlist="${match.id}">${match.waitlist_drawn_at ? "Refazer sorteio" : "Sortear espera inicial"}</button>` : ""}</div></section>`
+        : drawInfo;
       const deleteControls = future && this.canManageMatches() ? `<div class="delete-match-actions"><button class="btn btn-danger btn-block delete-match-button" data-delete-match="${match.id}">${recurring ? "Excluir somente esta data" : "Excluir jogo agendado"}</button>${recurring ? `<button class="btn btn-danger-outline btn-block" data-delete-series="${match.id}">Excluir esta e as próximas</button>` : ""}<p class="danger-help">A exclusão só é permitida antes do horário. Peladas realizadas permanecem no histórico.</p></div>` : "";
-      this.modal(match.title, `<div class="match-detail-banner"><span class="status-pill ${future ? "status-maybe" : "status-confirmed"}">${future ? "Agendado" : "Histórico"}</span><strong>${escapeHtml(shortDate(match.starts_at))}</strong><p>${escapeHtml(match.location)}</p>${match.notes ? `<small>${escapeHtml(match.notes)}</small>` : ""}</div>${recurringInfo}<section class="match-bbq-section"><div class="section-title"><h2>Confraternização</h2><small>Configuração exclusiva desta pelada.</small></div>${barbecueStatus}${barbecueControls}</section><div class="actions">${future ? `<button class="btn btn-primary" data-modal-rsvp="${match.id}">Minha presença</button>` : ""}${this.canManageMatches() ? `<button class="btn btn-secondary" data-modal-teams="${match.id}">Separar times</button>` : ""}</div>${deleteControls}${groupHtml("Confirmados", "confirmed")}${groupHtml("Talvez", "maybe")}${groupHtml("Lista de espera", "waitlist")}${groupHtml("Não vão", "out")}`, (root, close) => {
+      this.modal(match.title, `<div class="match-detail-banner"><span class="status-pill ${future ? "status-maybe" : "status-confirmed"}">${future ? "Agendado" : "Histórico"}</span><strong>${escapeHtml(shortDate(match.starts_at))}</strong><p>${escapeHtml(match.location)}</p>${match.notes ? `<small>${escapeHtml(match.notes)}</small>` : ""}</div>${recurringInfo}${managerControls}<section class="match-bbq-section"><div class="section-title"><h2>Confraternização</h2><small>Configuração exclusiva desta pelada.</small></div>${barbecueStatus}${barbecueControls}</section><div class="actions">${future ? `<button class="btn btn-primary" data-modal-rsvp="${match.id}">Minha presença</button>` : ""}${this.canManageMatches() ? `<button class="btn btn-secondary" data-modal-teams="${match.id}">Separar times</button>` : ""}</div>${deleteControls}${groupHtml("Começam jogando", "confirmed")}${groupHtml("Espera inicial", "waitlist")}${groupHtml("Talvez", "maybe")}${groupHtml("Não vão", "out")}`, (root, close) => {
         $("[data-modal-rsvp]", root)?.addEventListener("click", () => {
           close();
           this.openRsvp(match.id);
         });
         $("[data-modal-teams]", root)?.addEventListener("click", async () => { close(); await this.drawTeams(match.id); });
+        $("[data-manage-attendance]", root)?.addEventListener("click", () => {
+          close();
+          this.openAttendanceManager(match.id);
+        });
+        $("[data-draw-waitlist]", root)?.addEventListener("click", async event => {
+          const label = match.waitlist_drawn_at ? "Refazer o sorteio substituirá a ordem atual da espera. Deseja continuar?" : `Sortear ${Math.max(0, totalPlayingIntent - Number(match.max_players))} membro(s) para começar na espera?`;
+          if (!confirm(label)) return;
+          event.currentTarget.disabled = true;
+          event.currentTarget.textContent = "Sorteando...";
+          const result = await this.repo.drawMatchWaitlist(match.id);
+          this.state = this.repo.state;
+          close();
+          this.render();
+          this.openMatchDetails(match.id);
+          this.toast(`${Number(result.waitlist_count || 0)} membro(s) definido(s) para a espera inicial.`);
+        });
         const bbqForm = $("#matchBbqForm", root);
         if (bbqForm) {
           const enabled = $('[name="bbq_enabled"]', bbqForm);
@@ -1383,6 +1456,40 @@
       }
     },
 
+    openAttendanceManager(matchId) {
+      if (!this.canManageMatches()) return this.toast("Somente administrador e organizador podem gerenciar presenças.", true);
+      const match = this.state.matches.find(item => item.id === matchId);
+      if (!match || new Date(match.starts_at) <= new Date()) return this.toast("As presenças de jogos do histórico não podem ser alteradas.", true);
+      const attendance = new Map(this.attendanceFor(matchId).map(item => [item.player_id, item]));
+      const players = this.activePlayers().sort((a, b) => String(a.name).localeCompare(String(b.name), "pt-BR"));
+      const rows = players.map(player => {
+        const current = attendance.get(player.id);
+        const status = current?.status || "pending";
+        const waitLabel = `Espera${current?.waitlist_position ? ` #${current.waitlist_position}` : ""}`;
+        return `<label class="attendance-manager-row">${this.personAvatar(player, "attendance-manager-avatar")}<span><strong>${escapeHtml(player.name)}</strong><small>${escapeHtml(player.primary_position || "Sem posição")}</small></span><select name="attendance_${player.id}" data-player-id="${player.id}" data-original-status="${status}" aria-label="Presença de ${escapeHtml(player.name)}"><option value="pending" ${status === "pending" ? "selected" : ""}>Sem resposta</option><option value="confirmed" ${status === "confirmed" ? "selected" : ""}>Confirmado</option><option value="maybe" ${status === "maybe" ? "selected" : ""}>Talvez</option><option value="out" ${status === "out" ? "selected" : ""}>Ausente</option>${status === "waitlist" ? `<option value="waitlist" selected disabled>${waitLabel}</option>` : ""}</select></label>`;
+      }).join("");
+      this.modal("Gerenciar presenças", `<form id="attendanceManagerForm" class="form-grid"><div class="notice"><strong>${escapeHtml(match.title)}</strong><br>Administrador e organizador podem registrar respostas recebidas fora do aplicativo. A espera inicial continua sendo definida pelo sorteio.</div><div class="attendance-manager-list">${rows}</div><button class="btn btn-primary btn-block">Salvar alterações</button></form>`, (root, close) => {
+        $("#attendanceManagerForm", root).addEventListener("submit", async event => {
+          event.preventDefault();
+          const changes = $$('select[data-player-id]', event.currentTarget).map(select => ({
+            playerId: select.dataset.playerId,
+            status: select.value,
+            originalStatus: select.dataset.originalStatus
+          })).filter(item => item.status !== item.originalStatus && item.status !== "waitlist");
+          if (!changes.length) return this.toast("Nenhuma presença foi alterada.");
+          const submit = event.submitter;
+          submit.disabled = true;
+          submit.textContent = "Salvando...";
+          await this.repo.manageAttendances(matchId, changes);
+          this.state = this.repo.state;
+          close();
+          this.render();
+          this.openMatchDetails(matchId);
+          this.toast(`${changes.length} presença(s) atualizada(s).`);
+        });
+      });
+    },
+
     openRsvp(matchId) {
       const match = this.state.matches.find(item => item.id === matchId);
       if (!match) return this.toast("Crie um jogo primeiro.", true);
@@ -1390,44 +1497,49 @@
       const player = this.myPlayer();
       if (!player) return this.toast("Seu perfil de jogador não foi encontrado.", true);
       const current = this.state.attendance.find(item => item.match_id === matchId && item.player_id === player.id) || {};
-      this.modal("Confirmar presença", `<form id="rsvpForm" class="form-grid"><div class="notice"><strong>${escapeHtml(match.title)}</strong><br>${escapeHtml(shortDate(match.starts_at))} · ${escapeHtml(match.location)}</div><div class="radio-grid">${[["confirmed", "Vou jogar"], ["maybe", "Talvez"], ["out", "Não vou"], ["waitlist", "Espera"]].map(([value, label]) => `<label class="radio-card"><input type="radio" name="status" value="${value}" ${current.status === value || (!current.status && value === "confirmed") ? "checked" : ""}>${label}</label>`).join("")}</div>${match.bbq_enabled ? `<label class="check-row"><input type="checkbox" name="bbq" ${current.bbq ? "checked" : ""}> Participarei do churrasco</label><div class="field"><label>Acompanhantes</label><input type="number" name="bbq_guests" min="0" max="20" value="${current.bbq_guests || 0}"></div><div class="field"><label>O que vou levar</label><input name="bbq_note" value="${escapeHtml(current.bbq_note || "")}" placeholder="Refrigerante, pão de alho..."></div>` : ""}<button class="btn btn-primary btn-block">Salvar resposta</button></form>`, (root, close) => {
+      const selectedStatus = current.status === "waitlist" ? "confirmed" : current.status;
+      const waitlistNotice = current.status === "waitlist" ? `<div class="notice attendance-waitlist-notice"><strong>Você está na espera inicial</strong><br>Posição atual: ${Number(current.waitlist_position || 0) || "a definir"}. Ao escolher “Vou jogar”, sua intenção de participar será mantida.</div>` : "";
+      this.modal("Confirmar presença", `<form id="rsvpForm" class="form-grid"><div class="notice"><strong>${escapeHtml(match.title)}</strong><br>${escapeHtml(shortDate(match.starts_at))} · ${escapeHtml(match.location)}</div>${waitlistNotice}<div class="radio-grid">${[["confirmed", "Vou jogar"], ["maybe", "Talvez"], ["out", "Não vou"]].map(([value, label]) => `<label class="radio-card"><input type="radio" name="status" value="${value}" ${selectedStatus === value || (!selectedStatus && value === "confirmed") ? "checked" : ""}>${label}</label>`).join("")}</div>${match.bbq_enabled ? `<label class="check-row"><input type="checkbox" name="bbq" ${current.bbq ? "checked" : ""}> Participarei do churrasco</label><div class="field"><label>Acompanhantes</label><input type="number" name="bbq_guests" min="0" max="20" value="${current.bbq_guests || 0}"></div><div class="field"><label>O que vou levar</label><input name="bbq_note" value="${escapeHtml(current.bbq_note || "")}" placeholder="Refrigerante, pão de alho..."></div>` : ""}<button class="btn btn-primary btn-block">Salvar resposta</button></form>`, (root, close) => {
         $("#rsvpForm", root).addEventListener("submit", async event => {
           event.preventDefault();
           const form = new FormData(event.currentTarget);
-          let status = form.get("status");
-          const otherConfirmed = this.confirmedFor(matchId).filter(item => item.player_id !== player.id);
-          let waitlisted = false;
-          if (status === "confirmed" && current.status !== "confirmed" && otherConfirmed.length >= Number(match.max_players)) {
-            status = "waitlist";
-            waitlisted = true;
-          }
-          await this.repo.mutate("attendance", {
-            id: current.id || uid(),
-            match_id: matchId,
-            player_id: player.id,
-            status,
+          const requestedStatus = form.get("status");
+          const submit = event.submitter;
+          submit.disabled = true;
+          submit.textContent = "Salvando...";
+          const result = await this.repo.setMyAttendance(matchId, {
+            status: requestedStatus,
             bbq: form.get("bbq") === "on",
-            bbq_guests: Number(form.get("bbq_guests") || 0),
-            bbq_note: form.get("bbq_note") || "",
-            responded_at: nowIso()
+            bbqGuests: Number(form.get("bbq_guests") || 0),
+            bbqNote: form.get("bbq_note") || ""
           });
           this.state = this.repo.state;
           close();
           this.render();
-          if (!waitlisted && status === "confirmed" && current.status !== "confirmed") {
+          const effectiveStatus = result.status || requestedStatus;
+          if (effectiveStatus === "confirmed" && current.status !== "confirmed") {
             try {
               await this.repo.notifyAttendanceConfirmed(this.state.currentGroupId, matchId, player.id);
             } catch (error) {
               console.warn("Presença confirmada, mas a notificação falhou:", error);
             }
           }
-          this.toast(waitlisted ? "Vagas preenchidas. Você entrou na lista de espera." : "Presença atualizada.");
+          if (effectiveStatus === "waitlist") {
+            this.toast(`Limite inicial preenchido. Você está na posição ${Number(result.waitlist_position || 0) || "final"} da espera.`);
+          } else {
+            this.toast("Presença atualizada.");
+          }
         });
       });
     },
 
     async drawTeams(matchId) {
       if (!this.canManageMatches()) return this.toast("Seu perfil não pode formar os times.", true);
+      const match = this.state.matches.find(item => item.id === matchId);
+      if (match && this.confirmedFor(matchId).length > Number(match.max_players)) {
+        this.openMatchDetails(matchId);
+        return this.toast("Faça o sorteio da espera inicial antes de separar os times.", true);
+      }
       await this.repo.balanceTeams(matchId);
       this.state = this.repo.state;
       this.route = "teams";
