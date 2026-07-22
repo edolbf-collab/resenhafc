@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const APP_RELEASE = Object.freeze({ channel: "beta", version: "Beta 1.0", build: 100, database: 100, edge: 100 });
+  const APP_RELEASE = Object.freeze({ channel: "beta", version: "Beta 1.0", build: 101, database: 101, edge: 100 });
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
   const uid = () => crypto.randomUUID?.() || "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
@@ -26,7 +26,7 @@
   const avatarKey = value => /^badge-(0[1-9]|1[0-9]|20)$/.test(String(value || "")) ? String(value) : "badge-01";
   const groupAvatarUrl = key => {
     const normalized = avatarKey(key);
-    return window.RESENHA_GROUP_AVATARS?.[normalized] || assetUrl(`assets/group-avatars/${normalized}.png?v=beta100`);
+    return window.RESENHA_GROUP_AVATARS?.[normalized] || assetUrl(`assets/group-avatars/${normalized}.png?v=beta101`);
   };
   const positionOptions = ["Goleiro", "Zagueiro", "Lateral", "Volante", "Meia", "Atacante", "Coringa"];
   const roleLabels = { owner: "Administrador", admin: "Administrador", organizer: "Organizador", treasurer: "Tesoureiro", member: "Membro" };
@@ -324,6 +324,15 @@
       const { error } = await this.client.rpc("transfer_group_administration", { p_group_id: groupId, p_new_admin_user_id: userId });
       if (error) throw error;
       await this.init(groupId);
+    }
+
+    async removeGroupMember(groupId, userId) {
+      const { error } = await this.client.rpc("remove_group_member", {
+        p_group_id: groupId,
+        p_user_id: userId
+      });
+      if (error) throw error;
+      return this.loadGroup(groupId, { subscribe: false });
     }
 
     async updateMatchBbq(matchId, enabled, price) {
@@ -635,7 +644,7 @@
         if (!(image instanceof HTMLImageElement) || !image.matches("[data-group-avatar]")) return;
         if (image.dataset.fallbackApplied === "true") return;
         image.dataset.fallbackApplied = "true";
-        image.src = window.RESENHA_GROUP_AVATARS?.["badge-01"] || assetUrl("assets/group-avatars/badge-01.png?v=beta100");
+        image.src = window.RESENHA_GROUP_AVATARS?.["badge-01"] || assetUrl("assets/group-avatars/badge-01.png?v=beta101");
       }, true);
     },
 
@@ -863,7 +872,8 @@
       const player = this.memberPlayer(member) || { name: "Membro", primary_position: "Sem posição" };
       const summary = this.ratingSummary(player.id);
       const isMe = member.user_id === this.state.profile.id;
-      return `<article class="card member-row member-row-compact">${this.personAvatar(player)}<div class="list-main"><strong>${escapeHtml(player.name)}${isMe ? ' <span class="you-label">você</span>' : ""}</strong><small>${escapeHtml(player.primary_position || "Sem posição")}${player.nickname ? ` · ${escapeHtml(player.nickname)}` : ""}</small></div><div class="member-trailing"><span class="role-pill ${roleClass(member.role)}">${escapeHtml(roleLabels[member.role] || "Membro")}</span>${this.canSeeRatings() ? `<small class="private-score">${summary?.average ? `★ ${summary.average.toFixed(1)} (${summary.count})` : "Sem notas"}</small>` : ""}</div></article>`;
+      const canManageMember = this.canManageMatches() && !isMe && !["admin", "owner"].includes(member.role);
+      return `<article class="card member-row member-row-compact ${canManageMember ? "member-row-manageable" : ""}" ${canManageMember ? `data-action="manage-member" data-user-id="${member.user_id}" role="button" tabindex="0" aria-label="Gerenciar ${escapeHtml(player.name)}"` : ""}>${this.personAvatar(player)}<div class="list-main"><strong>${escapeHtml(player.name)}${isMe ? ' <span class="you-label">você</span>' : ""}</strong><small>${escapeHtml(player.primary_position || "Sem posição")}${player.nickname ? ` · ${escapeHtml(player.nickname)}` : ""}</small></div><div class="member-trailing"><span class="role-pill ${roleClass(member.role)}">${escapeHtml(roleLabels[member.role] || "Membro")}</span>${this.canSeeRatings() ? `<small class="private-score">${summary?.average ? `★ ${summary.average.toFixed(1)} (${summary.count})` : "Sem notas"}</small>` : ""}${canManageMember ? '<span class="member-manage-chevron">›</span>' : ""}</div></article>`;
     },
 
     privateRatingsPanel() {
@@ -918,6 +928,7 @@
           invite: () => this.openInviteModal(),
           "group-settings": () => this.openGroupSettings(),
           "manage-roles": () => this.openRoleManager(),
+          "manage-member": () => this.openMemberManager(data.userId),
           announcement: () => this.openAnnouncementForm(),
           "announcement-center": () => this.openAnnouncementCenter(data.id),
           "notification-settings": () => this.openNotificationSettings(),
@@ -1158,6 +1169,35 @@
           this.render();
           this.toast("Administração transferida.");
         }));
+      });
+    },
+
+    openMemberManager(userId) {
+      if (!this.canManageMatches()) return this.toast("Somente administrador e organizador podem gerenciar integrantes.", true);
+      const member = this.state.members.find(item => item.user_id === userId);
+      if (!member) return this.toast("Membro não encontrado.", true);
+      if (member.user_id === this.state.profile.id) return this.toast("Você não pode remover a si mesmo por esta opção.", true);
+      if (["admin", "owner"].includes(member.role)) return this.toast("O administrador único não pode ser removido. Transfira a administração primeiro.", true);
+      const player = this.memberPlayer(member) || { name: "Membro", primary_position: "Sem posição" };
+      this.modal("Gerenciar membro", `<div class="member-manager-summary">${this.personAvatar(player)}<div><strong>${escapeHtml(player.name)}</strong><small>${escapeHtml(player.primary_position || "Sem posição")} · ${escapeHtml(roleLabels[member.role] || "Membro")}</small></div></div><div class="notice"><strong>Histórico preservado</strong><br>A remoção encerra imediatamente o acesso ao grupo e às notificações. Presenças, avaliações, pagamentos e registros anteriores permanecem no histórico.</div><button id="removeMemberButton" class="btn btn-danger btn-block">Remover do grupo</button>`, (root, close) => {
+        $("#removeMemberButton", root)?.addEventListener("click", async event => {
+          if (!confirm(`Remover ${player.name} deste grupo? O acesso será encerrado imediatamente.`)) return;
+          const button = event.currentTarget;
+          button.disabled = true;
+          button.textContent = "Removendo…";
+          try {
+            await this.repo.removeGroupMember(this.state.currentGroupId, member.user_id);
+            this.state = this.repo.state;
+            await this.repo.logEvent("member_removed", { removed_user_id: member.user_id, removed_player_name: player.name });
+            close();
+            this.render();
+            this.toast(`${player.name} foi removido do grupo.`);
+          } catch (error) {
+            button.disabled = false;
+            button.textContent = "Remover do grupo";
+            this.toast(error.message || "Não foi possível remover o membro.", true);
+          }
+        });
       });
     },
 

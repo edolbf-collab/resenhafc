@@ -249,3 +249,13 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .admin-stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.admin-stat{display:grid;gap:4px;padding:13px;border:1px solid var(--line);border-radius:15px;background:rgba(255,255,255,.035)}.admin-stat small{color:var(--muted)}.admin-stat strong{font-size:1.55rem}.admin-stat.warning{border-color:rgba(255,189,89,.45)}.admin-stat.danger{border-color:rgba(255,104,104,.48)}
 .admin-feed,.admin-logs{display:grid;gap:9px}.admin-feed-item{padding:12px;border:1px solid var(--line);border-radius:14px;background:rgba(255,255,255,.03)}.admin-feed-item>div{display:grid}.admin-feed-item small,.admin-feed-item span{color:var(--muted);font-size:.75rem}.admin-feed-item p{margin:8px 0;font-size:.9rem;white-space:pre-wrap}.admin-log-row{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:12px}.admin-log-row>div{display:grid}.admin-log-row small{color:var(--muted)}.log-dot{width:8px;height:8px;border-radius:50%;background:#70b7ff}.log-dot.warning{background:#ffbd59}.log-dot.error{background:#ff6868}.admin-loading{text-align:center;color:var(--muted);padding:34px 0}
 @media(max-width:360px){.diagnostic-grid{grid-template-columns:1fr}.admin-stats{grid-template-columns:1fr 1fr}.update-banner{left:8px;right:8px}.update-banner small{display:none}}
+
+
+/* Beta 1.0 Build 101 — gerenciamento de membros */
+.member-row-manageable { cursor: pointer; transition: border-color .18s ease, transform .18s ease, background .18s ease; }
+.member-row-manageable:active { transform: scale(.992); }
+.member-row-manageable:hover { border-color: rgba(74, 222, 128, .38); }
+.member-manage-chevron { font-size: 1.3rem; color: var(--muted); line-height: 1; }
+.member-manager-summary { display: flex; align-items: center; gap: 12px; padding: 12px; margin-bottom: 12px; border: 1px solid var(--line); border-radius: 16px; background: rgba(255,255,255,.025); }
+.member-manager-summary > div:last-child { display: grid; gap: 3px; }
+.member-manager-summary small { color: var(--muted); }
