@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const APP_RELEASE = Object.freeze({ channel: "beta", version: "Beta 1.0", build: 101, database: 101, edge: 100 });
+  const APP_RELEASE = Object.freeze({ channel: "beta", version: "Beta 1.0", build: 102, database: 102, edge: 102 });
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
   const uid = () => crypto.randomUUID?.() || "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
@@ -26,7 +26,7 @@
   const avatarKey = value => /^badge-(0[1-9]|1[0-9]|20)$/.test(String(value || "")) ? String(value) : "badge-01";
   const groupAvatarUrl = key => {
     const normalized = avatarKey(key);
-    return window.RESENHA_GROUP_AVATARS?.[normalized] || assetUrl(`assets/group-avatars/${normalized}.png?v=beta101`);
+    return window.RESENHA_GROUP_AVATARS?.[normalized] || assetUrl(`assets/group-avatars/${normalized}.png?v=beta102`);
   };
   const positionOptions = ["Goleiro", "Zagueiro", "Lateral", "Volante", "Meia", "Atacante", "Coringa"];
   const roleLabels = { owner: "Administrador", admin: "Administrador", organizer: "Organizador", treasurer: "Tesoureiro", member: "Membro" };
@@ -444,6 +444,10 @@
       return data || {};
     }
 
+    async publishSystemNotification(title, body) {
+      return this.invokeNotification({ action: "system-publish", title, body });
+    }
+
     async publishAnnouncement(groupId, title, body) {
       const data = await this.invokeNotification({ action: "publish", groupId, title, body });
       if (!data?.announcement) throw new Error("O aviso não foi criado.");
@@ -586,6 +590,7 @@
         else if (this.launchAction === "rsvp") setTimeout(() => this.openRsvp(this.nextMatch()?.id), 80);
         else if (this.launchAnnouncementId) setTimeout(() => this.openAnnouncementCenter(this.launchAnnouncementId), 120);
         else if (this.launchMatchId) setTimeout(() => this.openMatchDetails(this.launchMatchId), 120);
+        setTimeout(() => this.maybeShowNotificationOnboarding(), 650);
       } catch (error) {
         console.error(error);
         this.renderBackendError(error);
@@ -644,7 +649,7 @@
         if (!(image instanceof HTMLImageElement) || !image.matches("[data-group-avatar]")) return;
         if (image.dataset.fallbackApplied === "true") return;
         image.dataset.fallbackApplied = "true";
-        image.src = window.RESENHA_GROUP_AVATARS?.["badge-01"] || assetUrl("assets/group-avatars/badge-01.png?v=beta101");
+        image.src = window.RESENHA_GROUP_AVATARS?.["badge-01"] || assetUrl("assets/group-avatars/badge-01.png?v=beta102");
       }, true);
     },
 
@@ -1547,7 +1552,8 @@
         const stat = (label, value, tone = "") => `<div class="admin-stat ${tone}"><small>${escapeHtml(label)}</small><strong>${escapeHtml(String(value ?? 0))}</strong></div>`;
         const reports = (data.reports || []).map(item => `<article class="admin-feed-item"><div><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.category)} · ${escapeHtml(shortDate(item.created_at))}</small></div><p>${escapeHtml(item.description)}</p><span>${escapeHtml(item.reporter_name || item.reporter_email || "Usuário")}${item.group_name ? ` · ${escapeHtml(item.group_name)}` : ""}</span></article>`).join("") || '<div class="card empty">Nenhum relato recebido.</div>';
         const logs = (data.logs || []).map(item => `<div class="admin-log-row"><span class="log-dot ${escapeHtml(item.severity)}"></span><div><strong>${escapeHtml(item.event_type)}</strong><small>${escapeHtml(shortDate(item.created_at))}${item.group_name ? ` · ${escapeHtml(item.group_name)}` : ""}</small></div></div>`).join("") || '<div class="card empty">Nenhum log recente.</div>';
-        this.modal("Painel Beta", `<div class="health-strip ${Number(s.errors_24h || 0) ? "warn" : "ok"}"><span></span><div><strong>${Number(s.errors_24h || 0) ? "Sistema requer atenção" : "Sistema operacional"}</strong><small>Indicadores das últimas 24 horas</small></div></div><div class="admin-stats">${stat("Usuários", s.users_total)}${stat("Grupos", s.groups_total)}${stat("Peladas futuras", s.matches_upcoming)}${stat("Confirmações", s.confirmations_total)}${stat("Push enviados", s.push_sent_total)}${stat("Falhas push", s.push_failed_total, Number(s.push_failed_total || 0) ? "danger" : "")}${stat("Relatos abertos", s.feedback_open, Number(s.feedback_open || 0) ? "warning" : "")}${stat("Erros 24h", s.errors_24h, Number(s.errors_24h || 0) ? "danger" : "")}</div><div class="section-title"><h2>Relatos recentes</h2></div><div class="admin-feed">${reports}</div><div class="section-title"><h2>Logs recentes</h2></div><div class="admin-logs">${logs}</div><button id="exportOperationalSnapshot" class="btn btn-secondary btn-block">Exportar snapshot operacional</button>`, (root) => {
+        this.modal("Painel Beta", `<div class="health-strip ${Number(s.errors_24h || 0) ? "warn" : "ok"}"><span></span><div><strong>${Number(s.errors_24h || 0) ? "Sistema requer atenção" : "Sistema operacional"}</strong><small>Indicadores das últimas 24 horas</small></div></div><div class="admin-stats">${stat("Usuários", s.users_total)}${stat("Grupos", s.groups_total)}${stat("Peladas futuras", s.matches_upcoming)}${stat("Confirmações", s.confirmations_total)}${stat("Push grupos", s.push_sent_total)}${stat("Push sistema", s.system_push_sent_total)}${stat("Falhas push", Number(s.push_failed_total || 0) + Number(s.system_push_failed_total || 0), (Number(s.push_failed_total || 0) + Number(s.system_push_failed_total || 0)) ? "danger" : "")}${stat("Relatos abertos", s.feedback_open, Number(s.feedback_open || 0) ? "warning" : "")}${stat("Erros 24h", s.errors_24h, Number(s.errors_24h || 0) ? "danger" : "")}</div><div class="section-title"><h2>Relatos recentes</h2></div><div class="admin-feed">${reports}</div><div class="section-title"><h2>Logs recentes</h2></div><div class="admin-logs">${logs}</div><button id="sendSystemNotification" class="btn btn-primary btn-block">Enviar notificação do sistema</button><button id="exportOperationalSnapshot" class="btn btn-secondary btn-block">Exportar snapshot operacional</button>`, (root) => {
+          $("#sendSystemNotification", root)?.addEventListener("click", () => this.openSystemNotificationForm());
           $("#exportOperationalSnapshot", root)?.addEventListener("click", () => {
             const blob = new Blob([JSON.stringify({ generated_at: nowIso(), release: APP_RELEASE, ...data }, null, 2)], { type: "application/json" });
             const link = document.createElement("a"); link.href = URL.createObjectURL(blob); link.download = `resenha-fc-beta-snapshot-${new Date().toISOString().slice(0,10)}.json`; link.click(); URL.revokeObjectURL(link.href);
@@ -1644,6 +1650,82 @@
         if (!silent) throw error;
         console.warn("Não foi possível remover a assinatura push durante a saída.", error);
       }
+    },
+
+    async maybeShowNotificationOnboarding() {
+      const key = "resenha-notification-onboarding-v1";
+      if (localStorage.getItem(key) === "done") return;
+      if (!isStandalone() || !pushSupported()) return;
+      if (!String(window.RESENHA_CONFIG?.vapidPublicKey || "").trim()) return;
+      if (Notification.permission === "denied") {
+        localStorage.setItem(key, "done");
+        return;
+      }
+      try {
+        const subscription = await this.currentPushSubscription();
+        const endpoint = subscription?.endpoint || "";
+        const linked = Boolean(endpoint && (this.state.push_subscriptions || []).some(item => item.endpoint === endpoint && item.enabled));
+        if (subscription && linked) {
+          localStorage.setItem(key, "done");
+          return;
+        }
+      } catch (error) {
+        console.warn("Falha ao verificar o primeiro acesso às notificações.", error);
+      }
+
+      const overlay = document.createElement("div");
+      overlay.className = "notification-onboarding-overlay";
+      overlay.innerHTML = `<section class="notification-onboarding-card" role="dialog" aria-modal="true" aria-labelledby="notificationOnboardingTitle"><div class="notification-onboarding-icon">🔔</div><h2 id="notificationOnboardingTitle">Ative as notificações</h2><p>Receba avisos do grupo, novas peladas e confirmações de presença mesmo quando o Resenha FC estiver fechado.</p><button type="button" class="btn btn-primary btn-block" id="notificationOnboardingEnable">Ativar agora</button><button type="button" class="notification-onboarding-later" id="notificationOnboardingLater">Agora não</button><small>Você poderá alterar esta opção depois em Mais → Notificações no celular.</small></section>`;
+      document.body.appendChild(overlay);
+      const finish = () => {
+        localStorage.setItem(key, "done");
+        overlay.remove();
+      };
+      $("#notificationOnboardingLater", overlay)?.addEventListener("click", finish);
+      $("#notificationOnboardingEnable", overlay)?.addEventListener("click", async event => {
+        const button = event.currentTarget;
+        button.disabled = true;
+        button.textContent = "Ativando…";
+        try {
+          await this.enablePushNotifications();
+          finish();
+          this.toast("Notificações ativadas neste aparelho.");
+        } catch (error) {
+          button.disabled = false;
+          button.textContent = "Ativar agora";
+          this.toast(error.message || "Não foi possível ativar as notificações.", true);
+        }
+      });
+    },
+
+    openSystemNotificationForm() {
+      if (!this.state.is_platform_admin) return this.toast("Acesso restrito à administração da plataforma.", true);
+      this.modal("Notificação do sistema", `<form id="systemNotificationForm" class="form-grid"><div class="notice notice-success"><strong>Envio para toda a plataforma</strong><br>A notificação será enviada a todos os aparelhos ativos vinculados ao Resenha FC.</div><div class="field"><label>Título</label><input name="title" required maxlength="80" autocomplete="off" placeholder="Ex.: Atualização disponível"></div><div class="field"><label>Mensagem</label><textarea name="body" required maxlength="500" placeholder="Escreva a comunicação do sistema"></textarea></div><button id="publishSystemNotificationButton" type="submit" class="btn btn-primary btn-block">Enviar para todos</button></form>`, (root, close) => {
+        const form = $("#systemNotificationForm", root);
+        const button = $("#publishSystemNotificationButton", root);
+        form?.addEventListener("submit", async event => {
+          event.preventDefault();
+          if (!button || button.disabled) return;
+          const data = new FormData(event.currentTarget);
+          const title = String(data.get("title") || "").trim();
+          const body = String(data.get("body") || "").trim();
+          if (title.length < 2 || body.length < 2) return this.toast("Informe um título e uma mensagem válidos.", true);
+          if (!confirm("Enviar esta notificação para todos os usuários com aparelho vinculado?")) return;
+          button.disabled = true;
+          button.textContent = "Enviando…";
+          try {
+            const result = await this.repo.publishSystemNotification(title, body);
+            close();
+            const sent = Number(result.sent || 0);
+            const failed = Number(result.failed || 0);
+            this.toast(sent ? `Notificação enviada a ${sent} aparelho(s)${failed ? `; ${failed} falharam` : ""}.` : "Nenhum aparelho ativo recebeu a notificação.", !sent);
+          } catch (error) {
+            button.disabled = false;
+            button.textContent = "Enviar para todos";
+            this.toast(error.message || "Não foi possível enviar a notificação do sistema.", true);
+          }
+        });
+      });
     },
 
     async openNotificationSettings() {

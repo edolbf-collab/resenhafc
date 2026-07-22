@@ -1,7 +1,9 @@
 {
   "channel": "beta",
   "version": "Beta 1.0",
-  "build": 101,
-  "releasedAt": "2026-07-21T23:30:00-03:00",
-  "notes": "Administrador e organizador podem remover integrantes, preservando o histórico do grupo."
+  "build": 102,
+  "database": 102,
+  "edge": 102,
+  "mandatory": false,
+  "notes": "Convite inicial para ativar notificações e envio de notificações gerais pela administração da plataforma."
 }

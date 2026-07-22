@@ -259,3 +259,13 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .member-manager-summary { display: flex; align-items: center; gap: 12px; padding: 12px; margin-bottom: 12px; border: 1px solid var(--line); border-radius: 16px; background: rgba(255,255,255,.025); }
 .member-manager-summary > div:last-child { display: grid; gap: 3px; }
 .member-manager-summary small { color: var(--muted); }
+
+
+/* Beta 1.0 Build 102 — convite inicial para notificações */
+.notification-onboarding-overlay{position:fixed;inset:0;z-index:1400;display:grid;place-items:center;padding:24px;background:rgba(0,10,14,.76);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+.notification-onboarding-card{width:min(100%,390px);padding:28px 24px 22px;border:1px solid rgba(105,233,87,.28);border-radius:26px;background:linear-gradient(160deg,#0b2630,#061b24 72%);box-shadow:0 24px 80px rgba(0,0,0,.46);text-align:center;color:#fff}
+.notification-onboarding-icon{display:grid;place-items:center;width:68px;height:68px;margin:0 auto 16px;border-radius:22px;background:rgba(75,210,65,.16);font-size:34px}
+.notification-onboarding-card h2{margin:0 0 10px;font-size:1.55rem}
+.notification-onboarding-card p{margin:0 0 20px;color:var(--muted,#a9bbc2);line-height:1.5}
+.notification-onboarding-card small{display:block;margin-top:14px;color:var(--muted,#8fa4ac);line-height:1.4}
+.notification-onboarding-later{width:100%;margin-top:8px;padding:12px;border:0;background:transparent;color:#c4d3d8;font:inherit;font-weight:700}
