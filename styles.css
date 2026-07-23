@@ -343,3 +343,42 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .draw-reveal-card{min-height:190px;margin-top:14px;border:1px solid rgba(255,255,255,.2);border-radius:18px;background:rgba(255,255,255,.08);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9px;padding:20px}.draw-reveal-card>span{font-size:58px;font-weight:900}.draw-reveal-card strong{font-size:21px}.draw-reveal-card small{opacity:.75}.draw-reveal-card.is-revealed{animation:drawReveal .48s cubic-bezier(.2,.8,.2,1)}.draw-reveal-avatar{width:72px;height:72px;font-size:24px}
 .draw-reveal-progress{text-align:center;color:var(--muted);font-weight:700}@keyframes drawReveal{0%{opacity:0;transform:scale(.78) rotateY(70deg)}100%{opacity:1;transform:scale(1) rotateY(0)}}
 .match-bbq-compact{margin:14px 0}.match-bbq-form.compact{padding:0}.bbq-toggle-row{padding:13px 15px;border:1px solid var(--line);border-radius:16px;background:var(--surface);font-weight:800}.bbq-expanded-options{display:grid;gap:12px;margin-top:12px;padding:15px;border:1px solid var(--line);border-radius:18px;background:var(--surface)}.bbq-expanded-options[hidden]{display:none!important}.match-bbq-section.is-enabled{margin-top:16px}
+
+/* Beta 1.0 Build 109 — participantes do churrasco */
+.bbq-participants-panel {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface-soft, rgba(255,255,255,.55));
+}
+.bbq-participants-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.bbq-participants-head span {
+  font-size: .78rem;
+  color: var(--muted);
+  text-align: right;
+}
+.bbq-participants-list {
+  display: grid;
+  gap: 8px;
+}
+.bbq-participant-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 0;
+  border-top: 1px solid var(--line);
+}
+.bbq-participant-row:first-child { border-top: 0; }
+.bbq-participant-avatar { width: 38px; height: 38px; flex: 0 0 38px; }
+.bbq-participants-empty {
+  padding: 10px 0 2px;
+  color: var(--muted);
+  font-size: .86rem;
+}

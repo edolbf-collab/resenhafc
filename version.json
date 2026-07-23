@@ -1,8 +1,8 @@
 {
   "channel": "beta",
   "version": "Beta 1.0",
-  "build": 108,
-  "database": 108,
+  "build": 109,
+  "database": 109,
   "edge": 102,
   "mandatory": false,
   "notes": "Sorteio dedicado dentro de cada evento, com seleção manual dos participantes, quantidade livre para a espera e modos instantâneo ou revelação. O churrasco fica compacto quando desativado e expande suas opções somente ao marcar o checkbox."

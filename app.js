@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const APP_RELEASE = Object.freeze({ channel: "beta", version: "Beta 1.0", build: 108, database: 108, edge: 102 });
+  const APP_RELEASE = Object.freeze({ channel: "beta", version: "Beta 1.0", build: 109, database: 109, edge: 102 });
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
   const uid = () => crypto.randomUUID?.() || "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
@@ -369,7 +369,7 @@
     }
 
     async drawMatchWaitlist(matchId, playerIds, waitlistCount) {
-      const { data, error } = await this.client.rpc("draw_match_waitlist", {
+      const { data, error } = await this.client.rpc("draw_match_waitlist_v2", {
         p_match_id: matchId,
         p_player_ids: playerIds,
         p_waitlist_count: Number(waitlistCount)
@@ -1402,7 +1402,16 @@
       const pendingPlayers = this.activePlayers().filter(player => !this.attendanceFor(id).some(item => item.player_id === player.id));
       const confirmedCount = grouped.confirmed.length;
       const barbecueParticipants = this.attendanceFor(id).filter(item => item.bbq);
-      const barbecueTotal = barbecueParticipants.reduce((sum, item) => sum + 1 + Number(item.bbq_guests || 0), 0);
+      const barbecueGuestsTotal = barbecueParticipants.reduce((sum, item) => sum + Number(item.bbq_guests || 0), 0);
+      const barbecueTotal = barbecueParticipants.length + barbecueGuestsTotal;
+      const barbecueParticipantRows = barbecueParticipants
+        .map(item => {
+          const player = this.player(item.player_id) || { name: "Participante", primary_position: "" };
+          const guests = Number(item.bbq_guests || 0);
+          const details = [guests ? `${guests} acompanhante(s)` : "Sem acompanhantes", item.bbq_note ? `Levará: ${item.bbq_note}` : ""].filter(Boolean).join(" · ");
+          return `<div class="bbq-participant-row">${this.personAvatar(player, "bbq-participant-avatar")}<div class="list-main"><strong>${escapeHtml(player.name)}</strong><small>${escapeHtml(details)}</small></div>${this.isGuest(player) ? '<span class="guest-badge">Convidado</span>' : ""}</div>`;
+        })
+        .join("");
       const attendanceRow = (item, key) => {
         const player = this.player(item.player_id) || { name: "Jogador" };
         const trailing = key === "waitlist" ? `<span class="waitlist-position">#${Number(item.waitlist_position || 0) || "–"}</span>` : "";
@@ -1421,7 +1430,7 @@
         : grouped.waitlist.length ? `<section class="match-draw-section"><div class="section-title"><h2>Resultado da espera</h2></div>${drawStatus}</section>` : "";
 
       const bbqExpanded = match.bbq_enabled
-        ? `<section class="match-bbq-section is-enabled"><div class="section-title"><h2>Confraternização</h2><small>Configuração exclusiva desta pelada.</small></div><div class="bbq-status enabled"><span>♨</span><div><strong>Churrasco confirmado</strong><small>${barbecueTotal} participante(s) · ${money(match.bbq_price || 0)} por pessoa</small></div></div>${future && this.canManageGroup() ? `<form id="matchBbqForm" class="match-bbq-form"><label class="check-row"><input name="bbq_enabled" type="checkbox" checked> Haverá churrasco nesta pelada</label><div class="bbq-expanded-options"><div class="field" id="matchBbqPriceField"><label>Valor por pessoa</label><input name="bbq_price" type="number" min="0" step="0.01" value="${Number(match.bbq_price || 0)}" inputmode="decimal"></div><button class="btn btn-secondary btn-block">Salvar churrasco</button></div></form>` : ""}</section>`
+        ? `<section class="match-bbq-section is-enabled"><div class="section-title"><h2>Confraternização</h2><small>Configuração exclusiva desta pelada.</small></div><div class="bbq-status enabled"><span>♨</span><div><strong>Churrasco confirmado</strong><small>${barbecueParticipants.length} membro(s)${barbecueGuestsTotal ? ` + ${barbecueGuestsTotal} acompanhante(s)` : ""} · ${money(match.bbq_price || 0)} por pessoa</small></div></div><div class="bbq-participants-panel"><div class="bbq-participants-head"><strong>Quem participará</strong><span>${barbecueTotal} pessoa(s) no total</span></div><div class="bbq-participants-list">${barbecueParticipantRows || '<div class="bbq-participants-empty">Ninguém marcou participação no churrasco.</div>'}</div></div>${future && this.canManageGroup() ? `<form id="matchBbqForm" class="match-bbq-form"><label class="check-row"><input name="bbq_enabled" type="checkbox" checked> Haverá churrasco nesta pelada</label><div class="bbq-expanded-options"><div class="field" id="matchBbqPriceField"><label>Valor por pessoa</label><input name="bbq_price" type="number" min="0" step="0.01" value="${Number(match.bbq_price || 0)}" inputmode="decimal"></div><button class="btn btn-secondary btn-block">Salvar churrasco</button></div></form>` : ""}</section>`
         : future && this.canManageGroup()
           ? `<section class="match-bbq-compact"><form id="matchBbqForm" class="match-bbq-form compact"><label class="check-row bbq-toggle-row"><input name="bbq_enabled" type="checkbox"> Haverá churrasco nesta pelada</label><div class="bbq-expanded-options" hidden><div class="bbq-status enabled"><span>♨</span><div><strong>Configurar churrasco</strong><small>Informe o valor e salve para abrir as opções aos participantes.</small></div></div><div class="field" id="matchBbqPriceField"><label>Valor por pessoa</label><input name="bbq_price" type="number" min="0" step="0.01" value="0" inputmode="decimal"></div><button class="btn btn-secondary btn-block">Salvar churrasco</button></div></form></section>`
           : "";
@@ -1534,15 +1543,23 @@
           if (!submit || submit.disabled) return;
           submit.disabled = true;
           submit.textContent = "Sorteando...";
-          const result = await this.repo.drawMatchWaitlist(matchId, selected, count);
-          this.state = this.repo.state;
-          close();
-          this.render();
-          const drawnIds = Array.isArray(result.waitlist_player_ids) ? result.waitlist_player_ids : [];
-          if (mode === "reveal" && drawnIds.length) this.openWaitlistReveal(matchId, drawnIds);
-          else {
-            this.openMatchDetails(matchId);
-            this.toast(`${Number(result.waitlist_count || count)} participante(s) sorteado(s) para a espera inicial.`);
+          try {
+            const result = await this.repo.drawMatchWaitlist(matchId, selected, count);
+            this.state = this.repo.state;
+            close();
+            this.render();
+            const drawnIds = Array.isArray(result.waitlist_player_ids) ? result.waitlist_player_ids : [];
+            if (!drawnIds.length) throw new Error("O sorteio não retornou participantes para a espera.");
+            if (mode === "reveal") this.openWaitlistReveal(matchId, drawnIds);
+            else {
+              this.openMatchDetails(matchId);
+              this.toast(`${Number(result.waitlist_count || count)} participante(s) sorteado(s) para a espera inicial.`);
+            }
+          } catch (error) {
+            console.error("Falha ao realizar sorteio:", error);
+            submit.disabled = false;
+            submit.textContent = "Realizar sorteio";
+            this.toast(error?.message || "Não foi possível realizar o sorteio.", true);
           }
         });
       });
