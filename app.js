@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const APP_RELEASE = Object.freeze({ channel: "beta", version: "Beta 1.0", build: 112, database: 110, edge: 102 });
+  const APP_RELEASE = Object.freeze({ channel: "beta", version: "Beta 1.0", build: 113, database: 113, edge: 102 });
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
   const uid = () => crypto.randomUUID?.() || "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
@@ -974,17 +974,49 @@
       const expenses = this.state.expenses;
       const income = payments.reduce((sum, item) => sum + Number(item.amount), 0);
       const out = expenses.reduce((sum, item) => sum + Number(item.amount), 0);
-      const charges = this.state.charges;
-      const paid = charges.filter(item => item.status === "paid").length;
-      const pct = charges.length ? Math.round(paid / charges.length * 100) : 0;
+      const chargeSummaries = this.state.charges.map(charge => {
+        const amount = Number(charge.amount || 0);
+        const paidAmount = payments
+          .filter(payment => payment.charge_id === charge.id)
+          .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+        const remaining = Math.max(0, amount - paidAmount);
+        const effectiveStatus = charge.status === "cancelled"
+          ? "cancelled"
+          : paidAmount >= amount && amount > 0
+            ? "paid"
+            : paidAmount > 0
+              ? "partial"
+              : charge.status;
+        return { ...charge, amount, paidAmount, remaining, effectiveStatus };
+      });
+      const activeCharges = chargeSummaries.filter(charge => charge.effectiveStatus !== "cancelled");
+      const totalCharged = activeCharges.reduce((sum, charge) => sum + charge.amount, 0);
+      const totalApplied = activeCharges.reduce((sum, charge) => sum + Math.min(charge.paidAmount, charge.amount), 0);
+      const paid = chargeSummaries.filter(charge => charge.effectiveStatus === "paid").length;
+      const partial = chargeSummaries.filter(charge => charge.effectiveStatus === "partial").length;
+      const pct = totalCharged ? Math.min(100, Math.round(totalApplied / totalCharged * 100)) : 0;
       const canDelete = this.canManageFinance();
       const movements = [
         ...payments.map(item => ({ ...item, entryType: "payment", type: "income", description: item.description || `Pagamento · ${this.player(item.player_id)?.nickname || "Jogador"}`, date: item.paid_at })),
         ...expenses.map(item => ({ ...item, entryType: "expense", type: "expense", date: item.occurred_at }))
       ].sort((a, b) => new Date(b.date) - new Date(a.date));
-      return `<div class="page-head"><div><span class="page-kicker">FINANCEIRO</span><h1>Caixa</h1><p>Mensalidades, quadra, materiais e churrasco.</p></div>${canDelete ? '<button class="btn btn-primary btn-small" data-action="new-finance">+ Lançar</button>' : ""}</div>${!canDelete ? '<div class="notice"><strong>Acesso de consulta</strong><br>Somente administrador e tesoureiro podem alterar lançamentos.</div>' : '<div class="notice notice-success"><strong>Acesso autorizado</strong><br>Você pode registrar e excluir cobranças, pagamentos e despesas.</div>'}<section class="card balance-card"><small>Saldo atual</small><h2>${money(income - out)}</h2><div class="balance-grid"><div><small>Entradas</small><strong>${money(income)}</strong></div><div><small>Saídas</small><strong>${money(out)}</strong></div></div><div class="balance-track"><span style="width:${pct}%"></span></div><p>${paid} de ${charges.length} cobranças pagas · ${pct}%</p></section><div class="section-title"><h2>Movimentações</h2></div><div class="list">${movements.map(item => `<div class="card finance-row"><div class="finance-icon ${item.type === "income" ? "finance-income" : "finance-expense"}">${item.type === "income" ? "+" : "−"}</div><div class="list-main"><strong>${escapeHtml(item.description)}</strong><small>${escapeHtml(shortDate(item.date))}</small></div><strong class="money ${item.type === "income" ? "positive" : "negative"}">${item.type === "income" ? "+" : "−"}${money(item.amount)}</strong>${canDelete ? `<button class="row-delete-button" data-action="delete-finance" data-type="${item.entryType}" data-id="${item.id}" aria-label="Excluir lançamento">×</button>` : ""}</div>`).join("") || '<div class="card empty">Sem movimentações.</div>'}</div><div class="section-title"><h2>Cobranças</h2></div><div class="list">${charges.map(charge => { const player = this.player(charge.player_id) || { name: "Grupo", primary_position: charge.description }; return `<div class="card list-row finance-charge-row">${this.personAvatar(player)}<div class="list-main"><strong>${escapeHtml(player.name)}</strong><small>${escapeHtml(charge.description)} · ${money(charge.amount)}</small></div><span class="status-pill ${charge.status === "paid" ? "status-confirmed" : "status-out"}">${charge.status === "paid" ? "Pago" : "Pendente"}</span>${canDelete ? `<button class="row-delete-button" data-action="delete-finance" data-type="charge" data-id="${charge.id}" aria-label="Excluir cobrança">×</button>` : ""}</div>`; }).join("") || '<div class="card empty">Nenhuma cobrança.</div>'}</div>`;
+      const statusPresentation = status => ({
+        paid: ["status-confirmed", "Pago"],
+        partial: ["status-maybe", "Parcial"],
+        overdue: ["status-out", "Vencida"],
+        cancelled: ["status-out", "Cancelada"],
+        open: ["status-out", "Pendente"]
+      }[status] || ["status-out", "Pendente"]);
+      const chargeRows = chargeSummaries.map(charge => {
+        const player = this.player(charge.player_id) || { name: "Grupo", primary_position: charge.description };
+        const [statusClass, statusLabel] = statusPresentation(charge.effectiveStatus);
+        const paymentDetails = charge.paidAmount > 0
+          ? `<small class="finance-charge-progress ${charge.effectiveStatus === "partial" ? "is-partial" : ""}">Pago: ${money(charge.paidAmount)} · ${charge.remaining > 0 ? `Restante: ${money(charge.remaining)}` : "Cobrança quitada"}</small>`
+          : "";
+        return `<div class="card list-row finance-charge-row">${this.personAvatar(player)}<div class="list-main"><strong>${escapeHtml(player.name)}</strong><small>${escapeHtml(charge.description)} · Total: ${money(charge.amount)}</small>${paymentDetails}</div><span class="status-pill ${statusClass}">${statusLabel}</span>${canDelete ? `<button class="row-delete-button" data-action="delete-finance" data-type="charge" data-id="${charge.id}" aria-label="Excluir cobrança">×</button>` : ""}</div>`;
+      }).join("");
+      return `<div class="page-head"><div><span class="page-kicker">FINANCEIRO</span><h1>Caixa</h1><p>Mensalidades, quadra, materiais e churrasco.</p></div>${canDelete ? '<button class="btn btn-primary btn-small" data-action="new-finance">+ Lançar</button>' : ""}</div>${!canDelete ? '<div class="notice"><strong>Acesso de consulta</strong><br>Somente administrador e tesoureiro podem alterar lançamentos.</div>' : '<div class="notice notice-success"><strong>Acesso autorizado</strong><br>Você pode registrar e excluir cobranças, pagamentos e despesas.</div>'}<section class="card balance-card"><small>Saldo atual</small><h2>${money(income - out)}</h2><div class="balance-grid"><div><small>Entradas</small><strong>${money(income)}</strong></div><div><small>Saídas</small><strong>${money(out)}</strong></div></div><div class="balance-track"><span style="width:${pct}%"></span></div><p>${paid} paga(s) · ${partial} parcial(is) · ${pct}% do valor cobrado recebido</p></section><div class="section-title"><h2>Movimentações</h2></div><div class="list">${movements.map(item => `<div class="card finance-row"><div class="finance-icon ${item.type === "income" ? "finance-income" : "finance-expense"}">${item.type === "income" ? "+" : "−"}</div><div class="list-main"><strong>${escapeHtml(item.description)}</strong><small>${escapeHtml(shortDate(item.date))}</small></div><strong class="money ${item.type === "income" ? "positive" : "negative"}">${item.type === "income" ? "+" : "−"}${money(item.amount)}</strong>${canDelete ? `<button class="row-delete-button" data-action="delete-finance" data-type="${item.entryType}" data-id="${item.id}" aria-label="Excluir lançamento">×</button>` : ""}</div>`).join("") || '<div class="card empty">Sem movimentações.</div>'}</div><div class="section-title"><h2>Cobranças</h2></div><div class="list">${chargeRows || '<div class="card empty">Nenhuma cobrança.</div>'}</div>`;
     },
-
 
     morePage() {
       const group = this.currentGroup();
@@ -1705,25 +1737,79 @@
     openFinanceForm() {
       if (!this.canManageFinance()) return this.toast("Somente administração e tesouraria podem alterar o caixa.", true);
       const players = this.activePlayers();
-      this.modal("Novo lançamento", `<form id="financeForm" class="form-grid"><div class="field"><label>Tipo</label><select name="type"><option value="payment">Pagamento recebido</option><option value="expense">Despesa</option><option value="charge">Nova cobrança</option></select></div><div class="field"><label>Jogador</label><select name="player_id"><option value="">Não se aplica</option>${players.map(player => `<option value="${player.id}">${escapeHtml(player.name)}</option>`).join("")}</select></div><div class="field"><label>Descrição</label><input name="description" required placeholder="Mensalidade, quadra, bola..."></div><div class="field"><label>Valor</label><input name="amount" type="number" min="0.01" step="0.01" required></div><button class="btn btn-primary btn-block">Salvar lançamento</button></form>`, (root, close) => {
-        $("#financeForm", root).addEventListener("submit", async event => {
+      this.modal("Novo lançamento", `<form id="financeForm" class="form-grid"><div class="field"><label>Tipo</label><select name="type"><option value="payment">Pagamento recebido</option><option value="expense">Despesa</option><option value="charge">Nova cobrança</option></select></div><div class="field"><label>Jogador</label><select name="player_id"><option value="">Não se aplica</option>${players.map(player => `<option value="${player.id}">${escapeHtml(player.name)}</option>`).join("")}</select></div><div class="notice finance-payment-link" id="paymentChargeInfo" hidden></div><div class="field"><label>Descrição</label><input name="description" required placeholder="Mensalidade, quadra, bola..."></div><div class="field"><label>Valor</label><input name="amount" type="number" min="0.01" step="0.01" required></div><button class="btn btn-primary btn-block">Salvar lançamento</button></form>`, (root, close) => {
+        const formElement = $("#financeForm", root);
+        const typeInput = $('[name="type"]', formElement);
+        const playerInput = $('[name="player_id"]', formElement);
+        const amountInput = $('[name="amount"]', formElement);
+        const chargeInfo = $("#paymentChargeInfo", formElement);
+        const linkedCharge = playerId => {
+          if (!playerId) return null;
+          return this.state.charges
+            .filter(item => item.player_id === playerId && !["paid", "cancelled"].includes(item.status))
+            .map(charge => {
+              const paidAmount = this.state.payments
+                .filter(payment => payment.charge_id === charge.id)
+                .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+              return { ...charge, paidAmount, remaining: Math.max(0, Number(charge.amount || 0) - paidAmount) };
+            })
+            .filter(charge => charge.remaining > 0)
+            .sort((a, b) => String(a.due_date).localeCompare(String(b.due_date)))[0] || null;
+        };
+        const refreshPaymentLink = () => {
+          const isPayment = typeInput.value === "payment";
+          const charge = isPayment ? linkedCharge(playerInput.value) : null;
+          chargeInfo.hidden = !isPayment;
+          amountInput.removeAttribute("max");
+          if (!isPayment) return;
+          if (!playerInput.value) {
+            chargeInfo.innerHTML = "<strong>Pagamento sem participante</strong><br>Escolha um jogador para vincular automaticamente uma cobrança pendente.";
+            return;
+          }
+          if (!charge) {
+            chargeInfo.innerHTML = "<strong>Nenhuma cobrança pendente</strong><br>O pagamento será registrado sem vínculo com cobrança.";
+            return;
+          }
+          amountInput.max = charge.remaining.toFixed(2);
+          chargeInfo.innerHTML = `<strong>Cobrança vinculada: ${escapeHtml(charge.description)}</strong><br>Total: ${money(charge.amount)} · Já pago: ${money(charge.paidAmount)} · Saldo: ${money(charge.remaining)}`;
+        };
+        typeInput.addEventListener("change", refreshPaymentLink);
+        playerInput.addEventListener("change", refreshPaymentLink);
+        refreshPaymentLink();
+
+        formElement.addEventListener("submit", async event => {
           event.preventDefault();
           const form = new FormData(event.currentTarget);
           const type = form.get("type");
           const playerId = form.get("player_id") || null;
-          const base = { id: uid(), group_id: this.state.currentGroupId, description: form.get("description"), amount: Number(form.get("amount")), player_id: playerId };
+          const amount = Number(form.get("amount"));
+          const base = { id: uid(), group_id: this.state.currentGroupId, description: form.get("description"), amount, player_id: playerId };
+          let successMessage = "Lançamento salvo.";
           if (type === "payment") {
-            const charge = this.state.charges.filter(item => item.player_id === playerId && !["paid", "cancelled"].includes(item.status)).sort((a, b) => String(a.due_date).localeCompare(String(b.due_date)))[0];
+            const charge = linkedCharge(playerId);
+            if (charge && amount > charge.remaining + 0.000001) {
+              return this.toast(`O valor excede o saldo restante de ${money(charge.remaining)}.`, true);
+            }
             await this.repo.recordPayment({ ...base, paid_at: nowIso(), method: "manual" }, charge);
+            if (charge) {
+              const remainingAfter = Math.max(0, charge.remaining - amount);
+              successMessage = remainingAfter > 0
+                ? `Pagamento parcial registrado. Restam ${money(remainingAfter)}.`
+                : "Pagamento registrado. Cobrança quitada.";
+            } else {
+              successMessage = "Pagamento registrado sem cobrança vinculada.";
+            }
           } else if (type === "expense") {
             await this.repo.mutate("expenses", { ...base, occurred_at: nowIso(), category: "outros" });
+            successMessage = "Despesa registrada.";
           } else {
             await this.repo.mutate("charges", { ...base, due_date: new Date().toISOString().slice(0, 10), status: "open" });
+            successMessage = "Cobrança criada.";
           }
           this.state = this.repo.state;
           close();
           this.render();
-          this.toast("Lançamento salvo.");
+          this.toast(successMessage);
         });
       });
     },
@@ -1732,7 +1818,7 @@
       if (!this.canManageFinance()) return this.toast("Somente administrador e tesoureiro podem excluir lançamentos.", true);
       const labels = { payment: "pagamento", expense: "despesa", charge: "cobrança" };
       const label = labels[entryType] || "lançamento";
-      const complement = entryType === "payment" ? " Se estiver vinculado a uma cobrança, ela poderá voltar ao status pendente." : "";
+      const complement = entryType === "payment" ? " Se estiver vinculado a uma cobrança, o valor pago, o saldo e o status serão recalculados." : "";
       if (!confirm(`Excluir este ${label} definitivamente?${complement}`)) return;
       await this.repo.deleteFinanceEntry(this.state.currentGroupId, entryType, entryId);
       this.state = this.repo.state;

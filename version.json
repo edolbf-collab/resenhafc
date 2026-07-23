@@ -1,9 +1,9 @@
 {
   "channel": "beta",
   "version": "Beta 1.0",
-  "build": 112,
-  "database": 110,
+  "build": 113,
+  "database": 113,
   "edge": 102,
   "mandatory": false,
-  "notes": "Remove a opção Talvez da confirmação feita pelo participante, mantendo apenas Vou jogar e Não vou."
+  "notes": "Adiciona pagamentos parciais, saldo restante e quitação somente quando a soma dos pagamentos atingir o valor da cobrança."
 }

@@ -483,3 +483,11 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .bbq-summary-card .bbq-participants-summary { flex: 1 1 auto; }
 .bbq-summary-card .bbq-participants-summary strong { font-size: 12px; }
 .bbq-summary-card .bbq-participants-summary small { font-size: 9.5px; }
+
+
+/* Beta 1.0 Build 113 — pagamentos parciais */
+.finance-charge-progress{margin-top:4px!important;color:#8cec71!important;font-size:8.5px!important;line-height:1.4}
+.finance-charge-progress.is-partial{color:#ffc262!important;font-weight:800}
+.finance-payment-link{margin:0;padding:11px 12px;border-color:rgba(245,165,36,.24);background:rgba(245,165,36,.055);font-size:10px;line-height:1.5}
+.finance-payment-link strong{color:#ffd07d}
+.finance-charge-row .list-main{min-width:0}
