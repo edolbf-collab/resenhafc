@@ -1,9 +1,9 @@
 {
   "channel": "beta",
   "version": "Beta 1.0",
-  "build": 111,
+  "build": 112,
   "database": 110,
   "edge": 102,
   "mandatory": false,
-  "notes": "Unifica o resumo e a lista expansível do churrasco em um único balão e compacta o bloco do sorteio da espera."
+  "notes": "Remove a opção Talvez da confirmação feita pelo participante, mantendo apenas Vou jogar e Não vou."
 }

@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const APP_RELEASE = Object.freeze({ channel: "beta", version: "Beta 1.0", build: 111, database: 110, edge: 102 });
+  const APP_RELEASE = Object.freeze({ channel: "beta", version: "Beta 1.0", build: 112, database: 110, edge: 102 });
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
   const uid = () => crypto.randomUUID?.() || "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
@@ -1649,13 +1649,16 @@
       const player = this.myPlayer();
       if (!player) return this.toast("Seu perfil de jogador não foi encontrado.", true);
       const current = this.state.attendance.find(item => item.match_id === matchId && item.player_id === player.id) || {};
-      const selectedStatus = current.status === "waitlist" ? "confirmed" : current.status;
+      const hadMaybeStatus = current.status === "maybe";
+      const selectedStatus = current.status === "waitlist" ? "confirmed" : hadMaybeStatus ? "" : current.status;
       const waitlistNotice = current.status === "waitlist" ? `<div class="notice attendance-waitlist-notice"><strong>Você está na espera inicial</strong><br>Posição atual: ${Number(current.waitlist_position || 0) || "a definir"}. Ao escolher “Vou jogar”, sua intenção de participar será mantida.</div>` : "";
-      this.modal("Confirmar presença", `<form id="rsvpForm" class="form-grid"><div class="notice"><strong>${escapeHtml(match.title)}</strong><br>${escapeHtml(shortDate(match.starts_at))} · ${escapeHtml(match.location)}</div>${waitlistNotice}<div class="radio-grid">${[["confirmed", "Vou jogar"], ["maybe", "Talvez"], ["out", "Não vou"]].map(([value, label]) => `<label class="radio-card"><input type="radio" name="status" value="${value}" ${selectedStatus === value || (!selectedStatus && value === "confirmed") ? "checked" : ""}>${label}</label>`).join("")}</div>${match.bbq_enabled ? `<label class="check-row"><input type="checkbox" name="bbq" ${current.bbq ? "checked" : ""}> Participarei do churrasco</label><div class="field"><label>Acompanhantes</label><input type="number" name="bbq_guests" min="0" max="20" value="${current.bbq_guests || 0}"></div><div class="field"><label>O que vou levar</label><input name="bbq_note" value="${escapeHtml(current.bbq_note || "")}" placeholder="Refrigerante, pão de alho..."></div>` : ""}<button class="btn btn-primary btn-block">Salvar resposta</button></form>`, (root, close) => {
+      const definitiveAnswerNotice = hadMaybeStatus ? `<div class="notice"><strong>Escolha uma resposta definitiva</strong><br>A opção “Talvez” foi removida. Confirme se você vai ou não vai participar.</div>` : "";
+      this.modal("Confirmar presença", `<form id="rsvpForm" class="form-grid"><div class="notice"><strong>${escapeHtml(match.title)}</strong><br>${escapeHtml(shortDate(match.starts_at))} · ${escapeHtml(match.location)}</div>${waitlistNotice}${definitiveAnswerNotice}<div class="radio-grid">${[["confirmed", "Vou jogar"], ["out", "Não vou"]].map(([value, label]) => `<label class="radio-card"><input type="radio" name="status" value="${value}" required ${selectedStatus === value || (!current.status && value === "confirmed") ? "checked" : ""}>${label}</label>`).join("")}</div>${match.bbq_enabled ? `<label class="check-row"><input type="checkbox" name="bbq" ${current.bbq ? "checked" : ""}> Participarei do churrasco</label><div class="field"><label>Acompanhantes</label><input type="number" name="bbq_guests" min="0" max="20" value="${current.bbq_guests || 0}"></div><div class="field"><label>O que vou levar</label><input name="bbq_note" value="${escapeHtml(current.bbq_note || "")}" placeholder="Refrigerante, pão de alho..."></div>` : ""}<button class="btn btn-primary btn-block">Salvar resposta</button></form>`, (root, close) => {
         $("#rsvpForm", root).addEventListener("submit", async event => {
           event.preventDefault();
           const form = new FormData(event.currentTarget);
-          const requestedStatus = form.get("status");
+          const requestedStatus = String(form.get("status") || "");
+          if (!["confirmed", "out"].includes(requestedStatus)) return this.toast("Escolha se você vai ou não vai participar.", true);
           const submit = event.submitter;
           submit.disabled = true;
           submit.textContent = "Salvando...";
