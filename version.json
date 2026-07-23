@@ -1,9 +1,9 @@
 {
   "channel": "beta",
   "version": "Beta 1.0",
-  "build": 106,
-  "database": 104,
+  "build": 107,
+  "database": 107,
   "edge": 102,
   "mandatory": false,
-  "notes": "Ativa o Cloudflare Web Analytics por instalação manual do beacon no index.html. Remove a dependência da injeção automática do Cloudflare Pages."
+  "notes": "Convidados passam a ser vinculados a um único evento, com nome validado, apelido opcional, posição obrigatória, edição e exclusão por administrador ou organizador e bloqueio contra múltiplos envios."
 }

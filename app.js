@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const APP_RELEASE = Object.freeze({ channel: "beta", version: "Beta 1.0", build: 106, database: 104, edge: 102 });
+  const APP_RELEASE = Object.freeze({ channel: "beta", version: "Beta 1.0", build: 107, database: 107, edge: 102 });
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
   const uid = () => crypto.randomUUID?.() || "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
@@ -373,6 +373,39 @@
       if (error) throw error;
       await this.loadGroup(this.state.currentGroupId, { subscribe: false });
       return data || {};
+    }
+
+    async createMatchGuest(payload) {
+      const { data, error } = await this.client.rpc("create_match_guest", {
+        p_match_id: payload.matchId,
+        p_name: payload.name,
+        p_nickname: payload.nickname || "",
+        p_primary_position: payload.position,
+        p_goalkeeper: Boolean(payload.goalkeeper)
+      });
+      if (error) throw error;
+      await this.loadGroup(this.state.currentGroupId, { subscribe: false });
+      return data;
+    }
+
+    async updateMatchGuest(payload) {
+      const { data, error } = await this.client.rpc("update_match_guest", {
+        p_player_id: payload.playerId,
+        p_name: payload.name,
+        p_nickname: payload.nickname || "",
+        p_primary_position: payload.position,
+        p_goalkeeper: Boolean(payload.goalkeeper)
+      });
+      if (error) throw error;
+      await this.loadGroup(this.state.currentGroupId, { subscribe: false });
+      return data;
+    }
+
+    async deleteMatchGuest(playerId) {
+      const { data, error } = await this.client.rpc("delete_match_guest", { p_player_id: playerId });
+      if (error) throw error;
+      await this.loadGroup(this.state.currentGroupId, { subscribe: false });
+      return data;
     }
 
     async rateMember(groupId, playerId, score) {
@@ -759,7 +792,10 @@
     canManageMatches() { return ["admin", "organizer"].includes(this.currentRole()); },
     canManageFinance() { return ["admin", "treasurer"].includes(this.currentRole()); },
     canSeeRatings() { return this.currentRole() === "admin"; },
-    activePlayers() { return (this.state?.players || []).filter(player => player.active !== false); },
+    activePlayers() { return (this.state?.players || []).filter(player => player.active !== false && !player.guest_match_id); },
+    guestPlayers() { return (this.state?.players || []).filter(player => player.active !== false && Boolean(player.guest_match_id)); },
+    matchPlayers(matchId) { return (this.state?.players || []).filter(player => player.active !== false && (!player.guest_match_id || player.guest_match_id === matchId)); },
+    isGuest(player) { return Boolean(player?.guest_match_id); },
     player(id) { return this.state?.players.find(player => player.id === id); },
     memberPlayer(member) { return this.player(member?.player_id) || this.state?.players.find(player => player.user_id === member?.user_id); },
     myPlayer() {
@@ -900,7 +936,7 @@
 
     teamCard(name, assignments) {
       const members = assignments.filter(item => item.team_name === name).sort((a, b) => a.slot - b.slot).map(item => this.player(item.player_id)).filter(Boolean);
-      return `<section class="card team-card"><div class="team-head"><div class="team-shirt">${name.includes("Verde") ? "🟢" : name.includes("Azul") ? "🔵" : name.includes("Laranja") ? "🟠" : "⚪"}</div><strong>${escapeHtml(name)}</strong><small>${members.length} jogadores</small></div>${members.map(player => { const summary = this.ratingSummary(player.id); return `<div class="team-player">${this.personAvatar(player)}<div class="list-main"><strong>${escapeHtml(player.nickname || player.name)}</strong><small>${escapeHtml(player.primary_position || "Sem posição")}${summary?.average ? ` · nota ${summary.average.toFixed(1)}` : ""}</small></div>${player.goalkeeper ? '<span class="score-pill">GOL</span>' : ""}</div>`; }).join("")}</section>`;
+      return `<section class="card team-card"><div class="team-head"><div class="team-shirt">${name.includes("Verde") ? "🟢" : name.includes("Azul") ? "🔵" : name.includes("Laranja") ? "🟠" : "⚪"}</div><strong>${escapeHtml(name)}</strong><small>${members.length} jogadores</small></div>${members.map(player => { const summary = this.ratingSummary(player.id); return `<div class="team-player">${this.personAvatar(player)}<div class="list-main"><strong>${escapeHtml(player.nickname || player.name)}</strong><small>${escapeHtml(player.primary_position || "Sem posição")}${summary?.average ? ` · nota ${summary.average.toFixed(1)}` : ""}</small></div><div class="team-player-trailing">${this.isGuest(player) ? '<span class="guest-badge">Convidado</span>' : ""}${player.goalkeeper ? '<span class="score-pill">GOL</span>' : ""}</div></div>`; }).join("")}</section>`;
     },
 
     membersPage() {
@@ -1369,7 +1405,8 @@
         const player = this.player(item.player_id) || { name: "Jogador" };
         const trailing = key === "waitlist" ? `<span class="waitlist-position">#${Number(item.waitlist_position || 0) || "–"}</span>` : "";
         const managerNote = item.status_change_source === "manager" ? '<small class="attendance-managed-note">ajustado pela organização</small>' : "";
-        return `<div class="card list-row attendance-list-row">${this.personAvatar(player)}<div class="list-main"><strong>${escapeHtml(player.name)}</strong><small>${escapeHtml(player.primary_position || "Sem posição")}</small>${managerNote}</div>${trailing}</div>`;
+        const guestBadge = this.isGuest(player) ? '<span class="guest-badge">Convidado</span>' : "";
+        return `<div class="card list-row attendance-list-row">${this.personAvatar(player)}<div class="list-main"><strong>${escapeHtml(player.name)}</strong><small>${escapeHtml(player.primary_position || "Sem posição")}</small>${managerNote}</div><div class="attendance-row-trailing">${guestBadge}${trailing}</div></div>`;
       };
       const groupHtml = (title, key) => `<div class="section-title"><h2>${title} (${grouped[key].length})</h2></div><div class="list">${grouped[key].map(item => attendanceRow(item, key)).join("") || '<div class="card empty">Nenhum.</div>'}</div>`;
       const recurringInfo = recurring ? `<div class="recurrence-detail"><span>↻</span><div><strong>Pelada semanal recorrente</strong><small>Esta data pertence a uma série criada automaticamente.</small></div></div>` : "";
@@ -1461,7 +1498,7 @@
       const match = this.state.matches.find(item => item.id === matchId);
       if (!match || new Date(match.starts_at) <= new Date()) return this.toast("As presenças de jogos do histórico não podem ser alteradas.", true);
       const attendance = new Map(this.attendanceFor(matchId).map(item => [item.player_id, item]));
-      const players = this.activePlayers().sort((a, b) => String(a.name).localeCompare(String(b.name), "pt-BR"));
+      const players = this.matchPlayers(matchId).sort((a, b) => String(a.name).localeCompare(String(b.name), "pt-BR"));
       const rows = players.map(player => {
         const current = attendance.get(player.id);
         const status = current?.status || "pending";
@@ -1586,41 +1623,92 @@
     },
 
     openPlayers() {
-      this.modal("Jogadores sem acesso", `${this.canManageMatches() ? '<button class="btn btn-primary btn-block" id="addPlayer">+ Cadastrar convidado</button>' : ""}<div class="section-title"><h2>Jogadores ativos</h2></div><div class="list">${this.activePlayers().filter(player => !player.user_id).map(player => this.playerRow(player)).join("") || '<div class="card empty">Nenhum convidado cadastrado.</div>'}</div>`, root => {
-        $("#addPlayer", root)?.addEventListener("click", () => this.openPlayerForm());
+      if (!this.canManageMatches()) return this.toast("Somente administrador e organizador podem gerenciar convidados.", true);
+      const guests = this.guestPlayers().sort((a, b) => {
+        const matchA = this.state.matches.find(item => item.id === a.guest_match_id);
+        const matchB = this.state.matches.find(item => item.id === b.guest_match_id);
+        return new Date(matchA?.starts_at || 0) - new Date(matchB?.starts_at || 0) || String(a.name).localeCompare(String(b.name), "pt-BR");
+      });
+      const rows = guests.map(player => {
+        const match = this.state.matches.find(item => item.id === player.guest_match_id);
+        const eventLabel = match ? `${match.title} · ${shortDate(match.starts_at)}` : "Evento indisponível";
+        return `<button type="button" class="card list-row guest-manage-row" data-edit-guest="${player.id}">${this.personAvatar(player)}<div class="list-main"><strong>${escapeHtml(player.name)}</strong><small>${escapeHtml(player.primary_position)} · ${escapeHtml(eventLabel)}</small></div><span class="guest-badge">Convidado</span><strong>›</strong></button>`;
+      }).join("");
+      this.modal("Convidados por evento", `<button class="btn btn-primary btn-block" id="addPlayer">+ Incluir convidado</button><div class="section-title"><h2>Convidados cadastrados</h2><small>Visíveis somente no evento escolhido.</small></div><div class="list">${rows || '<div class="card empty">Nenhum convidado cadastrado.</div>'}</div>`, root => {
+        $("#addPlayer", root)?.addEventListener("click", event => {
+          if (event.currentTarget.disabled) return;
+          event.currentTarget.disabled = true;
+          this.openPlayerForm();
+        }, { once: true });
+        $$('[data-edit-guest]', root).forEach(button => button.addEventListener("click", () => this.openPlayerForm(button.dataset.editGuest), { once: true }));
       });
     },
 
-    openPlayerForm() {
-      if (!this.canManageMatches()) return this.toast("Sem permissão para cadastrar convidados.", true);
-      this.modal("Cadastrar convidado", `<form id="playerForm" class="form-grid"><div class="field"><label>Nome completo</label><input name="name" required></div><div class="field"><label>Apelido</label><input name="nickname"></div><div class="field"><label>Posição</label><select name="position">${positionOptions.map(position => `<option>${position}</option>`).join("")}</select></div><label class="check-row"><input name="goalkeeper" type="checkbox"> Também joga no gol</label><button class="btn btn-primary btn-block">Cadastrar</button></form>`, (root, close) => {
-        $("#playerForm", root).addEventListener("submit", async event => {
+    openPlayerForm(playerId = null) {
+      if (!this.canManageMatches()) return this.toast("Sem permissão para gerenciar convidados.", true);
+      const player = playerId ? this.state.players.find(item => item.id === playerId && item.guest_match_id) : null;
+      if (playerId && !player) return this.toast("Convidado não encontrado.", true);
+      const futureMatches = this.state.matches
+        .filter(match => new Date(match.starts_at) > new Date() && !["cancelled", "finished"].includes(match.status))
+        .sort((a, b) => new Date(a.starts_at) - new Date(b.starts_at));
+      if (!player && !futureMatches.length) return this.toast("Crie um evento futuro antes de incluir convidados.", true);
+      const eventOptions = futureMatches.map(match => `<option value="${match.id}" ${player?.guest_match_id === match.id ? "selected" : ""}>${escapeHtml(match.title)} · ${escapeHtml(shortDate(match.starts_at))}</option>`).join("");
+      const positionItems = positionOptions.map(position => `<option value="${position}" ${player?.primary_position === position ? "selected" : ""}>${position}</option>`).join("");
+      const title = player ? "Editar convidado" : "Incluir convidado";
+      this.modal(title, `<form id="playerForm" class="form-grid" novalidate><div class="field"><label>Evento</label><select name="match_id" required ${player ? "disabled" : ""}><option value="">Selecione o evento</option>${eventOptions}</select>${player ? `<input type="hidden" name="match_id" value="${player.guest_match_id}">` : ""}</div><div class="field"><label>Nome</label><input name="name" required minlength="2" maxlength="80" autocomplete="off" value="${escapeHtml(player?.name || "")}" placeholder="Ex.: João da Silva"><small>Letras, espaços, ponto, apóstrofo e hífen.</small></div><div class="field"><label>Apelido <span class="optional-label">opcional</span></label><input name="nickname" maxlength="40" autocomplete="off" value="${escapeHtml(player?.nickname || "")}" placeholder="Ex.: João"></div><div class="field"><label>Posição</label><select name="position" required><option value="">Selecione a posição</option>${positionItems}</select></div><label class="check-row"><input name="goalkeeper" type="checkbox" ${player?.goalkeeper ? "checked" : ""}> Também joga no gol</label><button class="btn btn-primary btn-block" type="submit">${player ? "Salvar alterações" : "Incluir convidado"}</button>${player ? '<button class="btn btn-danger-outline btn-block" type="button" id="deleteGuest">Excluir convidado</button>' : ""}</form>`, (root, close) => {
+        const formEl = $("#playerForm", root);
+        let submitting = false;
+        formEl.addEventListener("submit", async event => {
           event.preventDefault();
-          const form = new FormData(event.currentTarget);
-          const position = form.get("position");
-          await this.repo.mutate("players", {
-            id: uid(),
-            group_id: this.state.currentGroupId,
-            user_id: null,
-            name: form.get("name"),
-            nickname: form.get("nickname") || String(form.get("name")).split(" ")[0],
-            skill: 3.5,
-            fair_play: 4,
-            conditioning: 3.5,
-            primary_position: position,
-            secondary_position: "",
-            goalkeeper: form.get("goalkeeper") === "on" || position === "Goleiro",
-            active: true,
-            games: 0,
-            wins: 0,
-            goals: 0,
-            assists: 0
-          });
-          this.state = this.repo.state;
-          close();
-          this.render();
-          this.toast("Convidado cadastrado.");
+          if (submitting) return;
+          const form = new FormData(formEl);
+          const name = String(form.get("name") || "").trim().replace(/\s+/g, " ");
+          const nickname = String(form.get("nickname") || "").trim().replace(/\s+/g, " ");
+          const position = String(form.get("position") || "");
+          const matchId = String(form.get("match_id") || "");
+          const validText = /^[\p{L}][\p{L}\p{M} .’'\-]{1,79}$/u;
+          const validNickname = !nickname || /^[\p{L}\p{N}][\p{L}\p{M}\p{N} .’'\-]{0,39}$/u.test(nickname);
+          if (!matchId) return this.toast("Selecione o evento do convidado.", true);
+          if (!validText.test(name)) return this.toast("Informe um nome válido usando letras, espaços, ponto, apóstrofo ou hífen.", true);
+          if (!validNickname) return this.toast("O apelido contém caracteres não permitidos.", true);
+          if (!positionOptions.includes(position)) return this.toast("Selecione a posição do convidado.", true);
+          submitting = true;
+          const submit = formEl.querySelector('button[type="submit"]');
+          $$('button, input, select', formEl).forEach(control => control.disabled = true);
+          submit.textContent = player ? "Salvando..." : "Incluindo...";
+          try {
+            const payload = { playerId: player?.id, matchId, name, nickname, position, goalkeeper: form.get("goalkeeper") === "on" || position === "Goleiro" };
+            if (player) await this.repo.updateMatchGuest(payload); else await this.repo.createMatchGuest(payload);
+            this.state = this.repo.state;
+            close();
+            this.render();
+            this.toast(player ? "Dados do convidado atualizados." : "Convidado incluído no evento.");
+          } catch (error) {
+            submitting = false;
+            $$('button, input, select', formEl).forEach(control => control.disabled = false);
+            if (player) $('[name="match_id"]', formEl).disabled = true;
+            submit.textContent = player ? "Salvar alterações" : "Incluir convidado";
+            this.toast(error.message || "Não foi possível salvar o convidado.", true);
+          }
         });
+        $("#deleteGuest", root)?.addEventListener("click", async event => {
+          if (submitting || !confirm(`Excluir ${player.name} deste evento?`)) return;
+          submitting = true;
+          event.currentTarget.disabled = true;
+          event.currentTarget.textContent = "Excluindo...";
+          try {
+            await this.repo.deleteMatchGuest(player.id);
+            this.state = this.repo.state;
+            close();
+            this.render();
+            this.toast("Convidado excluído do evento.");
+          } catch (error) {
+            submitting = false;
+            event.currentTarget.disabled = false;
+            event.currentTarget.textContent = "Excluir convidado";
+            this.toast(error.message || "Não foi possível excluir o convidado.", true);
+          }
+        }, { once: true });
       });
     },
 
