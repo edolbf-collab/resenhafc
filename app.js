@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const APP_RELEASE = Object.freeze({ channel: "beta", version: "Beta 1.0", build: 113, database: 113, edge: 102 });
+  const APP_RELEASE = Object.freeze({ channel: "beta", version: "Beta 1.0", build: 114, database: 114, edge: 103 });
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
   const uid = () => crypto.randomUUID?.() || "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
@@ -99,7 +99,8 @@
         match_events: [],
         announcements: [],
         push_subscriptions: [],
-        is_platform_admin: false
+        is_platform_admin: false,
+        beta_access: null
       };
       this.channel = null;
       this.subscribedGroupId = null;
@@ -108,6 +109,17 @@
 
     async session() {
       return (await this.client.auth.getSession()).data.session;
+    }
+
+    async claimBetaAccess() {
+      const { data, error } = await this.client.rpc("claim_beta_access");
+      if (error) {
+        const denied = new Error(error.message || "Acesso ao beta não autorizado.");
+        denied.betaAccessDenied = true;
+        throw denied;
+      }
+      this.state.beta_access = data || null;
+      return data;
     }
 
     async signInWithGoogleIdToken(token, nonce) {
@@ -146,6 +158,7 @@
       const email = user.email || "";
       const name = meta.name || meta.full_name || [meta.given_name, meta.family_name].filter(Boolean).join(" ") || email.split("@")[0] || "Usuário";
       this.state.profile = { id: user.id, email, name, avatar_url: meta.avatar_url || meta.picture || "" };
+      await this.claimBetaAccess();
 
       const { data: memberships, error } = await this.client
         .from("group_members")
@@ -606,13 +619,54 @@
     }
 
     async platformDashboard() {
-      const [summary, reports, logs] = await Promise.all([
+      const [summary, reports, logs, errorGroups, accessList, security] = await Promise.all([
         this.client.rpc("platform_beta_summary"),
         this.client.rpc("platform_recent_feedback", { p_limit: 30 }),
-        this.client.rpc("platform_recent_logs", { p_limit: 50 })
+        this.client.rpc("platform_recent_logs", { p_limit: 50 }),
+        this.client.rpc("platform_error_groups", { p_hours: 24, p_limit: 40 }),
+        this.client.rpc("platform_beta_access_list", { p_limit: 300 }),
+        this.client.rpc("platform_security_summary")
       ]);
-      for (const result of [summary, reports, logs]) if (result.error) throw result.error;
-      return { summary: summary.data || {}, reports: reports.data || [], logs: logs.data || [] };
+      for (const result of [summary, reports, logs, errorGroups, accessList, security]) if (result.error) throw result.error;
+      return {
+        summary: summary.data || {},
+        reports: reports.data || [],
+        logs: logs.data || [],
+        errorGroups: errorGroups.data || [],
+        accessList: accessList.data || [],
+        security: security.data || {}
+      };
+    }
+
+    async inviteBetaAccess(email, notes = "") {
+      const { data, error } = await this.client.rpc("platform_beta_access_invite", { p_email: email, p_notes: notes });
+      if (error) throw error;
+      return data;
+    }
+
+    async setBetaAccessStatus(email, status) {
+      const { data, error } = await this.client.rpc("platform_beta_access_set_status", { p_email: email, p_status: status });
+      if (error) throw error;
+      return data;
+    }
+
+    async platformErrorDetails(group, limit = 120) {
+      const { data, error } = await this.client.rpc("platform_error_details", {
+        p_event_type: group.event_type,
+        p_message: group.message,
+        p_source: group.source || "",
+        p_line: group.line || "",
+        p_build: group.build || "",
+        p_limit: limit
+      });
+      if (error) throw error;
+      return data || [];
+    }
+
+    async platformOperationalExport(days = 30, logLimit = 5000) {
+      const { data, error } = await this.client.rpc("platform_operational_export", { p_days: days, p_log_limit: logLimit });
+      if (error) throw error;
+      return data || {};
     }
 
     async appRelease() {
@@ -635,6 +689,7 @@
     swRegistration: null,
     updateAvailable: null,
     lastSyncAt: null,
+    accessCheckTimer: null,
 
     async init() {
       this.bindGlobal();
@@ -649,6 +704,7 @@
         if (!this.state) return this.renderAuth();
         this.lastSyncAt = nowIso();
         this.render();
+        this.startAccessMonitor();
         await this.registerServiceWorker();
         this.repo.logEvent("app_open", { groups: this.state.groups.length });
         this.checkForUpdates();
@@ -660,7 +716,29 @@
         setTimeout(() => this.maybeShowNotificationOnboarding(), 650);
       } catch (error) {
         console.error(error);
+        if (error?.betaAccessDenied || /beta fechado|acesso ao beta|não está autorizado|acesso.*bloqueado/i.test(error?.message || "")) {
+          return this.renderBetaAccessDenied(error);
+        }
         this.renderBackendError(error);
+      }
+    },
+
+    startAccessMonitor() {
+      clearInterval(this.accessCheckTimer);
+      this.accessCheckTimer = setInterval(() => this.verifyBetaAccess(), 120000);
+    },
+
+    async verifyBetaAccess() {
+      if (!this.repo || !this.state?.profile || !navigator.onLine) return;
+      try {
+        await this.repo.claimBetaAccess();
+      } catch (error) {
+        if (error?.betaAccessDenied || /beta fechado|acesso ao beta|não está autorizado|acesso.*bloqueado/i.test(error?.message || "")) {
+          clearInterval(this.accessCheckTimer);
+          this.renderBetaAccessDenied(error);
+          return;
+        }
+        console.warn("Não foi possível conferir o acesso ao beta.", error);
       }
     },
 
@@ -702,6 +780,10 @@
       });
       $("#notificationButton")?.addEventListener("click", () => this.openAnnouncementCenter());
       $("#profileButton")?.addEventListener("click", () => this.openProfileModal());
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible") this.verifyBetaAccess();
+      });
+      window.addEventListener("focus", () => this.verifyBetaAccess());
       window.addEventListener("error", event => {
         if (!this.repo || !event.error) return;
         this.repo.logEvent("frontend_error", { message: event.message, source: event.filename?.split("/").pop() || "", line: event.lineno || 0 }, "error");
@@ -1063,6 +1145,15 @@
         console.error(error);
         this.toast(error.message || "Não foi possível concluir a ação.", true);
       }
+    },
+
+    renderBetaAccessDenied(error) {
+      const email = this.repo?.state?.profile?.email || "esta conta";
+      document.body.innerHTML = `<main class="auth-screen"><section class="auth-panel simple-auth access-denied-panel"><img class="auth-logo" src="login-logo-transparent-v0311.png" alt="Resenha FC"><span class="access-denied-icon">!</span><h1>Acesso restrito</h1><p>O Resenha FC está em beta fechado. A conta <strong>${escapeHtml(email)}</strong> não possui acesso ativo.</p><div class="notice auth-error"><strong>Motivo</strong><br>${escapeHtml(error?.message || "E-mail não autorizado.")}</div><p class="access-denied-help">Solicite à administração que autorize exatamente o e-mail usado na sua conta Google.</p><button id="deniedSignOut" class="btn btn-primary btn-block">Sair e usar outra conta</button><button class="btn btn-secondary btn-block" data-action="reload">Verificar novamente</button></section></main><div id="toastRoot" class="toast-root"></div>`;
+      $("#deniedSignOut")?.addEventListener("click", async () => {
+        try { await this.repo.signOut(); } catch {}
+        location.reload();
+      });
     },
 
     renderAuth() {
@@ -1948,24 +2039,129 @@
 
     async openPlatformAdmin() {
       if (!this.state.is_platform_admin) return this.toast("Acesso restrito à administração da plataforma.", true);
-      const loading = this.modal("Painel Beta", `<div class="admin-loading">Carregando indicadores…</div>`, () => {});
+      this.modal("Painel Beta", `<div class="admin-loading">Carregando indicadores, acessos e erros…</div>`, () => {});
       try {
         const data = await this.repo.platformDashboard();
         const s = data.summary || {};
+        const security = data.security || {};
+        const errorGroups = data.errorGroups || [];
+        const accessList = data.accessList || [];
         document.querySelector(".modal-layer")?.remove();
+
         const stat = (label, value, tone = "") => `<div class="admin-stat ${tone}"><small>${escapeHtml(label)}</small><strong>${escapeHtml(String(value ?? 0))}</strong></div>`;
-        const reports = (data.reports || []).map(item => `<article class="admin-feed-item"><div><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.category)} · ${escapeHtml(shortDate(item.created_at))}</small></div><p>${escapeHtml(item.description)}</p><span>${escapeHtml(item.reporter_name || item.reporter_email || "Usuário")}${item.group_name ? ` · ${escapeHtml(item.group_name)}` : ""}</span></article>`).join("") || '<div class="card empty">Nenhum relato recebido.</div>';
-        const logs = (data.logs || []).map(item => `<div class="admin-log-row"><span class="log-dot ${escapeHtml(item.severity)}"></span><div><strong>${escapeHtml(item.event_type)}</strong><small>${escapeHtml(shortDate(item.created_at))}${item.group_name ? ` · ${escapeHtml(item.group_name)}` : ""}</small></div></div>`).join("") || '<div class="card empty">Nenhum log recente.</div>';
-        this.modal("Painel Beta", `<div class="health-strip ${Number(s.errors_24h || 0) ? "warn" : "ok"}"><span></span><div><strong>${Number(s.errors_24h || 0) ? "Sistema requer atenção" : "Sistema operacional"}</strong><small>Indicadores das últimas 24 horas</small></div></div><button id="sendSystemNotification" class="btn btn-primary btn-block admin-primary-action">Enviar notificação do sistema</button><div class="admin-stats">${stat("Usuários", s.users_total)}${stat("Grupos", s.groups_total)}${stat("Peladas futuras", s.matches_upcoming)}${stat("Confirmações", s.confirmations_total)}${stat("Push grupos", s.push_sent_total)}${stat("Push sistema", s.system_push_sent_total)}${stat("Falhas push", Number(s.push_failed_total || 0) + Number(s.system_push_failed_total || 0), (Number(s.push_failed_total || 0) + Number(s.system_push_failed_total || 0)) ? "danger" : "")}${stat("Relatos abertos", s.feedback_open, Number(s.feedback_open || 0) ? "warning" : "")}${stat("Erros 24h", s.errors_24h, Number(s.errors_24h || 0) ? "danger" : "")}</div><div class="section-title"><h2>Relatos recentes</h2></div><div class="admin-feed">${reports}</div><div class="section-title"><h2>Logs recentes</h2></div><div class="admin-logs">${logs}</div><button id="exportOperationalSnapshot" class="btn btn-secondary btn-block">Exportar snapshot operacional</button>`, (root) => {
+        const statusLabel = status => ({ active: "Ativo", invited: "Convidado", blocked: "Bloqueado" }[status] || status);
+        const accessRows = accessList.map(item => {
+          const status = item.status || "invited";
+          const action = status === "blocked" ? "active" : "blocked";
+          const actionLabel = status === "blocked" ? "Reativar" : "Bloquear";
+          const lastSeen = item.last_seen_at ? shortDate(item.last_seen_at) : "Ainda não acessou";
+          const isCurrentAdmin = String(item.email || "").toLowerCase() === String(this.state.profile?.email || "").toLowerCase();
+          const actionButton = isCurrentAdmin ? '<span class="access-self-label">Você</span>' : `<button type="button" class="access-action ${action === "blocked" ? "danger" : "restore"}" data-access-email="${escapeHtml(item.email)}" data-access-status="${action}">${actionLabel}</button>`;
+          return `<article class="beta-access-row"><div class="beta-access-main"><div><strong>${escapeHtml(item.user_name || item.email)}</strong><small>${escapeHtml(item.email)} · ${escapeHtml(lastSeen)}</small></div><span class="beta-access-status ${escapeHtml(status)}">${escapeHtml(statusLabel(status))}</span></div><div class="beta-access-meta"><span>${Number(item.groups_count || 0)} grupo(s)</span>${item.notes ? `<span>${escapeHtml(item.notes)}</span>` : ""}</div>${actionButton}</article>`;
+        }).join("") || '<div class="card empty">Nenhum e-mail cadastrado.</div>';
+
+        const errorRows = errorGroups.map((item, index) => {
+          const build = item.build ? `Build ${item.build}` : "Build não informada";
+          const location = [item.source, item.line ? `linha ${item.line}` : ""].filter(Boolean).join(" · ");
+          return `<article class="admin-error-group"><div class="admin-error-head"><span class="admin-error-count">${Number(item.occurrences || 0)}×</span><div><strong>${escapeHtml(item.message || "Erro sem mensagem")}</strong><small>${escapeHtml(item.event_type)} · ${escapeHtml(build)}${location ? ` · ${escapeHtml(location)}` : ""}</small></div></div><div class="admin-error-metrics"><span>${Number(item.affected_users || 0)} usuário(s)</span><span>Primeiro: ${escapeHtml(shortDate(item.first_seen))}</span><span>Último: ${escapeHtml(shortDate(item.last_seen))}</span></div><button type="button" class="btn btn-secondary btn-small" data-error-index="${index}">Ver ocorrências e metadados</button></article>`;
+        }).join("") || '<div class="card empty">Nenhum erro registrado nas últimas 24 horas.</div>';
+
+        const reports = (data.reports || []).map(item => `<details class="admin-feed-item"><summary><div><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.category)} · ${escapeHtml(shortDate(item.created_at))}</small></div></summary><p>${escapeHtml(item.description)}</p><span>${escapeHtml(item.reporter_name || item.reporter_email || "Usuário")}${item.group_name ? ` · ${escapeHtml(item.group_name)}` : ""}</span><pre>${escapeHtml(JSON.stringify(item.context || {}, null, 2))}</pre></details>`).join("") || '<div class="card empty">Nenhum relato recebido.</div>';
+        const logs = (data.logs || []).map(item => `<details class="admin-log-detail"><summary><span class="log-dot ${escapeHtml(item.severity)}"></span><div><strong>${escapeHtml(item.event_type)}</strong><small>${escapeHtml(shortDate(item.created_at))}${item.group_name ? ` · ${escapeHtml(item.group_name)}` : ""}</small></div></summary><pre>${escapeHtml(JSON.stringify(item.metadata || {}, null, 2))}</pre></details>`).join("") || '<div class="card empty">Nenhum log recente.</div>';
+
+        const securityTone = Number(security.tables_without_rls || 0) || Number(security.auth_users_without_access || 0) ? "warn" : "ok";
+        const systemStatus = Number(s.errors_24h || 0) ? "Sistema requer análise" : "Sistema operacional";
+        const errorSubtitle = `${Number(s.errors_24h || 0)} registro(s) distribuído(s) em ${Number(s.error_groups_24h || 0)} erro(s) distinto(s)`;
+
+        this.modal("Painel Beta", `<div class="health-strip ${Number(s.errors_24h || 0) ? "warn" : "ok"}"><span></span><div><strong>${systemStatus}</strong><small>${escapeHtml(errorSubtitle)}</small></div></div><div class="admin-toolbar"><button id="sendSystemNotification" class="btn btn-primary">Enviar notificação</button><button id="refreshPlatformPanel" class="btn btn-secondary">Atualizar painel</button></div><div class="admin-stats">${stat("Usuários", s.users_total)}${stat("Acessos ativos", s.beta_active)}${stat("Convites pendentes", s.beta_invited, Number(s.beta_invited || 0) ? "warning" : "")}${stat("Bloqueados", s.beta_blocked, Number(s.beta_blocked || 0) ? "danger" : "")}${stat("Grupos", s.groups_total)}${stat("Peladas futuras", s.matches_upcoming)}${stat("Relatos abertos", s.feedback_open, Number(s.feedback_open || 0) ? "warning" : "")}${stat("Erros 24h", s.errors_24h, Number(s.errors_24h || 0) ? "danger" : "")}</div>
+
+        <details class="admin-section-card" open><summary><div><strong>Acessos do beta</strong><small>Autorize o e-mail antes do primeiro login.</small></div><span>${accessList.length}</span></summary><form id="betaAccessForm" class="beta-access-form"><div class="field"><label>E-mail da conta Google</label><input type="email" name="email" required autocomplete="off" placeholder="membro@gmail.com"></div><div class="field"><label>Observação <span class="optional-label">opcional</span></label><input name="notes" maxlength="500" placeholder="Grupo ou responsável pelo convite"></div><button type="submit" class="btn btn-primary btn-block">Autorizar e-mail</button></form><div class="beta-access-list">${accessRows}</div></details>
+
+        <details class="admin-section-card" open><summary><div><strong>Erros agrupados — 24 horas</strong><small>Analise causas distintas, não apenas o contador bruto.</small></div><span>${errorGroups.length}</span></summary><div class="admin-error-list">${errorRows}</div></details>
+
+        <details class="admin-section-card"><summary><div><strong>Segurança e integridade</strong><small>Verificações automáticas do banco.</small></div><span class="security-mini ${securityTone}">${securityTone === "ok" ? "OK" : "Atenção"}</span></summary><div class="security-grid">${stat("Tabelas sem RLS", security.tables_without_rls, Number(security.tables_without_rls || 0) ? "danger" : "")}${stat("Auth sem acesso", security.auth_users_without_access, Number(security.auth_users_without_access || 0) ? "danger" : "")}${stat("Vínculos bloqueados", security.blocked_group_memberships, Number(security.blocked_group_memberships || 0) ? "warning" : "")}${stat("Função do hook", security.hook_function_ready ? "Preparada" : "Ausente", security.hook_function_ready ? "" : "danger")}</div><div class="notice"><strong>Proteção de novos cadastros</strong><br>A função do hook foi instalada. Ative-a uma vez em Authentication → Hooks → Before User Created para impedir que contas não autorizadas sejam criadas.</div></details>
+
+        <details class="admin-section-card"><summary><div><strong>Relatos recentes</strong><small>Descrição e contexto técnico completo.</small></div><span>${(data.reports || []).length}</span></summary><div class="admin-feed">${reports}</div></details>
+        <details class="admin-section-card"><summary><div><strong>Logs recentes</strong><small>Abra cada registro para consultar os metadados.</small></div><span>${(data.logs || []).length}</span></summary><div class="admin-logs">${logs}</div></details>
+        <button id="exportOperationalSnapshot" class="btn btn-secondary btn-block">Exportar dados operacionais — 30 dias</button>`, (root, close) => {
           $("#sendSystemNotification", root)?.addEventListener("click", () => this.openSystemNotificationForm());
-          $("#exportOperationalSnapshot", root)?.addEventListener("click", () => {
-            const blob = new Blob([JSON.stringify({ generated_at: nowIso(), release: APP_RELEASE, ...data }, null, 2)], { type: "application/json" });
-            const link = document.createElement("a"); link.href = URL.createObjectURL(blob); link.download = `resenha-fc-beta-snapshot-${new Date().toISOString().slice(0,10)}.json`; link.click(); URL.revokeObjectURL(link.href);
+          $("#refreshPlatformPanel", root)?.addEventListener("click", () => { close(); this.openPlatformAdmin(); });
+          $("#betaAccessForm", root)?.addEventListener("submit", async event => {
+            event.preventDefault();
+            const form = new FormData(event.currentTarget);
+            const button = event.submitter;
+            button.disabled = true;
+            button.textContent = "Autorizando…";
+            try {
+              await this.repo.inviteBetaAccess(String(form.get("email") || ""), String(form.get("notes") || ""));
+              close();
+              this.toast("E-mail autorizado para o beta.");
+              this.openPlatformAdmin();
+            } catch (error) {
+              button.disabled = false;
+              button.textContent = "Autorizar e-mail";
+              this.toast(error.message || "Não foi possível autorizar o e-mail.", true);
+            }
+          });
+          $$('[data-access-email]', root).forEach(button => button.addEventListener("click", async event => {
+            const target = event.currentTarget;
+            const email = target.dataset.accessEmail;
+            const status = target.dataset.accessStatus;
+            const verb = status === "blocked" ? "bloquear" : "reativar";
+            if (!confirm(`Deseja ${verb} o acesso de ${email}?`)) return;
+            target.disabled = true;
+            try {
+              await this.repo.setBetaAccessStatus(email, status);
+              close();
+              this.toast(status === "blocked" ? "Acesso bloqueado imediatamente." : "Acesso reativado.");
+              this.openPlatformAdmin();
+            } catch (error) {
+              target.disabled = false;
+              this.toast(error.message || "Não foi possível alterar o acesso.", true);
+            }
+          }));
+          $$('[data-error-index]', root).forEach(button => button.addEventListener("click", () => {
+            const group = errorGroups[Number(button.dataset.errorIndex)];
+            if (group) this.openPlatformErrorDetails(group);
+          }));
+          $("#exportOperationalSnapshot", root)?.addEventListener("click", async event => {
+            const button = event.currentTarget;
+            button.disabled = true;
+            button.textContent = "Preparando exportação…";
+            try {
+              const exported = await this.repo.platformOperationalExport(30, 5000);
+              const blob = new Blob([JSON.stringify({ release: APP_RELEASE, ...exported }, null, 2)], { type: "application/json" });
+              const link = document.createElement("a");
+              link.href = URL.createObjectURL(blob);
+              link.download = `resenha-fc-beta-operacao-${new Date().toISOString().slice(0,10)}.json`;
+              link.click();
+              URL.revokeObjectURL(link.href);
+              button.disabled = false;
+              button.textContent = "Exportar dados operacionais — 30 dias";
+            } catch (error) {
+              button.disabled = false;
+              button.textContent = "Exportar dados operacionais — 30 dias";
+              this.toast(error.message || "Não foi possível exportar os dados.", true);
+            }
           });
         });
       } catch (error) {
         document.querySelector(".modal-layer")?.remove();
         this.toast(error.message || "Não foi possível carregar o painel.", true);
+      }
+    },
+
+    async openPlatformErrorDetails(group) {
+      if (!this.state.is_platform_admin) return;
+      this.modal("Detalhes do erro", `<div class="admin-loading">Carregando ocorrências…</div>`, () => {});
+      try {
+        const rows = await this.repo.platformErrorDetails(group);
+        document.querySelector(".modal-layer")?.remove();
+        const details = rows.map(item => `<details class="error-occurrence"><summary><div><strong>${escapeHtml(item.user_name || item.user_email || "Usuário não identificado")}</strong><small>${escapeHtml(shortDate(item.created_at))}${item.group_name ? ` · ${escapeHtml(item.group_name)}` : ""}</small></div><span>Ver JSON</span></summary><pre>${escapeHtml(JSON.stringify(item.metadata || {}, null, 2))}</pre></details>`).join("") || '<div class="card empty">Nenhuma ocorrência encontrada.</div>';
+        this.modal("Detalhes do erro", `<div class="error-detail-summary"><span>${Number(group.occurrences || 0)} ocorrência(s)</span><strong>${escapeHtml(group.message || "Erro sem mensagem")}</strong><small>${escapeHtml(group.event_type)}${group.build ? ` · Build ${escapeHtml(group.build)}` : ""}</small></div><div class="error-occurrence-list">${details}</div>`, () => {});
+      } catch (error) {
+        document.querySelector(".modal-layer")?.remove();
+        this.toast(error.message || "Não foi possível carregar as ocorrências.", true);
       }
     },
 
@@ -2206,6 +2402,7 @@
 
     async logout() {
       if (!confirm("Deseja sair da sua conta neste aparelho?")) return;
+      clearInterval(this.accessCheckTimer);
       await this.disablePushNotifications(true);
       await this.repo.signOut();
       localStorage.removeItem("resenha-current-group");
