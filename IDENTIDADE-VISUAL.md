@@ -21,3 +21,8 @@ Emblema circular com jogadores, bola, confirmação e confraternização. A comp
 
 ## Regra de uso
 Não distorcer, recolorir ou remover elementos do emblema. Em tamanhos muito pequenos, usar os arquivos de ícone já preparados, que possuem margem segura para os recortes do sistema.
+
+
+## Compatibilidade iOS/iPadOS
+
+Os arquivos Apple Touch oficiais estão disponíveis na raiz do site e em tamanhos específicos. O HTML referencia nomes versionados para impedir que o Safari reutilize a imagem antiga ao reinstalar o aplicativo.

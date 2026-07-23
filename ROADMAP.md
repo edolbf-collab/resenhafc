@@ -1,53 +1,24 @@
 # Roadmap — Resenha FC
 
-## Próxima etapa prioritária
+## Concluído na v0.3.4
 
-1. **Operação ao vivo da partida**
-   - cronômetro;
-   - placar por time;
-   - registro rápido de gols, assistências, cartões e substituições;
-   - encerramento da partida com atualização automática das estatísticas.
+- Reenvio e exclusão de avisos.
+- Push para pelada marcada e confirmação de presença.
+- Exclusão de pagamentos, despesas e cobranças.
+- Aba Membros compacta.
 
-2. **Mensalidades em lote**
-   - geração automática mensal para todos os jogadores ativos;
-   - vencimento configurável;
-   - baixa manual ou por Pix;
-   - lembretes e histórico individual.
 
-3. **Times ajustáveis**
-   - arrastar jogadores entre equipes após o sorteio;
-   - travar goleiros ou jogadores específicos;
-   - refazer sorteio mantendo pares separados ou juntos;
-   - comparação da força média dos times.
+- notificações push para confirmações e cobranças;
+- edição manual dos times após o balanceamento;
+- placar e eventos ao vivo;
+- estatísticas automáticas por partida;
+- cobrança Pix e conciliação financeira;
+- upload de fotos do grupo e partidas;
+- painel web ampliado para administração.
 
-4. **Notificações e compartilhamento**
-   - push para confirmação, prazo, mudança de horário e cobrança;
-   - resumo compartilhável no WhatsApp;
-   - convite por link além do código do grupo.
+## Concluído na v0.3.3
 
-5. **Mídia e memória do grupo**
-   - fotos e vídeos por jogo;
-   - destaques e medalhas;
-   - mural de resenha;
-   - retrospectiva mensal e anual.
-
-## Evolução de segurança e administração
-
-- criar tela para o proprietário atribuir as funções já protegidas no backend;
-- trilha de auditoria para alterações financeiras e administrativas;
-- recuperação de conta e autenticação social;
-- política de privacidade, consentimento e exclusão de conta/dados;
-- exportação CSV/PDF e restauração de backup;
-- testes automatizados em projeto Supabase de homologação e testes específicos das políticas RLS.
-
-## Possíveis recursos adicionais
-
-- reserva e rateio de quadra;
-- controle de uniformes/coletes, bolas e materiais;
-- multas por ausência após confirmação;
-- lista de convidados/diaristas;
-- campeonatos internos e temporadas;
-- confrontos com outros grupos;
-- votação de melhor da partida, bola murcha e fair play;
-- histórico de lesões e disponibilidade, sem diagnóstico médico;
-- sorteio por ordem de chegada como opção alternativa.
+- notificações push para avisos do grupo;
+- ativação por aparelho;
+- central interna de comunicados;
+- Edge Function autenticada para publicação e envio.

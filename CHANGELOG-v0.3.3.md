@@ -16,3 +16,11 @@
 - publicação de avisos passa pela Edge Function;
 - service worker recebe eventos `push` e `notificationclick`;
 - versão do cache atualizada para `resenha-fc-v0.3.3`.
+
+## v0.3.3.3
+
+- validação do vínculo da assinatura push no banco;
+- estado "Aguardando vinculação" quando o aparelho possui permissão local sem registro no Supabase;
+- retorno distinto entre ausência de assinaturas e falha de entrega;
+- substituição do pacote Node.js `web-push` por implementação compatível com Deno/Web Crypto;
+- detalhes seguros do primeiro erro de entrega no retorno da Edge Function.

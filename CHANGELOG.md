@@ -67,3 +67,15 @@
 - ordem da espera é persistente e novas confirmações entram no final após o sorteio;
 - primeira pessoa da espera é promovida automaticamente quando surge uma vaga;
 - separação de times exige que os excedentes tenham sido sorteados.
+
+## Beta 1.0 Build 108
+- sorteio seletivo e independente do limite, com modos instantâneo e revelação;
+- churrasco compacto quando desativado e expandido sob demanda.
+
+## Beta 1.0 Build 110
+
+- corrigida a constraint que rejeitava `manual_draw` durante o sorteio da espera;
+- padronizado o ingresso posterior ao sorteio com `late_confirmation`;
+- adicionada normalização segura dos motivos antigos da espera;
+- incluído selo discreto de churrasco nos cartões de presença;
+- lista nominal do churrasco recolhida por padrão e expansível em `Ver nomes`.

@@ -79,7 +79,7 @@ Use o conteúdo de:
 supabase/functions/publish-announcement/index.ts
 ```
 
-A verificação JWT deve permanecer ativada.
+Como o frontend utiliza uma Publishable key (`sb_publishable_...`), desative a verificação JWT legada da função. A própria função valida o JWT do usuário com `auth.getUser()` antes de qualquer operação.
 
 ## iPhone e iPad
 

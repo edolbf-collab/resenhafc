@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const APP_RELEASE = Object.freeze({ channel: "beta", version: "Beta 1.0", build: 109, database: 109, edge: 102 });
+  const APP_RELEASE = Object.freeze({ channel: "beta", version: "Beta 1.0", build: 110, database: 110, edge: 102 });
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
   const uid = () => crypto.randomUUID?.() || "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
@@ -1412,12 +1412,16 @@
           return `<div class="bbq-participant-row">${this.personAvatar(player, "bbq-participant-avatar")}<div class="list-main"><strong>${escapeHtml(player.name)}</strong><small>${escapeHtml(details)}</small></div>${this.isGuest(player) ? '<span class="guest-badge">Convidado</span>' : ""}</div>`;
         })
         .join("");
+      const barbecueParticipantsPanel = barbecueParticipants.length
+        ? `<div class="bbq-participants-panel"><button type="button" class="bbq-participants-toggle" data-toggle-bbq-participants aria-expanded="false" aria-controls="bbqParticipants-${match.id}"><span class="bbq-participants-summary"><strong>Quem vai ao churrasco</strong><small>${barbecueParticipants.length} participante(s)${barbecueGuestsTotal ? ` + ${barbecueGuestsTotal} acompanhante(s)` : ""} · ${barbecueTotal} pessoa(s) no total</small></span><span class="bbq-participants-action"><span class="bbq-participants-action-label">Ver nomes</span><b aria-hidden="true">⌄</b></span></button><div id="bbqParticipants-${match.id}" class="bbq-participants-list" data-bbq-participants-list hidden>${barbecueParticipantRows}</div></div>`
+        : `<div class="bbq-participants-panel is-empty"><div class="bbq-participants-toggle is-static"><span class="bbq-participants-summary"><strong>Quem vai ao churrasco</strong><small>Nenhum participante confirmou até o momento.</small></span><span class="bbq-participants-empty-icon" aria-hidden="true">♨</span></div></div>`;
       const attendanceRow = (item, key) => {
         const player = this.player(item.player_id) || { name: "Jogador" };
         const trailing = key === "waitlist" ? `<span class="waitlist-position">#${Number(item.waitlist_position || 0) || "–"}</span>` : "";
         const managerNote = item.status_change_source === "manager" ? '<small class="attendance-managed-note">ajustado pela organização</small>' : "";
+        const bbqBadge = item.bbq ? '<span class="bbq-attendance-badge" title="Participará do churrasco" aria-label="Participará do churrasco">♨</span>' : "";
         const guestBadge = this.isGuest(player) ? '<span class="guest-badge">Convidado</span>' : "";
-        return `<div class="card list-row attendance-list-row">${this.personAvatar(player)}<div class="list-main"><strong>${escapeHtml(player.name)}</strong><small>${escapeHtml(player.primary_position || "Sem posição")}</small>${managerNote}</div><div class="attendance-row-trailing">${guestBadge}${trailing}</div></div>`;
+        return `<div class="card list-row attendance-list-row">${this.personAvatar(player)}<div class="list-main"><strong>${escapeHtml(player.name)}</strong><small>${escapeHtml(player.primary_position || "Sem posição")}</small>${managerNote}</div><div class="attendance-row-trailing">${bbqBadge}${guestBadge}${trailing}</div></div>`;
       };
       const groupHtml = (title, key) => `<div class="section-title"><h2>${title} (${grouped[key].length})</h2></div><div class="list">${grouped[key].map(item => attendanceRow(item, key)).join("") || '<div class="card empty">Nenhum.</div>'}</div>`;
       const recurringInfo = recurring ? `<div class="recurrence-detail"><span>↻</span><div><strong>Pelada semanal recorrente</strong><small>Esta data pertence a uma série criada automaticamente.</small></div></div>` : "";
@@ -1430,7 +1434,7 @@
         : grouped.waitlist.length ? `<section class="match-draw-section"><div class="section-title"><h2>Resultado da espera</h2></div>${drawStatus}</section>` : "";
 
       const bbqExpanded = match.bbq_enabled
-        ? `<section class="match-bbq-section is-enabled"><div class="section-title"><h2>Confraternização</h2><small>Configuração exclusiva desta pelada.</small></div><div class="bbq-status enabled"><span>♨</span><div><strong>Churrasco confirmado</strong><small>${barbecueParticipants.length} membro(s)${barbecueGuestsTotal ? ` + ${barbecueGuestsTotal} acompanhante(s)` : ""} · ${money(match.bbq_price || 0)} por pessoa</small></div></div><div class="bbq-participants-panel"><div class="bbq-participants-head"><strong>Quem participará</strong><span>${barbecueTotal} pessoa(s) no total</span></div><div class="bbq-participants-list">${barbecueParticipantRows || '<div class="bbq-participants-empty">Ninguém marcou participação no churrasco.</div>'}</div></div>${future && this.canManageGroup() ? `<form id="matchBbqForm" class="match-bbq-form"><label class="check-row"><input name="bbq_enabled" type="checkbox" checked> Haverá churrasco nesta pelada</label><div class="bbq-expanded-options"><div class="field" id="matchBbqPriceField"><label>Valor por pessoa</label><input name="bbq_price" type="number" min="0" step="0.01" value="${Number(match.bbq_price || 0)}" inputmode="decimal"></div><button class="btn btn-secondary btn-block">Salvar churrasco</button></div></form>` : ""}</section>`
+        ? `<section class="match-bbq-section is-enabled"><div class="section-title"><h2>Confraternização</h2><small>Configuração exclusiva desta pelada.</small></div><div class="bbq-status enabled"><span>♨</span><div><strong>Churrasco confirmado</strong><small>${barbecueParticipants.length} participante(s)${barbecueGuestsTotal ? ` + ${barbecueGuestsTotal} acompanhante(s)` : ""} · ${money(match.bbq_price || 0)} por pessoa</small></div></div>${barbecueParticipantsPanel}${future && this.canManageGroup() ? `<form id="matchBbqForm" class="match-bbq-form"><label class="check-row"><input name="bbq_enabled" type="checkbox" checked> Haverá churrasco nesta pelada</label><div class="bbq-expanded-options"><div class="field" id="matchBbqPriceField"><label>Valor por pessoa</label><input name="bbq_price" type="number" min="0" step="0.01" value="${Number(match.bbq_price || 0)}" inputmode="decimal"></div><button class="btn btn-secondary btn-block">Salvar churrasco</button></div></form>` : ""}</section>`
         : future && this.canManageGroup()
           ? `<section class="match-bbq-compact"><form id="matchBbqForm" class="match-bbq-form compact"><label class="check-row bbq-toggle-row"><input name="bbq_enabled" type="checkbox"> Haverá churrasco nesta pelada</label><div class="bbq-expanded-options" hidden><div class="bbq-status enabled"><span>♨</span><div><strong>Configurar churrasco</strong><small>Informe o valor e salve para abrir as opções aos participantes.</small></div></div><div class="field" id="matchBbqPriceField"><label>Valor por pessoa</label><input name="bbq_price" type="number" min="0" step="0.01" value="0" inputmode="decimal"></div><button class="btn btn-secondary btn-block">Salvar churrasco</button></div></form></section>`
           : "";
@@ -1453,6 +1457,18 @@
           close();
           this.openWaitlistDraw(match.id);
         });
+        const bbqParticipantsToggle = $("[data-toggle-bbq-participants]", root);
+        if (bbqParticipantsToggle) {
+          const participantsList = $("[data-bbq-participants-list]", root);
+          const actionLabel = $(".bbq-participants-action-label", bbqParticipantsToggle);
+          bbqParticipantsToggle.addEventListener("click", () => {
+            const expanded = bbqParticipantsToggle.getAttribute("aria-expanded") !== "true";
+            bbqParticipantsToggle.setAttribute("aria-expanded", String(expanded));
+            bbqParticipantsToggle.classList.toggle("is-open", expanded);
+            if (participantsList) participantsList.hidden = !expanded;
+            if (actionLabel) actionLabel.textContent = expanded ? "Ocultar nomes" : "Ver nomes";
+          });
+        }
         const bbqForm = $("#matchBbqForm", root);
         if (bbqForm) {
           const enabled = $('[name="bbq_enabled"]', bbqForm);
