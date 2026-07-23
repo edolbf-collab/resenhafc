@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const APP_RELEASE = Object.freeze({ channel: "beta", version: "Beta 1.0", build: 114, database: 114, edge: 103 });
+  const APP_RELEASE = Object.freeze({ channel: "beta", version: "Beta 1.0", build: 115, database: 114, edge: 103 });
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
   const uid = () => crypto.randomUUID?.() || "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
@@ -1148,8 +1148,47 @@
     },
 
     renderBetaAccessDenied(error) {
-      const email = this.repo?.state?.profile?.email || "esta conta";
-      document.body.innerHTML = `<main class="auth-screen"><section class="auth-panel simple-auth access-denied-panel"><img class="auth-logo" src="login-logo-transparent-v0311.png" alt="Resenha FC"><span class="access-denied-icon">!</span><h1>Acesso restrito</h1><p>O Resenha FC está em beta fechado. A conta <strong>${escapeHtml(email)}</strong> não possui acesso ativo.</p><div class="notice auth-error"><strong>Motivo</strong><br>${escapeHtml(error?.message || "E-mail não autorizado.")}</div><p class="access-denied-help">Solicite à administração que autorize exatamente o e-mail usado na sua conta Google.</p><button id="deniedSignOut" class="btn btn-primary btn-block">Sair e usar outra conta</button><button class="btn btn-secondary btn-block" data-action="reload">Verificar novamente</button></section></main><div id="toastRoot" class="toast-root"></div>`;
+      clearInterval(this.accessCheckTimer);
+      const email = this.repo?.state?.profile?.email || "E-mail não identificado";
+      const hasIdentifiedEmail = email !== "E-mail não identificado";
+      document.body.innerHTML = `<main class="auth-screen"><section class="auth-panel simple-auth access-denied-panel"><img class="auth-logo" src="login-logo-transparent-v0311.png" alt="Resenha FC"><span class="access-denied-icon">!</span><h1>Aguardando liberação</h1><p>O Resenha FC está em beta fechado. Antes de continuar, a administração precisa autorizar a conta Google usada no login.</p><div class="denied-account-card"><small>CONTA UTILIZADA</small><div><strong id="deniedAccountEmail">${escapeHtml(email)}</strong>${hasIdentifiedEmail ? '<button id="copyDeniedEmail" class="copy-email-button" type="button" aria-label="Copiar e-mail">Copiar</button>' : ''}</div></div><div class="notice auth-error"><strong>Situação do acesso</strong><br><span id="deniedAccessMessage">${escapeHtml(error?.message || "Este e-mail ainda não está autorizado.")}</span></div><div class="access-denied-instructions"><strong>Como liberar</strong><ol><li>Envie o e-mail acima para a administração do beta.</li><li>Aguarde a confirmação de que o acesso foi autorizado.</li><li>Volte a esta tela e toque em <b>Verificar liberação</b>.</li></ol></div><div id="deniedCheckStatus" class="denied-check-status" role="status" aria-live="polite"></div><button id="deniedCheckAccess" class="btn btn-primary btn-block">Verificar liberação</button><button id="deniedSignOut" class="btn btn-secondary btn-block">Sair e usar outra conta</button></section></main><div id="toastRoot" class="toast-root"></div>`;
+
+      $("#copyDeniedEmail")?.addEventListener("click", async event => {
+        try {
+          await navigator.clipboard.writeText(email);
+          event.currentTarget.textContent = "Copiado";
+          setTimeout(() => { if (event.currentTarget) event.currentTarget.textContent = "Copiar"; }, 1500);
+        } catch {
+          this.toast("Não foi possível copiar o e-mail.", true);
+        }
+      });
+
+      $("#deniedCheckAccess")?.addEventListener("click", async event => {
+        const button = event.currentTarget;
+        const status = $("#deniedCheckStatus");
+        button.disabled = true;
+        button.textContent = "Verificando...";
+        status.className = "denied-check-status is-checking";
+        status.textContent = "Consultando a autorização desta conta...";
+        try {
+          await this.repo.claimBetaAccess();
+          status.className = "denied-check-status is-success";
+          status.textContent = "Acesso liberado. Carregando o aplicativo...";
+          setTimeout(() => location.reload(), 450);
+        } catch (checkError) {
+          if (checkError?.betaAccessDenied || /beta fechado|acesso ao beta|não está autorizado|acesso.*bloqueado/i.test(checkError?.message || "")) {
+            status.className = "denied-check-status is-pending";
+            status.textContent = "O acesso ainda não foi liberado. Confirme com a administração se este é o e-mail autorizado.";
+            $("#deniedAccessMessage").textContent = checkError.message || "Este e-mail ainda não está autorizado.";
+          } else {
+            status.className = "denied-check-status is-error";
+            status.textContent = "Não foi possível verificar agora. Confira sua conexão e tente novamente.";
+          }
+          button.disabled = false;
+          button.textContent = "Verificar liberação";
+        }
+      });
+
       $("#deniedSignOut")?.addEventListener("click", async () => {
         try { await this.repo.signOut(); } catch {}
         location.reload();
