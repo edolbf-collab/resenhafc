@@ -326,3 +326,20 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
   font-weight: 600;
   opacity: .62;
 }
+
+
+/* Beta 1.0 Build 108 — sorteio dedicado e churrasco progressivo */
+.match-draw-section{margin:18px 0;padding:16px;border:1px solid var(--line);border-radius:18px;background:var(--surface)}
+.draw-status{display:flex;gap:12px;align-items:center;padding:13px;border-radius:15px;background:var(--soft);margin-bottom:12px}
+.draw-status>span{display:grid;place-items:center;width:38px;height:38px;border-radius:12px;background:var(--surface);font-size:20px;font-weight:800}
+.draw-status div{display:grid;gap:3px}.draw-status small{color:var(--muted);line-height:1.35}.draw-status.ready{background:rgba(25,135,84,.1)}
+.draw-selection-head{display:flex;justify-content:space-between;align-items:center;gap:12px}.text-button{border:0;background:transparent;color:var(--primary);font-weight:800;padding:8px;cursor:pointer}
+.draw-player-list{display:grid;gap:8px;max-height:310px;overflow:auto;padding-right:3px}
+.draw-player-row{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:14px;background:var(--surface);cursor:pointer}
+.draw-player-row>input{position:absolute;opacity:0;pointer-events:none}.draw-player-check{display:grid;place-items:center;width:25px;height:25px;border:2px solid var(--line);border-radius:8px;color:transparent;font-weight:900;flex:0 0 auto}
+.draw-player-row:has(input:checked){border-color:var(--primary);background:color-mix(in srgb,var(--primary) 7%,var(--surface))}.draw-player-row:has(input:checked) .draw-player-check{background:var(--primary);border-color:var(--primary);color:#fff}
+.draw-player-avatar{width:38px;height:38px}.draw-mode-grid{grid-template-columns:1fr 1fr}
+.draw-reveal{display:grid;gap:16px}.draw-reveal-stage{padding:18px;border-radius:20px;background:linear-gradient(145deg,rgba(4,21,33,.96),rgba(16,62,75,.94));color:#fff;text-align:center}.draw-reveal-kicker{font-size:11px;letter-spacing:.16em;font-weight:900;opacity:.72}
+.draw-reveal-card{min-height:190px;margin-top:14px;border:1px solid rgba(255,255,255,.2);border-radius:18px;background:rgba(255,255,255,.08);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9px;padding:20px}.draw-reveal-card>span{font-size:58px;font-weight:900}.draw-reveal-card strong{font-size:21px}.draw-reveal-card small{opacity:.75}.draw-reveal-card.is-revealed{animation:drawReveal .48s cubic-bezier(.2,.8,.2,1)}.draw-reveal-avatar{width:72px;height:72px;font-size:24px}
+.draw-reveal-progress{text-align:center;color:var(--muted);font-weight:700}@keyframes drawReveal{0%{opacity:0;transform:scale(.78) rotateY(70deg)}100%{opacity:1;transform:scale(1) rotateY(0)}}
+.match-bbq-compact{margin:14px 0}.match-bbq-form.compact{padding:0}.bbq-toggle-row{padding:13px 15px;border:1px solid var(--line);border-radius:16px;background:var(--surface);font-weight:800}.bbq-expanded-options{display:grid;gap:12px;margin-top:12px;padding:15px;border:1px solid var(--line);border-radius:18px;background:var(--surface)}.bbq-expanded-options[hidden]{display:none!important}.match-bbq-section.is-enabled{margin-top:16px}

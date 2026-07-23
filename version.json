@@ -1,9 +1,9 @@
 {
   "channel": "beta",
   "version": "Beta 1.0",
-  "build": 107,
-  "database": 107,
+  "build": 108,
+  "database": 108,
   "edge": 102,
   "mandatory": false,
-  "notes": "Convidados passam a ser vinculados a um único evento, com nome validado, apelido opcional, posição obrigatória, edição e exclusão por administrador ou organizador e bloqueio contra múltiplos envios."
+  "notes": "Sorteio dedicado dentro de cada evento, com seleção manual dos participantes, quantidade livre para a espera e modos instantâneo ou revelação. O churrasco fica compacto quando desativado e expande suas opções somente ao marcar o checkbox."
 }

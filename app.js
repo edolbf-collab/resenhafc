@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const APP_RELEASE = Object.freeze({ channel: "beta", version: "Beta 1.0", build: 107, database: 107, edge: 102 });
+  const APP_RELEASE = Object.freeze({ channel: "beta", version: "Beta 1.0", build: 108, database: 108, edge: 102 });
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
   const uid = () => crypto.randomUUID?.() || "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
@@ -368,8 +368,12 @@
       return data || {};
     }
 
-    async drawMatchWaitlist(matchId) {
-      const { data, error } = await this.client.rpc("draw_match_waitlist", { p_match_id: matchId });
+    async drawMatchWaitlist(matchId, playerIds, waitlistCount) {
+      const { data, error } = await this.client.rpc("draw_match_waitlist", {
+        p_match_id: matchId,
+        p_player_ids: playerIds,
+        p_waitlist_count: Number(waitlistCount)
+      });
       if (error) throw error;
       await this.loadGroup(this.state.currentGroupId, { subscribe: false });
       return data || {};
@@ -1397,8 +1401,6 @@
       grouped.waitlist.sort((a, b) => Number(a.waitlist_position || 9999) - Number(b.waitlist_position || 9999));
       const pendingPlayers = this.activePlayers().filter(player => !this.attendanceFor(id).some(item => item.player_id === player.id));
       const confirmedCount = grouped.confirmed.length;
-      const totalPlayingIntent = confirmedCount + grouped.waitlist.length;
-      const overflow = Math.max(0, confirmedCount - Number(match.max_players));
       const barbecueParticipants = this.attendanceFor(id).filter(item => item.bbq);
       const barbecueTotal = barbecueParticipants.reduce((sum, item) => sum + 1 + Number(item.bbq_guests || 0), 0);
       const attendanceRow = (item, key) => {
@@ -1410,22 +1412,25 @@
       };
       const groupHtml = (title, key) => `<div class="section-title"><h2>${title} (${grouped[key].length})</h2></div><div class="list">${grouped[key].map(item => attendanceRow(item, key)).join("") || '<div class="card empty">Nenhum.</div>'}</div>`;
       const recurringInfo = recurring ? `<div class="recurrence-detail"><span>↻</span><div><strong>Pelada semanal recorrente</strong><small>Esta data pertence a uma série criada automaticamente.</small></div></div>` : "";
-      const barbecueStatus = match.bbq_enabled
-        ? `<div class="bbq-status enabled"><span>♨</span><div><strong>Churrasco confirmado</strong><small>${barbecueTotal} participante(s) · ${money(match.bbq_price || 0)} por pessoa</small></div></div>`
-        : `<div class="bbq-status"><span>♨</span><div><strong>Churrasco não definido</strong><small>O administrador pode ativar separadamente para esta pelada.</small></div></div>`;
-      const barbecueControls = future && this.canManageGroup()
-        ? `<form id="matchBbqForm" class="match-bbq-form"><label class="check-row"><input name="bbq_enabled" type="checkbox" ${match.bbq_enabled ? "checked" : ""}> Haverá churrasco nesta pelada</label><div class="field" id="matchBbqPriceField"><label>Valor por pessoa</label><input name="bbq_price" type="number" min="0" step="0.01" value="${Number(match.bbq_price || 0)}" inputmode="decimal"></div><button class="btn btn-secondary btn-block">Salvar churrasco</button></form>`
-        : "";
-      const drawInfo = !future ? "" : overflow > 0
-        ? `<div class="attendance-capacity-card warning"><span>⇅</span><div><strong>Sorteio necessário</strong><small>${confirmedCount} confirmados para ${match.max_players} lugares iniciais. ${overflow} membro(s) devem começar na espera.</small></div></div>`
-        : grouped.waitlist.length
-          ? `<div class="attendance-capacity-card ready"><span>✓</span><div><strong>Espera inicial definida</strong><small>${confirmedCount} começam jogando e ${grouped.waitlist.length} aguardam, em ordem.</small></div></div>`
-          : `<div class="attendance-capacity-card"><span>◎</span><div><strong>${confirmedCount} de ${match.max_players} lugares iniciais</strong><small>${Math.max(0, Number(match.max_players) - confirmedCount)} lugar(es) ainda disponível(is).</small></div></div>`;
+
+      const drawStatus = match.waitlist_drawn_at
+        ? `<div class="draw-status ready"><span>✓</span><div><strong>Sorteio realizado</strong><small>${grouped.waitlist.length} pessoa(s) na espera inicial. O resultado permanece salvo até um novo sorteio.</small></div></div>`
+        : `<div class="draw-status"><span>⇅</span><div><strong>Nenhum sorteio realizado</strong><small>Selecione livremente os participantes e quantos começarão na espera.</small></div></div>`;
+      const drawSection = future
+        ? `<section class="match-draw-section"><div class="section-title"><h2>Sorteio da espera</h2><small>Independente do limite de participantes.</small></div>${drawStatus}${this.canManageMatches() ? `<button class="btn btn-secondary btn-block" data-open-waitlist-draw="${match.id}">${match.waitlist_drawn_at ? "Refazer sorteio" : "Configurar sorteio"}</button>` : ""}</section>`
+        : grouped.waitlist.length ? `<section class="match-draw-section"><div class="section-title"><h2>Resultado da espera</h2></div>${drawStatus}</section>` : "";
+
+      const bbqExpanded = match.bbq_enabled
+        ? `<section class="match-bbq-section is-enabled"><div class="section-title"><h2>Confraternização</h2><small>Configuração exclusiva desta pelada.</small></div><div class="bbq-status enabled"><span>♨</span><div><strong>Churrasco confirmado</strong><small>${barbecueTotal} participante(s) · ${money(match.bbq_price || 0)} por pessoa</small></div></div>${future && this.canManageGroup() ? `<form id="matchBbqForm" class="match-bbq-form"><label class="check-row"><input name="bbq_enabled" type="checkbox" checked> Haverá churrasco nesta pelada</label><div class="bbq-expanded-options"><div class="field" id="matchBbqPriceField"><label>Valor por pessoa</label><input name="bbq_price" type="number" min="0" step="0.01" value="${Number(match.bbq_price || 0)}" inputmode="decimal"></div><button class="btn btn-secondary btn-block">Salvar churrasco</button></div></form>` : ""}</section>`
+        : future && this.canManageGroup()
+          ? `<section class="match-bbq-compact"><form id="matchBbqForm" class="match-bbq-form compact"><label class="check-row bbq-toggle-row"><input name="bbq_enabled" type="checkbox"> Haverá churrasco nesta pelada</label><div class="bbq-expanded-options" hidden><div class="bbq-status enabled"><span>♨</span><div><strong>Configurar churrasco</strong><small>Informe o valor e salve para abrir as opções aos participantes.</small></div></div><div class="field" id="matchBbqPriceField"><label>Valor por pessoa</label><input name="bbq_price" type="number" min="0" step="0.01" value="0" inputmode="decimal"></div><button class="btn btn-secondary btn-block">Salvar churrasco</button></div></form></section>`
+          : "";
+
       const managerControls = future && this.canManageMatches()
-        ? `<section class="attendance-manager-section"><div class="section-title"><h2>Gestão da escala</h2><small>${pendingPlayers.length} sem resposta.</small></div>${drawInfo}<div class="attendance-manager-actions"><button class="btn btn-secondary" data-manage-attendance="${match.id}">Gerenciar presenças</button>${totalPlayingIntent > Number(match.max_players) ? `<button class="btn btn-primary" data-draw-waitlist="${match.id}">${match.waitlist_drawn_at ? "Refazer sorteio" : "Sortear espera inicial"}</button>` : ""}</div></section>`
-        : drawInfo;
+        ? `<section class="attendance-manager-section"><div class="section-title"><h2>Gestão da escala</h2><small>${pendingPlayers.length} sem resposta.</small></div><div class="attendance-manager-actions"><button class="btn btn-secondary" data-manage-attendance="${match.id}">Gerenciar presenças</button></div></section>`
+        : "";
       const deleteControls = future && this.canManageMatches() ? `<div class="delete-match-actions"><button class="btn btn-danger btn-block delete-match-button" data-delete-match="${match.id}">${recurring ? "Excluir somente esta data" : "Excluir jogo agendado"}</button>${recurring ? `<button class="btn btn-danger-outline btn-block" data-delete-series="${match.id}">Excluir esta e as próximas</button>` : ""}<p class="danger-help">A exclusão só é permitida antes do horário. Peladas realizadas permanecem no histórico.</p></div>` : "";
-      this.modal(match.title, `<div class="match-detail-banner"><span class="status-pill ${future ? "status-maybe" : "status-confirmed"}">${future ? "Agendado" : "Histórico"}</span><strong>${escapeHtml(shortDate(match.starts_at))}</strong><p>${escapeHtml(match.location)}</p>${match.notes ? `<small>${escapeHtml(match.notes)}</small>` : ""}</div>${recurringInfo}${managerControls}<section class="match-bbq-section"><div class="section-title"><h2>Confraternização</h2><small>Configuração exclusiva desta pelada.</small></div>${barbecueStatus}${barbecueControls}</section><div class="actions">${future ? `<button class="btn btn-primary" data-modal-rsvp="${match.id}">Minha presença</button>` : ""}${this.canManageMatches() ? `<button class="btn btn-secondary" data-modal-teams="${match.id}">Separar times</button>` : ""}</div>${deleteControls}${groupHtml("Começam jogando", "confirmed")}${groupHtml("Espera inicial", "waitlist")}${groupHtml("Talvez", "maybe")}${groupHtml("Não vão", "out")}`, (root, close) => {
+      this.modal(match.title, `<div class="match-detail-banner"><span class="status-pill ${future ? "status-maybe" : "status-confirmed"}">${future ? "Agendado" : "Histórico"}</span><strong>${escapeHtml(shortDate(match.starts_at))}</strong><p>${escapeHtml(match.location)}</p>${match.notes ? `<small>${escapeHtml(match.notes)}</small>` : ""}</div>${recurringInfo}${managerControls}${drawSection}${bbqExpanded}<div class="actions">${future ? `<button class="btn btn-primary" data-modal-rsvp="${match.id}">Minha presença</button>` : ""}${this.canManageMatches() ? `<button class="btn btn-secondary" data-modal-teams="${match.id}">Separar times</button>` : ""}</div>${deleteControls}${groupHtml("Começam jogando", "confirmed")}${groupHtml("Espera inicial", "waitlist")}${groupHtml("Talvez", "maybe")}${groupHtml("Não vão", "out")}`, (root, close) => {
         $("[data-modal-rsvp]", root)?.addEventListener("click", () => {
           close();
           this.openRsvp(match.id);
@@ -1435,37 +1440,32 @@
           close();
           this.openAttendanceManager(match.id);
         });
-        $("[data-draw-waitlist]", root)?.addEventListener("click", async event => {
-          const label = match.waitlist_drawn_at ? "Refazer o sorteio substituirá a ordem atual da espera. Deseja continuar?" : `Sortear ${Math.max(0, totalPlayingIntent - Number(match.max_players))} membro(s) para começar na espera?`;
-          if (!confirm(label)) return;
-          event.currentTarget.disabled = true;
-          event.currentTarget.textContent = "Sorteando...";
-          const result = await this.repo.drawMatchWaitlist(match.id);
-          this.state = this.repo.state;
+        $("[data-open-waitlist-draw]", root)?.addEventListener("click", () => {
           close();
-          this.render();
-          this.openMatchDetails(match.id);
-          this.toast(`${Number(result.waitlist_count || 0)} membro(s) definido(s) para a espera inicial.`);
+          this.openWaitlistDraw(match.id);
         });
         const bbqForm = $("#matchBbqForm", root);
         if (bbqForm) {
           const enabled = $('[name="bbq_enabled"]', bbqForm);
+          const options = $(".bbq-expanded-options", bbqForm);
           const price = $('[name="bbq_price"]', bbqForm);
           const refreshBbq = () => {
-            price.disabled = !enabled.checked;
-            $("#matchBbqPriceField", bbqForm).classList.toggle("is-disabled", !enabled.checked);
+            if (options) options.hidden = !enabled.checked;
+            if (price) price.disabled = !enabled.checked;
           };
           enabled.addEventListener("change", refreshBbq);
           refreshBbq();
           bbqForm.addEventListener("submit", async event => {
             event.preventDefault();
             const submit = event.submitter;
+            if (!submit || submit.disabled) return;
             submit.disabled = true;
             submit.textContent = "Salvando...";
-            await this.repo.updateMatchBbq(match.id, enabled.checked, Number(price.value || 0));
+            await this.repo.updateMatchBbq(match.id, enabled.checked, Number(price?.value || 0));
             this.state = this.repo.state;
             close();
             this.render();
+            this.openMatchDetails(match.id);
             this.toast(enabled.checked ? "Churrasco ativado para esta pelada." : "Churrasco removido desta pelada.");
           });
         }
@@ -1491,6 +1491,87 @@
         this.launchMatchId = "";
         history.replaceState({}, document.title, appBaseUrl());
       }
+    },
+
+    openWaitlistDraw(matchId) {
+      if (!this.canManageMatches()) return this.toast("Somente administrador e organizador podem realizar o sorteio.", true);
+      const match = this.state.matches.find(item => item.id === matchId);
+      if (!match || new Date(match.starts_at) <= new Date()) return this.toast("O sorteio está disponível apenas em eventos futuros.", true);
+      const eligibleAttendance = this.attendanceFor(matchId).filter(item => ["confirmed", "waitlist"].includes(item.status));
+      const eligiblePlayers = eligibleAttendance.map(item => this.player(item.player_id)).filter(Boolean).sort((a, b) => String(a.name).localeCompare(String(b.name), "pt-BR"));
+      if (eligiblePlayers.length < 2) return this.toast("São necessárias ao menos duas presenças confirmadas para realizar o sorteio.", true);
+      const currentWaitlist = new Set(eligibleAttendance.filter(item => item.status === "waitlist").map(item => item.player_id));
+      const rows = eligiblePlayers.map(player => `<label class="draw-player-row"><input type="checkbox" name="draw_player" value="${player.id}" checked><span class="draw-player-check">✓</span>${this.personAvatar(player, "draw-player-avatar")}<span class="list-main"><strong>${escapeHtml(player.name)}</strong><small>${escapeHtml(player.primary_position || "Sem posição")}${currentWaitlist.has(player.id) ? " · atualmente na espera" : ""}</small></span>${this.isGuest(player) ? '<span class="guest-badge">Convidado</span>' : ""}</label>`).join("");
+      const initialCount = Math.max(1, Math.min(currentWaitlist.size || 1, eligiblePlayers.length - 1));
+      this.modal("Sorteio da espera", `<form id="waitlistDrawForm" class="form-grid"><div class="notice"><strong>${escapeHtml(match.title)}</strong><br>Escolha exatamente quem participará do sorteio. O sorteio pode ser realizado mesmo sem exceder o limite da pelada.</div><div class="draw-selection-head"><strong>Participantes do sorteio</strong><button type="button" class="text-button" id="toggleDrawPlayers">Desmarcar todos</button></div><div class="draw-player-list">${rows}</div><div class="field"><label>Quantos começarão na espera</label><input type="number" name="waitlist_count" min="1" max="${eligiblePlayers.length - 1}" value="${initialCount}" required inputmode="numeric"><small id="drawCountHelp">Selecione ao menos 2 participantes.</small></div><div class="field"><label>Forma de exibição</label><div class="radio-grid draw-mode-grid"><label class="radio-card"><input type="radio" name="draw_mode" value="instant" checked>Instantâneo</label><label class="radio-card"><input type="radio" name="draw_mode" value="reveal">Revelação</label></div></div><button class="btn btn-primary btn-block">Realizar sorteio</button></form>`, (root, close) => {
+        const form = $("#waitlistDrawForm", root);
+        const checks = () => $$('input[name="draw_player"]', form);
+        const countInput = $('[name="waitlist_count"]', form);
+        const toggle = $("#toggleDrawPlayers", form);
+        const updateLimits = () => {
+          const selected = checks().filter(input => input.checked).length;
+          countInput.max = String(Math.max(1, selected - 1));
+          if (Number(countInput.value) > selected - 1) countInput.value = String(Math.max(1, selected - 1));
+          countInput.disabled = selected < 2;
+          $("#drawCountHelp", form).textContent = selected < 2 ? "Selecione ao menos 2 participantes." : `${selected} selecionado(s); até ${selected - 1} podem ir para a espera.`;
+          toggle.textContent = selected ? "Desmarcar todos" : "Selecionar todos";
+        };
+        checks().forEach(input => input.addEventListener("change", updateLimits));
+        toggle.addEventListener("click", () => {
+          const shouldCheck = !checks().some(input => input.checked);
+          checks().forEach(input => { input.checked = shouldCheck; });
+          updateLimits();
+        });
+        updateLimits();
+        form.addEventListener("submit", async event => {
+          event.preventDefault();
+          const selected = checks().filter(input => input.checked).map(input => input.value);
+          const count = Number(countInput.value || 0);
+          if (selected.length < 2) return this.toast("Selecione ao menos dois participantes.", true);
+          if (count < 1 || count >= selected.length) return this.toast("A quantidade da espera deve ser menor que o total selecionado.", true);
+          const mode = new FormData(form).get("draw_mode") || "instant";
+          const submit = event.submitter;
+          if (!submit || submit.disabled) return;
+          submit.disabled = true;
+          submit.textContent = "Sorteando...";
+          const result = await this.repo.drawMatchWaitlist(matchId, selected, count);
+          this.state = this.repo.state;
+          close();
+          this.render();
+          const drawnIds = Array.isArray(result.waitlist_player_ids) ? result.waitlist_player_ids : [];
+          if (mode === "reveal" && drawnIds.length) this.openWaitlistReveal(matchId, drawnIds);
+          else {
+            this.openMatchDetails(matchId);
+            this.toast(`${Number(result.waitlist_count || count)} participante(s) sorteado(s) para a espera inicial.`);
+          }
+        });
+      });
+    },
+
+    openWaitlistReveal(matchId, playerIds) {
+      const match = this.state.matches.find(item => item.id === matchId);
+      const players = playerIds.map(id => this.player(id)).filter(Boolean);
+      let index = 0;
+      this.modal("Revelação do sorteio", `<div class="draw-reveal"><div class="draw-reveal-stage"><span class="draw-reveal-kicker">ESPERA INICIAL</span><div id="drawRevealCard" class="draw-reveal-card"><span>?</span><strong>Resultado oculto</strong><small>Toque para revelar o primeiro nome</small></div></div><div id="drawRevealProgress" class="draw-reveal-progress">0 de ${players.length} revelados</div><button class="btn btn-primary btn-block" id="revealNextDraw">Revelar próximo</button></div>`, (root, close) => {
+        const card = $("#drawRevealCard", root);
+        const button = $("#revealNextDraw", root);
+        const progress = $("#drawRevealProgress", root);
+        button.addEventListener("click", () => {
+          if (index >= players.length) {
+            close();
+            this.openMatchDetails(matchId);
+            return;
+          }
+          const player = players[index];
+          index += 1;
+          card.classList.remove("is-revealed");
+          void card.offsetWidth;
+          card.innerHTML = `${this.personAvatar(player, "draw-reveal-avatar")}<strong>${escapeHtml(player.name)}</strong><small>${index}º da espera inicial${this.isGuest(player) ? " · Convidado" : ""}</small>`;
+          card.classList.add("is-revealed");
+          progress.textContent = `${index} de ${players.length} revelados`;
+          button.textContent = index >= players.length ? "Ver resultado completo" : "Revelar próximo";
+        });
+      });
     },
 
     openAttendanceManager(matchId) {
