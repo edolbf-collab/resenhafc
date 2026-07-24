@@ -1,13 +1,12 @@
-const CACHE = "resenha-fc-beta-1.0-build-118";
+const CACHE = "resenha-fc-beta-1.0-build-119";
 const CORE_ASSETS = [
   "/",
   "/index.html",
-  "/styles.css?v=beta118",
-  "/app.js?v=beta118",
-  "/pwa-bootstrap.js?v=beta118",
+  "/styles.css?v=beta119",
+  "/app.js?v=beta119",
+  "/pwa-bootstrap.js?v=beta119",
   "/supabase-config.js?v=0.3.3",
-  "/cloud-client-loader.js?v=beta118",
-  "/group-avatars-data.js?v=beta118",
+  "/group-avatars-data.js?v=beta119",
   "/manifest.json",
   "/offline.html",
   "/version.json",
@@ -36,23 +35,7 @@ self.addEventListener("fetch", event => {
   if (event.request.method !== "GET") return;
   const url = new URL(event.request.url);
   if (url.origin !== self.location.origin) {
-    const isCloudLibrary = (url.hostname === "cdn.jsdelivr.net" || url.hostname === "unpkg.com")
-      && url.pathname.includes("@supabase/supabase-js");
-    if (!isCloudLibrary) {
-      event.respondWith(fetch(event.request));
-      return;
-    }
-    event.respondWith(caches.open(CACHE).then(async cache => {
-      const cached = await cache.match(event.request);
-      try {
-        const response = await fetch(event.request);
-        if (response.ok || response.type === "opaque") cache.put(event.request, response.clone()).catch(() => {});
-        return response;
-      } catch (error) {
-        if (cached) return cached;
-        throw error;
-      }
-    }));
+    event.respondWith(fetch(event.request));
     return;
   }
   if (event.request.mode === "navigate") {

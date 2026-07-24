@@ -1,10 +1,10 @@
 {
   "channel": "beta",
   "version": "Beta 1.0",
-  "build": 118,
+  "build": 119,
   "database": 114,
   "edge": 103,
   "mandatory": false,
-  "notes": "Tela de acesso restrito aprimorada com e-mail identificado, cópia rápida, instruções e verificação de liberação sem novo login.",
-  "label": "Beta 1.0 Build 118"
+  "notes": "Reconstrução do carregamento do cliente Supabase com base funcional na Build 115, mantendo a instalação Android da Build 116.",
+  "label": "Beta 1.0 Build 119"
 }
