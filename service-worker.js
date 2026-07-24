@@ -1,12 +1,12 @@
-const CACHE = "resenha-fc-beta-1.0-build-119";
-const CORE_ASSETS = [
+const CACHE = "resenha-fc-beta-1.0-build-120";
+const ASSETS = [
   "/",
   "/index.html",
-  "/styles.css?v=beta119",
-  "/app.js?v=beta119",
-  "/pwa-bootstrap.js?v=beta119",
+  "/styles.css?v=beta120",
+  "/app.js?v=beta120",
+  "/pwa-bootstrap.js?v=beta120",
   "/supabase-config.js?v=0.3.3",
-  "/group-avatars-data.js?v=beta119",
+  "/group-avatars-data.js?v=beta120",
   "/manifest.json",
   "/offline.html",
   "/version.json",
@@ -19,39 +19,44 @@ const CORE_ASSETS = [
   "/brand/brand-mark-transparent-v0311.png"
 ];
 
-self.addEventListener("install", event => {
-  event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(CORE_ASSETS)));
-  self.skipWaiting();
-});
+self.addEventListener("install", event => event.waitUntil((async () => {
+  const cache = await caches.open(CACHE);
+  await Promise.allSettled(ASSETS.map(async asset => {
+    try { await cache.add(asset); }
+    catch (error) { console.warn("Asset não armazenado no cache:", asset, error); }
+  }));
+  await self.skipWaiting();
+})()));
 
-self.addEventListener("activate", event => {
-  event.waitUntil(Promise.all([
-    caches.keys().then(keys => Promise.all(keys.filter(key => key !== CACHE).map(key => caches.delete(key)))),
-    self.clients.claim()
-  ]));
-});
+self.addEventListener("activate", event => event.waitUntil(
+  caches.keys()
+    .then(keys => Promise.all(keys.filter(key => key !== CACHE).map(key => caches.delete(key))))
+    .then(() => self.clients.claim())
+));
 
 self.addEventListener("fetch", event => {
   if (event.request.method !== "GET") return;
   const url = new URL(event.request.url);
-  if (url.origin !== self.location.origin) {
-    event.respondWith(fetch(event.request));
-    return;
-  }
-  if (event.request.mode === "navigate") {
-    event.respondWith(fetch(event.request).then(response => {
-      if (response.ok) caches.open(CACHE).then(cache => cache.put("/index.html", response.clone())).catch(() => {});
-      return response;
-    }).catch(async () => (await caches.match("/index.html")) || caches.match("/")));
-    return;
-  }
-  event.respondWith(caches.match(event.request).then(cached => {
-    const network = fetch(event.request).then(response => {
-      if (response.ok) caches.open(CACHE).then(cache => cache.put(event.request, response.clone())).catch(() => {});
-      return response;
-    });
-    return cached || network;
-  }));
+
+  // Igual à Build 115: recursos externos não são interceptados pelo service worker.
+  // O navegador carrega diretamente Google, Supabase CDN e demais origens permitidas pelo CSP.
+  if (url.origin !== self.location.origin) return;
+
+  const navigation = event.request.mode === "navigate";
+  event.respondWith(
+    fetch(event.request)
+      .then(response => {
+        if (response?.ok) {
+          caches.open(CACHE).then(cache => cache.put(event.request, response.clone())).catch(() => {});
+        }
+        return response;
+      })
+      .catch(() => caches.match(event.request, { ignoreSearch: true }).then(hit =>
+        hit || (navigation
+          ? caches.match("/index.html", { ignoreSearch: true })
+          : caches.match("/offline.html", { ignoreSearch: true }))
+      ))
+  );
 });
 
 self.addEventListener("push", event => {
