@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const APP_RELEASE = Object.freeze({ channel: "beta", version: "Beta 1.0", build: 115, database: 114, edge: 103 });
+  const APP_RELEASE = Object.freeze({ channel: "beta", version: "Beta 1.0", build: 116, database: 114, edge: 103 });
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
   const uid = () => crypto.randomUUID?.() || "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
@@ -805,9 +805,12 @@
     async registerServiceWorker() {
       if (!("serviceWorker" in navigator) || !location.protocol.startsWith("http")) return null;
       try {
-        this.swRegistration = await navigator.serviceWorker.register("service-worker.js");
-        this.swRegistration.addEventListener("updatefound", () => {
-          const worker = this.swRegistration.installing;
+        const registration = await (window.resenhaPwa?.getRegistration?.() || navigator.serviceWorker.ready);
+        if (!registration) return null;
+        if (this.swRegistration === registration) return registration;
+        this.swRegistration = registration;
+        registration.addEventListener("updatefound", () => {
+          const worker = registration.installing;
           worker?.addEventListener("statechange", () => {
             if (worker.state === "installed" && navigator.serviceWorker.controller) {
               this.updateAvailable = { build: "novo", version: "Nova versão" };
@@ -815,10 +818,10 @@
             }
           });
         });
-        navigator.serviceWorker.addEventListener("controllerchange", () => location.reload());
-        return this.swRegistration;
+        navigator.serviceWorker.addEventListener("controllerchange", () => location.reload(), { once: true });
+        return registration;
       } catch (error) {
-        console.warn("Falha ao registrar o service worker.", error);
+        console.warn("Falha ao obter o service worker registrado.", error);
         return null;
       }
     },
@@ -2292,9 +2295,9 @@
     },
 
     async maybeShowNotificationOnboarding() {
-      const key = "resenha-notification-onboarding-v1";
+      const key = "resenha-notification-onboarding-v2";
       if (localStorage.getItem(key) === "done") return;
-      if (!isStandalone() || !pushSupported()) return;
+      if (!pushSupported()) return;
       if (!String(window.RESENHA_CONFIG?.vapidPublicKey || "").trim()) return;
       if (Notification.permission === "denied") {
         localStorage.setItem(key, "done");

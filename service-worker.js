@@ -1,57 +1,57 @@
-const CACHE = "resenha-fc-beta-1.0-build-115";
-const ASSETS = [
-  "./",
-  "./index.html",
-  "./styles.css",
-  "./app.js",
-  "./supabase-config.js",
-  "./manifest.webmanifest",
-  "./offline.html",
-  "./version.json",
-  "./brand/brand-mark.png",
-  "./brand/logo-resenha-fc.png",
-  "./login-logo-transparent-v0311.png",
-  "./brand/brand-mark-transparent-v0311.png",
-  "./group-avatars-data.js",
-  "./icons/favicon-16x16.png",
-  "./icons/favicon-32x32.png",
-  "./icons/icon-96.png",
-  "./icons/icon-192-v023.png",
-  "./icons/icon-512-v023.png",
-  "./icons/maskable-icon-192.png",
-  "./icons/maskable-icon-512.png",
-  "./apple-touch-icon.png",
-  "./apple-touch-icon-180x180-v023.png",
-  ...Array.from({ length: 20 }, (_, index) => `./assets/group-avatars/badge-${String(index + 1).padStart(2, "0")}.png`)
+const CACHE = "resenha-fc-beta-1.0-build-116";
+const CORE_ASSETS = [
+  "/",
+  "/index.html",
+  "/styles.css?v=beta116",
+  "/app.js?v=beta116",
+  "/pwa-bootstrap.js?v=beta116",
+  "/supabase-config.js?v=0.3.3",
+  "/group-avatars-data.js?v=beta116",
+  "/manifest.json",
+  "/offline.html",
+  "/version.json",
+  "/resenhafc-icon-192.png",
+  "/resenhafc-icon-512.png",
+  "/resenhafc-maskable-192.png",
+  "/resenhafc-maskable-512.png",
+  "/apple-touch-icon.png",
+  "/login-logo-transparent-v0311.png",
+  "/brand/brand-mark-transparent-v0311.png"
 ];
 
-self.addEventListener("install", event => event.waitUntil((async () => {
-  const cache = await caches.open(CACHE);
-  await Promise.allSettled(ASSETS.map(async asset => {
-    try { await cache.add(asset); }
-    catch (error) { console.warn("Asset não armazenado no cache:", asset, error); }
-  }));
-  await self.skipWaiting();
-})()));
+self.addEventListener("install", event => {
+  event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(CORE_ASSETS)));
+  self.skipWaiting();
+});
 
-self.addEventListener("activate", event => event.waitUntil(
-  caches.keys().then(keys => Promise.all(keys.filter(key => key !== CACHE).map(key => caches.delete(key)))).then(() => self.clients.claim())
-));
+self.addEventListener("activate", event => {
+  event.waitUntil(Promise.all([
+    caches.keys().then(keys => Promise.all(keys.filter(key => key !== CACHE).map(key => caches.delete(key)))),
+    self.clients.claim()
+  ]));
+});
 
 self.addEventListener("fetch", event => {
   if (event.request.method !== "GET") return;
   const url = new URL(event.request.url);
-  if (url.origin !== location.origin) return;
-
-  const navigation = event.request.mode === "navigate";
-  event.respondWith(
-    fetch(event.request)
-      .then(response => {
-        if (response?.ok) caches.open(CACHE).then(cache => cache.put(event.request, response.clone()));
-        return response;
-      })
-      .catch(() => caches.match(event.request, { ignoreSearch: true }).then(hit => hit || (navigation ? caches.match("./index.html", { ignoreSearch: true }) : caches.match("./offline.html", { ignoreSearch: true }))))
-  );
+  if (url.origin !== self.location.origin) {
+    event.respondWith(fetch(event.request));
+    return;
+  }
+  if (event.request.mode === "navigate") {
+    event.respondWith(fetch(event.request).then(response => {
+      if (response.ok) caches.open(CACHE).then(cache => cache.put("/index.html", response.clone())).catch(() => {});
+      return response;
+    }).catch(async () => (await caches.match("/index.html")) || caches.match("/")));
+    return;
+  }
+  event.respondWith(caches.match(event.request).then(cached => {
+    const network = fetch(event.request).then(response => {
+      if (response.ok) caches.open(CACHE).then(cache => cache.put(event.request, response.clone())).catch(() => {});
+      return response;
+    });
+    return cached || network;
+  }));
 });
 
 self.addEventListener("push", event => {
