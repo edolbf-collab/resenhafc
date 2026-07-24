@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const APP_RELEASE = Object.freeze({ channel: "beta", version: "Beta 1.0", build: 116, database: 114, edge: 103 });
+  const APP_RELEASE = Object.freeze({ channel: "beta", version: "Beta 1.0", build: 117, database: 114, edge: 103 });
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
   const uid = () => crypto.randomUUID?.() || "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
@@ -2485,15 +2485,11 @@
     const config = window.RESENHA_CONFIG || {};
     const cloudConfigured = Boolean(config.supabaseUrl && config.supabasePublishableKey);
     if (cloudConfigured && !window.supabase) {
-      await new Promise((resolve, reject) => {
-        const script = document.createElement("script");
-        script.src = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2";
-        script.onload = resolve;
-        script.onerror = () => reject(new Error("Não foi possível carregar o cliente de nuvem."));
-        document.head.appendChild(script);
-      }).catch(error => {
+      try {
+        if (window.RESENHA_CLOUD_READY) await window.RESENHA_CLOUD_READY;
+      } catch (error) {
         window.RESENHA_CLOUD_LOAD_ERROR = error;
-      });
+      }
     }
     App.init();
   }

@@ -1,7 +1,7 @@
 {
   "channel": "beta",
   "version": "Beta 1.0",
-  "build": 116,
+  "build": 117,
   "database": 114,
   "edge": 103,
   "mandatory": false,
