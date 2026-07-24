@@ -1,4 +1,4 @@
-/* Resenha FC Build 117 — registro PWA antecipado e instalação nativa do Chrome. */
+/* Resenha FC Build 118 — registro PWA antecipado e instalação nativa do Chrome. */
 (() => {
   "use strict";
 

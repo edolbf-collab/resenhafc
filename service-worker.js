@@ -1,13 +1,13 @@
-const CACHE = "resenha-fc-beta-1.0-build-117";
+const CACHE = "resenha-fc-beta-1.0-build-118";
 const CORE_ASSETS = [
   "/",
   "/index.html",
-  "/styles.css?v=beta117",
-  "/app.js?v=beta117",
-  "/pwa-bootstrap.js?v=beta117",
+  "/styles.css?v=beta118",
+  "/app.js?v=beta118",
+  "/pwa-bootstrap.js?v=beta118",
   "/supabase-config.js?v=0.3.3",
-  "/cloud-client-loader.js?v=beta117",
-  "/group-avatars-data.js?v=beta117",
+  "/cloud-client-loader.js?v=beta118",
+  "/group-avatars-data.js?v=beta118",
   "/manifest.json",
   "/offline.html",
   "/version.json",

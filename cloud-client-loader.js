@@ -1,10 +1,10 @@
-/* Resenha FC Build 117 — carregamento resiliente do cliente Supabase. */
+/* Resenha FC Build 118 — carregamento resiliente do cliente Supabase. */
 (() => {
   "use strict";
 
   const SOURCES = [
-    "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.6/dist/umd/supabase.js",
-    "https://unpkg.com/@supabase/supabase-js@2.45.6/dist/umd/supabase.js"
+    "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2",
+    "https://unpkg.com/@supabase/supabase-js@2"
   ];
   const TIMEOUT_MS = 12000;
 
@@ -16,7 +16,6 @@
       const script = document.createElement("script");
       script.src = src;
       script.async = true;
-      script.crossOrigin = "anonymous";
       script.dataset.resenhaCloudSrc = src;
       const timer = setTimeout(() => {
         script.remove();
