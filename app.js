@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const APP_RELEASE = Object.freeze({ channel: "beta", version: "Beta 1.0", build: 120, database: 114, edge: 103 });
+  const APP_RELEASE = Object.freeze({ channel: "beta", version: "Beta 1.0", build: 121, database: 121, edge: 104 });
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
   const uid = () => crypto.randomUUID?.() || "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
@@ -21,12 +21,24 @@
       return "";
     }
   };
+  const extractUserAvatar = (user = null) => {
+    const candidates = [];
+    const meta = user?.user_metadata || {};
+    candidates.push(meta.avatar_url, meta.picture, meta.photo_url, meta.picture_url);
+    const identities = Array.isArray(user?.identities) ? user.identities : [];
+    identities.forEach(identity => {
+      const data = identity?.identity_data || {};
+      candidates.push(data.avatar_url, data.picture, data.photo_url, data.picture_url);
+    });
+    const chosen = candidates.map(value => safeImageUrl(value || "")).find(Boolean);
+    return chosen || "";
+  };
   const appBaseUrl = () => new URL("./", document.baseURI).href;
   const assetUrl = path => new URL(path, document.baseURI).href;
   const avatarKey = value => /^badge-(0[1-9]|1[0-9]|20)$/.test(String(value || "")) ? String(value) : "badge-01";
   const groupAvatarUrl = key => {
     const normalized = avatarKey(key);
-    return window.RESENHA_GROUP_AVATARS?.[normalized] || assetUrl(`assets/group-avatars/${normalized}.png?v=beta102`);
+    return window.RESENHA_GROUP_AVATARS?.[normalized] || assetUrl(`assets/group-avatars/${normalized}.png?v=beta121`);
   };
   const positionOptions = ["Goleiro", "Zagueiro", "Lateral", "Volante", "Meia", "Atacante", "Coringa"];
   const roleLabels = { owner: "Administrador", admin: "Administrador", organizer: "Organizador", treasurer: "Tesoureiro", member: "Membro" };
@@ -157,7 +169,8 @@
       const meta = user.user_metadata || {};
       const email = user.email || "";
       const name = meta.name || meta.full_name || [meta.given_name, meta.family_name].filter(Boolean).join(" ") || email.split("@")[0] || "Usuário";
-      this.state.profile = { id: user.id, email, name, avatar_url: meta.avatar_url || meta.picture || "" };
+      const avatarUrl = extractUserAvatar(user);
+      this.state.profile = { id: user.id, email, name, avatar_url: avatarUrl };
       await this.claimBetaAccess();
 
       const { data: memberships, error } = await this.client
@@ -207,6 +220,13 @@
         if (result.error) throw result.error;
         this.state[key] = result.data || [];
       });
+
+      const ownAvatar = safeImageUrl(this.state.profile?.avatar_url || "");
+      if (ownAvatar) {
+        this.state.players = (this.state.players || []).map(player => player?.user_id === this.state.profile?.id && !safeImageUrl(player.avatar_url || "")
+          ? { ...player, avatar_url: ownAvatar }
+          : player);
+      }
 
       if (subscribe) this.subscribe(groupId);
       return this.state;
@@ -566,6 +586,15 @@
       });
     }
 
+    async notifyChargeCreated(groupId, chargeId) {
+      return this.invokeNotification({
+        action: "charge-created",
+        groupId,
+        chargeId,
+        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Sao_Paulo"
+      });
+    }
+
     async deleteFinanceEntry(groupId, entryType, entryId) {
       const { error } = await this.client.rpc("delete_finance_entry", {
         p_group_id: groupId,
@@ -798,7 +827,7 @@
         if (!(image instanceof HTMLImageElement) || !image.matches("[data-group-avatar]")) return;
         if (image.dataset.fallbackApplied === "true") return;
         image.dataset.fallbackApplied = "true";
-        image.src = window.RESENHA_GROUP_AVATARS?.["badge-01"] || assetUrl("assets/group-avatars/badge-01.png?v=beta102");
+        image.src = window.RESENHA_GROUP_AVATARS?.["badge-01"] || assetUrl("assets/group-avatars/badge-01.png?v=beta121");
       }, true);
     },
 
@@ -1937,7 +1966,19 @@
             successMessage = "Despesa registrada.";
           } else {
             await this.repo.mutate("charges", { ...base, due_date: new Date().toISOString().slice(0, 10), status: "open" });
-            successMessage = "Cobrança criada.";
+            if (playerId) {
+              try {
+                const pushResult = await this.repo.notifyChargeCreated(this.state.currentGroupId, base.id);
+                successMessage = Number(pushResult?.sent || 0) > 0
+                  ? "Cobrança criada e aviso enviado ao membro."
+                  : "Cobrança criada. O membro ainda não possui push ativo neste aparelho.";
+              } catch (pushError) {
+                console.warn("Não foi possível enviar a notificação da cobrança.", pushError);
+                successMessage = "Cobrança criada, mas a notificação não pôde ser enviada.";
+              }
+            } else {
+              successMessage = "Cobrança criada sem membro vinculado.";
+            }
           }
           this.state = this.repo.state;
           close();
