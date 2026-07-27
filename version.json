@@ -1,10 +1,10 @@
 {
   "channel": "beta",
   "version": "Beta 1.0",
-  "build": 124,
+  "build": 125,
   "database": 124,
   "edge": 104,
   "mandatory": false,
-  "notes": "Ícones de grupos aprovados em alta resolução e ferramenta administrativa para identificar usuários ativos sem notificações push.",
-  "label": "Beta 1.0 Build 124"
+  "notes": "Recriação integral dos 20 ícones de grupos em vetor e PNG transparente 1024x1024, carregados diretamente pelo aplicativo sem recortes de imagem.",
+  "label": "Beta 1.0 Build 125"
 }
