@@ -1,10 +1,10 @@
 {
   "channel": "beta",
   "version": "Beta 1.0",
-  "build": 121,
+  "build": 122,
   "database": 121,
   "edge": 104,
   "mandatory": false,
-  "notes": "Novos escudos de futebol, reforço na exibição das fotos Google e push individual ao criar cobrança.",
-  "label": "Beta 1.0 Build 121"
+  "notes": "Escudos da criação de grupo substituídos pelos 20 ícones do arquivo aprovado e revisão de espaçamento entre balões/cartões nas telas e modais do app.",
+  "label": "Beta 1.0 Build 122"
 }

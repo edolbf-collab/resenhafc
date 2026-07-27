@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const APP_RELEASE = Object.freeze({ channel: "beta", version: "Beta 1.0", build: 121, database: 121, edge: 104 });
+  const APP_RELEASE = Object.freeze({ channel: "beta", version: "Beta 1.0", build: 122, database: 121, edge: 104 });
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
   const uid = () => crypto.randomUUID?.() || "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
@@ -38,7 +38,7 @@
   const avatarKey = value => /^badge-(0[1-9]|1[0-9]|20)$/.test(String(value || "")) ? String(value) : "badge-01";
   const groupAvatarUrl = key => {
     const normalized = avatarKey(key);
-    return window.RESENHA_GROUP_AVATARS?.[normalized] || assetUrl(`assets/group-avatars/${normalized}.png?v=beta121`);
+    return window.RESENHA_GROUP_AVATARS?.[normalized] || assetUrl(`assets/group-avatars/${normalized}.png?v=beta122`);
   };
   const positionOptions = ["Goleiro", "Zagueiro", "Lateral", "Volante", "Meia", "Atacante", "Coringa"];
   const roleLabels = { owner: "Administrador", admin: "Administrador", organizer: "Organizador", treasurer: "Tesoureiro", member: "Membro" };
@@ -827,7 +827,7 @@
         if (!(image instanceof HTMLImageElement) || !image.matches("[data-group-avatar]")) return;
         if (image.dataset.fallbackApplied === "true") return;
         image.dataset.fallbackApplied = "true";
-        image.src = window.RESENHA_GROUP_AVATARS?.["badge-01"] || assetUrl("assets/group-avatars/badge-01.png?v=beta121");
+        image.src = window.RESENHA_GROUP_AVATARS?.["badge-01"] || assetUrl("assets/group-avatars/badge-01.png?v=beta122");
       }, true);
     },
 
@@ -1049,7 +1049,7 @@
       const confirmed = this.confirmedFor(match.id).map(item => this.player(item.player_id)).filter(Boolean);
       const assignments = this.state.assignments.filter(item => item.match_id === match.id);
       const teams = [...new Set(assignments.map(item => item.team_name))];
-      return `<div class="page-head"><div><span class="page-kicker">ESCALAÇÃO</span><h1>Times</h1><p>${escapeHtml(match.title)} · ${confirmed.length} confirmados</p></div>${this.canManageMatches() ? `<button class="btn btn-primary btn-small" data-action="draw-teams" data-id="${match.id}">${assignments.length ? "Rebalancear" : "Separar"}</button>` : ""}</div><div class="notice"><strong>Equilíbrio confidencial</strong><br>O servidor considera posição, goleiros e média das avaliações. Organizadores conseguem formar os times sem visualizar as notas.</div>${teams.length ? `<div class="team-grid">${teams.map(name => this.teamCard(name, assignments)).join("")}</div>` : `<div class="card empty"><strong>Times ainda não formados</strong><span>${confirmed.length < 2 ? "Aguarde mais confirmações." : "Use o botão Separar para gerar equipes equilibradas."}</span></div>`}<div class="section-title"><h2>Confirmados</h2></div><div class="list">${confirmed.map(player => this.playerRow(player, { showRating: this.canSeeRatings() })).join("") || '<div class="card empty">Nenhum confirmado.</div>'}</div>`;
+      return `<div class="page-head"><div><span class="page-kicker">ESCALAÇÃO</span><h1>Times</h1><p>${escapeHtml(match.title)} · ${confirmed.length} confirmados</p></div>${this.canManageMatches() ? `<button class="btn btn-primary btn-small" data-action="draw-teams" data-id="${match.id}">${assignments.length ? "Rebalancear" : "Separar"}</button>` : ""}</div><div class="content-stack"><div class="notice"><strong>Equilíbrio confidencial</strong><br>O servidor considera posição, goleiros e média das avaliações. Organizadores conseguem formar os times sem visualizar as notas.</div>${teams.length ? `<div class="team-grid">${teams.map(name => this.teamCard(name, assignments)).join("")}</div>` : `<div class="card empty"><strong>Times ainda não formados</strong><span>${confirmed.length < 2 ? "Aguarde mais confirmações." : "Use o botão Separar para gerar equipes equilibradas."}</span></div>`}</div><div class="section-title"><h2>Confirmados</h2></div><div class="list">${confirmed.map(player => this.playerRow(player, { showRating: this.canSeeRatings() })).join("") || '<div class="card empty">Nenhum confirmado.</div>'}</div>`;
     },
 
     teamCard(name, assignments) {
@@ -1129,7 +1129,7 @@
           : "";
         return `<div class="card list-row finance-charge-row">${this.personAvatar(player)}<div class="list-main"><strong>${escapeHtml(player.name)}</strong><small>${escapeHtml(charge.description)} · Total: ${money(charge.amount)}</small>${paymentDetails}</div><span class="status-pill ${statusClass}">${statusLabel}</span>${canDelete ? `<button class="row-delete-button" data-action="delete-finance" data-type="charge" data-id="${charge.id}" aria-label="Excluir cobrança">×</button>` : ""}</div>`;
       }).join("");
-      return `<div class="page-head"><div><span class="page-kicker">FINANCEIRO</span><h1>Caixa</h1><p>Mensalidades, quadra, materiais e churrasco.</p></div>${canDelete ? '<button class="btn btn-primary btn-small" data-action="new-finance">+ Lançar</button>' : ""}</div>${!canDelete ? '<div class="notice"><strong>Acesso de consulta</strong><br>Somente administrador e tesoureiro podem alterar lançamentos.</div>' : '<div class="notice notice-success"><strong>Acesso autorizado</strong><br>Você pode registrar e excluir cobranças, pagamentos e despesas.</div>'}<section class="card balance-card"><small>Saldo atual</small><h2>${money(income - out)}</h2><div class="balance-grid"><div><small>Entradas</small><strong>${money(income)}</strong></div><div><small>Saídas</small><strong>${money(out)}</strong></div></div><div class="balance-track"><span style="width:${pct}%"></span></div><p>${paid} paga(s) · ${partial} parcial(is) · ${pct}% do valor cobrado recebido</p></section><div class="section-title"><h2>Movimentações</h2></div><div class="list">${movements.map(item => `<div class="card finance-row"><div class="finance-icon ${item.type === "income" ? "finance-income" : "finance-expense"}">${item.type === "income" ? "+" : "−"}</div><div class="list-main"><strong>${escapeHtml(item.description)}</strong><small>${escapeHtml(shortDate(item.date))}</small></div><strong class="money ${item.type === "income" ? "positive" : "negative"}">${item.type === "income" ? "+" : "−"}${money(item.amount)}</strong>${canDelete ? `<button class="row-delete-button" data-action="delete-finance" data-type="${item.entryType}" data-id="${item.id}" aria-label="Excluir lançamento">×</button>` : ""}</div>`).join("") || '<div class="card empty">Sem movimentações.</div>'}</div><div class="section-title"><h2>Cobranças</h2></div><div class="list">${chargeRows || '<div class="card empty">Nenhuma cobrança.</div>'}</div>`;
+      return `<div class="page-head"><div><span class="page-kicker">FINANCEIRO</span><h1>Caixa</h1><p>Mensalidades, quadra, materiais e churrasco.</p></div>${canDelete ? '<button class="btn btn-primary btn-small" data-action="new-finance">+ Lançar</button>' : ""}</div><div class="content-stack">${!canDelete ? '<div class="notice"><strong>Acesso de consulta</strong><br>Somente administrador e tesoureiro podem alterar lançamentos.</div>' : '<div class="notice notice-success"><strong>Acesso autorizado</strong><br>Você pode registrar e excluir cobranças, pagamentos e despesas.</div>'}<section class="card balance-card"><small>Saldo atual</small><h2>${money(income - out)}</h2><div class="balance-grid"><div><small>Entradas</small><strong>${money(income)}</strong></div><div><small>Saídas</small><strong>${money(out)}</strong></div></div><div class="balance-track"><span style="width:${pct}%"></span></div><p>${paid} paga(s) · ${partial} parcial(is) · ${pct}% do valor cobrado recebido</p></section></div><div class="section-title"><h2>Movimentações</h2></div><div class="list">${movements.map(item => `<div class="card finance-row"><div class="finance-icon ${item.type === "income" ? "finance-income" : "finance-expense"}">${item.type === "income" ? "+" : "−"}</div><div class="list-main"><strong>${escapeHtml(item.description)}</strong><small>${escapeHtml(shortDate(item.date))}</small></div><strong class="money ${item.type === "income" ? "positive" : "negative"}">${item.type === "income" ? "+" : "−"}${money(item.amount)}</strong>${canDelete ? `<button class="row-delete-button" data-action="delete-finance" data-type="${item.entryType}" data-id="${item.id}" aria-label="Excluir lançamento">×</button>` : ""}</div>`).join("") || '<div class="card empty">Sem movimentações.</div>'}</div><div class="section-title"><h2>Cobranças</h2></div><div class="list">${chargeRows || '<div class="card empty">Nenhuma cobrança.</div>'}</div>`;
     },
 
     morePage() {
