@@ -1,10 +1,10 @@
 {
   "channel": "beta",
   "version": "Beta 1.0",
-  "build": 123,
-  "database": 121,
+  "build": 124,
+  "database": 124,
   "edge": 104,
   "mandatory": false,
-  "notes": "Correção da qualidade e do enquadramento dos 20 ícones da criação de grupos, com extração limpa do arquivo aprovado e ajustes visuais no seletor de escudos.",
-  "label": "Beta 1.0 Build 123"
+  "notes": "Ícones de grupos aprovados em alta resolução e ferramenta administrativa para identificar usuários ativos sem notificações push.",
+  "label": "Beta 1.0 Build 124"
 }

@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const APP_RELEASE = Object.freeze({ channel: "beta", version: "Beta 1.0", build: 123, database: 121, edge: 104 });
+  const APP_RELEASE = Object.freeze({ channel: "beta", version: "Beta 1.0", build: 124, database: 124, edge: 104 });
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
   const uid = () => crypto.randomUUID?.() || "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
@@ -38,7 +38,7 @@
   const avatarKey = value => /^badge-(0[1-9]|1[0-9]|20)$/.test(String(value || "")) ? String(value) : "badge-01";
   const groupAvatarUrl = key => {
     const normalized = avatarKey(key);
-    return window.RESENHA_GROUP_AVATARS?.[normalized] || assetUrl(`assets/group-avatars/${normalized}.png?v=beta123`);
+    return window.RESENHA_GROUP_AVATARS?.[normalized] || assetUrl(`assets/group-avatars/${normalized}.png?v=beta124`);
   };
   const positionOptions = ["Goleiro", "Zagueiro", "Lateral", "Volante", "Meia", "Atacante", "Coringa"];
   const roleLabels = { owner: "Administrador", admin: "Administrador", organizer: "Organizador", treasurer: "Tesoureiro", member: "Membro" };
@@ -648,22 +648,24 @@
     }
 
     async platformDashboard() {
-      const [summary, reports, logs, errorGroups, accessList, security] = await Promise.all([
+      const [summary, reports, logs, errorGroups, accessList, security, pushStatus] = await Promise.all([
         this.client.rpc("platform_beta_summary"),
         this.client.rpc("platform_recent_feedback", { p_limit: 30 }),
         this.client.rpc("platform_recent_logs", { p_limit: 50 }),
         this.client.rpc("platform_error_groups", { p_hours: 24, p_limit: 40 }),
         this.client.rpc("platform_beta_access_list", { p_limit: 300 }),
-        this.client.rpc("platform_security_summary")
+        this.client.rpc("platform_security_summary"),
+        this.client.rpc("platform_push_status_list", { p_limit: 500 })
       ]);
-      for (const result of [summary, reports, logs, errorGroups, accessList, security]) if (result.error) throw result.error;
+      for (const result of [summary, reports, logs, errorGroups, accessList, security, pushStatus]) if (result.error) throw result.error;
       return {
         summary: summary.data || {},
         reports: reports.data || [],
         logs: logs.data || [],
         errorGroups: errorGroups.data || [],
         accessList: accessList.data || [],
-        security: security.data || {}
+        security: security.data || {},
+        pushStatus: pushStatus.data || []
       };
     }
 
@@ -827,7 +829,7 @@
         if (!(image instanceof HTMLImageElement) || !image.matches("[data-group-avatar]")) return;
         if (image.dataset.fallbackApplied === "true") return;
         image.dataset.fallbackApplied = "true";
-        image.src = window.RESENHA_GROUP_AVATARS?.["badge-01"] || assetUrl("assets/group-avatars/badge-01.png?v=beta123");
+        image.src = window.RESENHA_GROUP_AVATARS?.["badge-01"] || assetUrl("assets/group-avatars/badge-01.png?v=beta124");
       }, true);
     },
 
@@ -2129,6 +2131,8 @@
         const security = data.security || {};
         const errorGroups = data.errorGroups || [];
         const accessList = data.accessList || [];
+        const pushStatus = data.pushStatus || [];
+        const usersWithoutPush = pushStatus.filter(item => Number(item.active_push_devices || 0) === 0);
         document.querySelector(".modal-layer")?.remove();
 
         const stat = (label, value, tone = "") => `<div class="admin-stat ${tone}"><small>${escapeHtml(label)}</small><strong>${escapeHtml(String(value ?? 0))}</strong></div>`;
@@ -2143,6 +2147,11 @@
           return `<article class="beta-access-row"><div class="beta-access-main"><div><strong>${escapeHtml(item.user_name || item.email)}</strong><small>${escapeHtml(item.email)} · ${escapeHtml(lastSeen)}</small></div><span class="beta-access-status ${escapeHtml(status)}">${escapeHtml(statusLabel(status))}</span></div><div class="beta-access-meta"><span>${Number(item.groups_count || 0)} grupo(s)</span>${item.notes ? `<span>${escapeHtml(item.notes)}</span>` : ""}</div>${actionButton}</article>`;
         }).join("") || '<div class="card empty">Nenhum e-mail cadastrado.</div>';
 
+        const pushRows = usersWithoutPush.map(item => {
+          const lastSeen = item.last_seen_at ? shortDate(item.last_seen_at) : "Ainda não acessou";
+          return `<article class="push-status-row"><div class="push-status-main"><span class="push-status-icon">🔕</span><div><strong>${escapeHtml(item.user_name || item.email)}</strong><small>${escapeHtml(item.email)} · ${escapeHtml(lastSeen)}</small></div><span class="push-status-badge">Sem push</span></div><div class="push-status-meta"><span>${Number(item.groups_count || 0)} grupo(s)</span><span>Nenhum aparelho vinculado</span></div></article>`;
+        }).join("") || '<div class="card empty"><strong>Todos os usuários ativos possuem push</strong><span>Não há usuários ativos sem uma assinatura vinculada.</span></div>';
+
         const errorRows = errorGroups.map((item, index) => {
           const build = item.build ? `Build ${item.build}` : "Build não informada";
           const location = [item.source, item.line ? `linha ${item.line}` : ""].filter(Boolean).join(" · ");
@@ -2156,9 +2165,11 @@
         const systemStatus = Number(s.errors_24h || 0) ? "Sistema requer análise" : "Sistema operacional";
         const errorSubtitle = `${Number(s.errors_24h || 0)} registro(s) distribuído(s) em ${Number(s.error_groups_24h || 0)} erro(s) distinto(s)`;
 
-        this.modal("Painel Beta", `<div class="health-strip ${Number(s.errors_24h || 0) ? "warn" : "ok"}"><span></span><div><strong>${systemStatus}</strong><small>${escapeHtml(errorSubtitle)}</small></div></div><div class="admin-toolbar"><button id="sendSystemNotification" class="btn btn-primary">Enviar notificação</button><button id="refreshPlatformPanel" class="btn btn-secondary">Atualizar painel</button></div><div class="admin-stats">${stat("Usuários", s.users_total)}${stat("Acessos ativos", s.beta_active)}${stat("Convites pendentes", s.beta_invited, Number(s.beta_invited || 0) ? "warning" : "")}${stat("Bloqueados", s.beta_blocked, Number(s.beta_blocked || 0) ? "danger" : "")}${stat("Grupos", s.groups_total)}${stat("Peladas futuras", s.matches_upcoming)}${stat("Relatos abertos", s.feedback_open, Number(s.feedback_open || 0) ? "warning" : "")}${stat("Erros 24h", s.errors_24h, Number(s.errors_24h || 0) ? "danger" : "")}</div>
+        this.modal("Painel Beta", `<div class="health-strip ${Number(s.errors_24h || 0) ? "warn" : "ok"}"><span></span><div><strong>${systemStatus}</strong><small>${escapeHtml(errorSubtitle)}</small></div></div><div class="admin-toolbar"><button id="sendSystemNotification" class="btn btn-primary">Enviar notificação</button><button id="refreshPlatformPanel" class="btn btn-secondary">Atualizar painel</button></div><div class="admin-stats">${stat("Usuários", s.users_total)}${stat("Acessos ativos", s.beta_active)}${stat("Push ativo", s.push_users_active)}${stat("Sem notificações", s.push_users_without_active, Number(s.push_users_without_active || 0) ? "warning" : "")}${stat("Convites pendentes", s.beta_invited, Number(s.beta_invited || 0) ? "warning" : "")}${stat("Bloqueados", s.beta_blocked, Number(s.beta_blocked || 0) ? "danger" : "")}${stat("Grupos", s.groups_total)}${stat("Peladas futuras", s.matches_upcoming)}${stat("Relatos abertos", s.feedback_open, Number(s.feedback_open || 0) ? "warning" : "")}${stat("Erros 24h", s.errors_24h, Number(s.errors_24h || 0) ? "danger" : "")}</div>
 
         <details class="admin-section-card" open><summary><div><strong>Acessos do beta</strong><small>Autorize o e-mail antes do primeiro login.</small></div><span>${accessList.length}</span></summary><form id="betaAccessForm" class="beta-access-form"><div class="field"><label>E-mail da conta Google</label><input type="email" name="email" required autocomplete="off" placeholder="membro@gmail.com"></div><div class="field"><label>Observação <span class="optional-label">opcional</span></label><input name="notes" maxlength="500" placeholder="Grupo ou responsável pelo convite"></div><button type="submit" class="btn btn-primary btn-block">Autorizar e-mail</button></form><div class="beta-access-list">${accessRows}</div></details>
+
+        <details class="admin-section-card" open><summary><div><strong>Notificações dos usuários</strong><small>Usuários ativos que ainda não vincularam nenhum aparelho.</small></div><span class="push-summary-count ${usersWithoutPush.length ? "warn" : "ok"}">${usersWithoutPush.length}</span></summary><div class="push-status-summary"><strong>${Number(s.push_users_active || 0)} com push ativo</strong><small>${usersWithoutPush.length} usuário(s) ativo(s) sem notificações.</small></div><div class="push-status-list">${pushRows}</div></details>
 
         <details class="admin-section-card" open><summary><div><strong>Erros agrupados — 24 horas</strong><small>Analise causas distintas, não apenas o contador bruto.</small></div><span>${errorGroups.length}</span></summary><div class="admin-error-list">${errorRows}</div></details>
 
