@@ -508,3 +508,33 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 
 /* Beta 1.0 Build 125 — ícones aprovados e painel de status push */
 .avatar-option{display:grid;place-items:center;min-width:0}.avatar-option img{width:100%;height:auto;aspect-ratio:1;object-fit:contain;padding:4px;border-radius:18px;image-rendering:auto}.push-status-summary{display:grid;gap:4px;margin:12px;padding:12px 14px;border-radius:14px;background:rgba(53,183,255,.07);border:1px solid rgba(53,183,255,.18)}.push-status-summary small{color:var(--muted);font-size:.72rem}.push-status-list{display:grid;gap:8px;padding:0 12px 12px}.push-status-row{padding:12px;border:1px solid rgba(244,189,62,.2);border-radius:14px;background:rgba(244,189,62,.035)}.push-status-main{display:flex;align-items:center;gap:9px}.push-status-icon{width:34px;height:34px;display:grid;place-items:center;border-radius:11px;background:rgba(244,189,62,.1)}.push-status-main>div{display:grid;min-width:0;flex:1}.push-status-main strong,.push-status-main small{overflow:hidden;text-overflow:ellipsis}.push-status-main small{margin-top:3px;color:var(--muted);font-size:.7rem}.push-status-badge{padding:4px 7px;border-radius:999px;background:rgba(244,189,62,.12);color:#ffd17d;font-size:.62rem;font-weight:900;text-transform:uppercase}.push-status-meta{display:flex;flex-wrap:wrap;gap:5px;margin-top:9px}.push-status-meta span{padding:4px 7px;border-radius:8px;background:rgba(255,255,255,.04);color:var(--muted);font-size:.64rem}.push-summary-count{min-width:34px;padding:4px 8px;border-radius:999px;text-align:center;font-size:.72rem;font-weight:900}.push-summary-count.warn{color:#ffd17d;background:rgba(244,189,62,.11)}.push-summary-count.ok{color:#8cf07a;background:rgba(92,210,61,.11)}
+
+
+/* Build 126 — correção de renderização dos escudos de grupos */
+.avatar-option, .group-icon-action, .hero-avatar-button { overflow: visible; }
+.avatar-option img,
+.group-avatar,
+.top-group-avatar,
+.hero-group-avatar,
+.summary-group-avatar,
+.invite-avatar {
+  display: block;
+  object-fit: contain !important;
+  object-position: center;
+  image-rendering: auto;
+  background: transparent;
+}
+.avatar-option img {
+  width: 100%;
+  height: 100%;
+  padding: 4px;
+  border-radius: 18px;
+}
+.group-avatar,
+.top-group-avatar,
+.hero-group-avatar,
+.summary-group-avatar,
+.invite-avatar {
+  max-width: 100%;
+  max-height: 100%;
+}
