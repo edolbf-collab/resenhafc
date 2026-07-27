@@ -1,10 +1,10 @@
 {
   "channel": "beta",
   "version": "Beta 1.0",
-  "build": 122,
+  "build": 123,
   "database": 121,
   "edge": 104,
   "mandatory": false,
-  "notes": "Escudos da criação de grupo substituídos pelos 20 ícones do arquivo aprovado e revisão de espaçamento entre balões/cartões nas telas e modais do app.",
-  "label": "Beta 1.0 Build 122"
+  "notes": "Correção da qualidade e do enquadramento dos 20 ícones da criação de grupos, com extração limpa do arquivo aprovado e ajustes visuais no seletor de escudos.",
+  "label": "Beta 1.0 Build 123"
 }
