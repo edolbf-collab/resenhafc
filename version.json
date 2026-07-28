@@ -5,6 +5,6 @@
   "database": 124,
   "edge": 104,
   "mandatory": false,
-  "notes": "Substitui os 20 ícones de grupos pelos aprovados em PNG transparente, atualiza o cache e reforça a renderização no app para evitar distorções.",
+  "notes": "Build 126 corrigida: identidade interna ajustada para Build 126, cache renovado e arquivos essenciais configurados sem cache persistente.",
   "label": "Beta 1.0 Build 126"
 }
