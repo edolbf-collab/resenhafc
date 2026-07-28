@@ -1,4 +1,23 @@
+## Beta 1.0 Build 119
+
+Reconstrução do carregamento do Supabase com base na Build 115, mantendo a instalação Android da Build 116.
+
+## Beta 1.0 Build 116
+- Instalação PWA Android restaurada com arquitetura validada do RoutePilot v2.0.34.
+- Onboarding de push exibido também no Android em modo navegador.
+
 # Changelog
+
+## Beta 1.0 Build 113
+
+- adiciona o status `partial` às cobranças;
+- soma pagamentos vinculados antes de determinar a quitação;
+- mostra total pago e saldo restante;
+- bloqueia pagamento acima do saldo;
+- recalcula a cobrança quando um pagamento é excluído;
+- corrige registros antigos marcados como pagos após pagamento insuficiente;
+- banco esperado: Build 113;
+- Edge Function: Build 102.
 
 ## Beta 1.0 Build 106
 
@@ -72,6 +91,21 @@
 - sorteio seletivo e independente do limite, com modos instantâneo e revelação;
 - churrasco compacto quando desativado e expandido sob demanda.
 
+## Beta 1.0 Build 112
+
+- Remove a opção “Talvez” da confirmação feita pelo participante.
+- Mantém somente “Vou jogar” e “Não vou”.
+- Solicita resposta definitiva para registros antigos marcados como “Talvez”.
+- Banco esperado: Build 110.
+- Edge Function: Build 102.
+
+## Beta 1.0 Build 111
+
+- consolida o status, a contagem, o valor e a lista nominal do churrasco em um único balão expansível;
+- omite o valor por pessoa quando não houver cobrança configurada;
+- preserva o selo discreto de churrasco nas listas de presença;
+- reduz o espaço vertical ocupado pelo bloco do sorteio da espera.
+
 ## Beta 1.0 Build 110
 
 - corrigida a constraint que rejeitava `manual_draw` durante o sorteio da espera;
@@ -79,3 +113,21 @@
 - adicionada normalização segura dos motivos antigos da espera;
 - incluído selo discreto de churrasco nos cartões de presença;
 - lista nominal do churrasco recolhida por padrão e expansível em `Ver nomes`.
+## Beta 1.0 Build 114
+
+- controle fechado do beta por e-mail da conta Google;
+- autorização, bloqueio e reativação no Painel Beta;
+- bloqueio integrado às políticas RLS e operações sem grupo;
+- hook Before User Created preparado para impedir cadastros não autorizados;
+- erros agrupados por causa, build, arquivo e linha;
+- detalhes completos das ocorrências e metadados JSON;
+- auditoria automática de RLS e integridade de acessos.
+
+
+
+## Beta 1.0 Build 115
+
+- tela de acesso pendente passa a identificar o e-mail usado no login;
+- botão para copiar o e-mail e solicitar autorização;
+- verificação de liberação diretamente na tela, sem reinstalar ou refazer o login;
+- mensagens distintas para acesso pendente, liberado e indisponibilidade de conexão.
