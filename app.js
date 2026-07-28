@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const APP_RELEASE = Object.freeze({ channel: "beta", version: "Beta 1.0", build: 127, database: 124, edge: 104 });
+  const APP_RELEASE = Object.freeze({ channel: "beta", version: "Beta 1.0", build: 128, database: 128, edge: 105 });
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
   const uid = () => crypto.randomUUID?.() || "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
@@ -38,7 +38,7 @@
   const avatarKey = value => /^badge-(0[1-9]|1[0-9]|20)$/.test(String(value || "")) ? String(value) : "badge-01";
   const groupAvatarUrl = key => {
     const normalized = avatarKey(key);
-    return window.RESENHA_GROUP_AVATARS?.[normalized] || assetUrl(`assets/group-avatars/${normalized}.png?v=beta127r1`);
+    return window.RESENHA_GROUP_AVATARS?.[normalized] || assetUrl(`assets/group-avatars/${normalized}.png?v=beta128r1`);
   };
   const positionOptions = ["Goleiro", "Zagueiro", "Lateral", "Volante", "Meia", "Atacante", "Coringa"];
   const roleLabels = { owner: "Administrador", admin: "Administrador", organizer: "Organizador", treasurer: "Tesoureiro", member: "Membro" };
@@ -681,6 +681,37 @@
       return data;
     }
 
+    async deleteBetaUserPermanently(email) {
+      const { data, error } = await this.client.functions.invoke("delete-beta-user", {
+        body: { email: String(email || "").trim().toLowerCase() }
+      });
+      if (error) {
+        let message = error?.message || "A Edge Function recusou a exclusão permanente.";
+        let details = null;
+        try {
+          const response = error?.context;
+          if (response && typeof response.clone === "function") {
+            details = await response.clone().json().catch(async () => {
+              const text = await response.text().catch(() => "");
+              return text ? { error: text } : null;
+            });
+          }
+        } catch (parseError) {
+          console.warn("Não foi possível ler o retorno da exclusão permanente:", parseError);
+        }
+        if (details?.error || details?.detail || details?.message) {
+          message = details.error || details.detail || details.message;
+          if (details.stage) message += ` [etapa: ${details.stage}]`;
+        }
+        const wrapped = new Error(message);
+        wrapped.cause = error;
+        wrapped.details = details;
+        throw wrapped;
+      }
+      if (data?.error) throw new Error(data.error);
+      return data || {};
+    }
+
     async platformErrorDetails(group, limit = 120) {
       const { data, error } = await this.client.rpc("platform_error_details", {
         p_event_type: group.event_type,
@@ -829,7 +860,7 @@
         if (!(image instanceof HTMLImageElement) || !image.matches("[data-group-avatar]")) return;
         if (image.dataset.fallbackApplied === "true") return;
         image.dataset.fallbackApplied = "true";
-        image.src = window.RESENHA_GROUP_AVATARS?.["badge-01"] || assetUrl("assets/group-avatars/badge-01.png?v=beta127r1");
+        image.src = window.RESENHA_GROUP_AVATARS?.["badge-01"] || assetUrl("assets/group-avatars/badge-01.png?v=beta128r1");
       }, true);
     },
 
@@ -2137,14 +2168,16 @@
 
         const stat = (label, value, tone = "") => `<div class="admin-stat ${tone}"><small>${escapeHtml(label)}</small><strong>${escapeHtml(String(value ?? 0))}</strong></div>`;
         const statusLabel = status => ({ active: "Ativo", invited: "Convidado", blocked: "Bloqueado" }[status] || status);
-        const accessRows = accessList.map(item => {
+        const accessRows = accessList.map((item, index) => {
           const status = item.status || "invited";
           const action = status === "blocked" ? "active" : "blocked";
           const actionLabel = status === "blocked" ? "Reativar" : "Bloquear";
           const lastSeen = item.last_seen_at ? shortDate(item.last_seen_at) : "Ainda não acessou";
           const isCurrentAdmin = String(item.email || "").toLowerCase() === String(this.state.profile?.email || "").toLowerCase();
-          const actionButton = isCurrentAdmin ? '<span class="access-self-label">Você</span>' : `<button type="button" class="access-action ${action === "blocked" ? "danger" : "restore"}" data-access-email="${escapeHtml(item.email)}" data-access-status="${action}">${actionLabel}</button>`;
-          return `<article class="beta-access-row"><div class="beta-access-main"><div><strong>${escapeHtml(item.user_name || item.email)}</strong><small>${escapeHtml(item.email)} · ${escapeHtml(lastSeen)}</small></div><span class="beta-access-status ${escapeHtml(status)}">${escapeHtml(statusLabel(status))}</span></div><div class="beta-access-meta"><span>${Number(item.groups_count || 0)} grupo(s)</span>${item.notes ? `<span>${escapeHtml(item.notes)}</span>` : ""}</div>${actionButton}</article>`;
+          const actionButtons = isCurrentAdmin
+            ? '<div class="beta-access-actions"><span class="access-self-label">Você</span></div>'
+            : `<div class="beta-access-actions"><button type="button" class="access-action ${action === "blocked" ? "danger" : "restore"}" data-access-email="${escapeHtml(item.email)}" data-access-status="${action}">${actionLabel}</button><button type="button" class="access-action delete" data-delete-beta-index="${index}">Excluir permanentemente</button></div>`;
+          return `<article class="beta-access-row"><div class="beta-access-main"><div><strong>${escapeHtml(item.user_name || item.email)}</strong><small>${escapeHtml(item.email)} · ${escapeHtml(lastSeen)}</small></div><span class="beta-access-status ${escapeHtml(status)}">${escapeHtml(statusLabel(status))}</span></div><div class="beta-access-meta"><span>${Number(item.groups_count || 0)} grupo(s)</span>${item.notes ? `<span>${escapeHtml(item.notes)}</span>` : ""}</div>${actionButtons}</article>`;
         }).join("") || '<div class="card empty">Nenhum e-mail cadastrado.</div>';
 
         const pushRows = usersWithoutPush.map(item => {
@@ -2167,7 +2200,7 @@
 
         this.modal("Painel Beta", `<div class="health-strip ${Number(s.errors_24h || 0) ? "warn" : "ok"}"><span></span><div><strong>${systemStatus}</strong><small>${escapeHtml(errorSubtitle)}</small></div></div><div class="admin-toolbar"><button id="sendSystemNotification" class="btn btn-primary">Enviar notificação</button><button id="refreshPlatformPanel" class="btn btn-secondary">Atualizar painel</button></div><div class="admin-stats">${stat("Usuários", s.users_total)}${stat("Acessos ativos", s.beta_active)}${stat("Push ativo", s.push_users_active)}${stat("Sem notificações", s.push_users_without_active, Number(s.push_users_without_active || 0) ? "warning" : "")}${stat("Convites pendentes", s.beta_invited, Number(s.beta_invited || 0) ? "warning" : "")}${stat("Bloqueados", s.beta_blocked, Number(s.beta_blocked || 0) ? "danger" : "")}${stat("Grupos", s.groups_total)}${stat("Peladas futuras", s.matches_upcoming)}${stat("Relatos abertos", s.feedback_open, Number(s.feedback_open || 0) ? "warning" : "")}${stat("Erros 24h", s.errors_24h, Number(s.errors_24h || 0) ? "danger" : "")}</div>
 
-        <details class="admin-section-card" open><summary><div><strong>Acessos do beta</strong><small>Autorize o e-mail antes do primeiro login.</small></div><span>${accessList.length}</span></summary><form id="betaAccessForm" class="beta-access-form"><div class="field"><label>E-mail da conta Google</label><input type="email" name="email" required autocomplete="off" placeholder="membro@gmail.com"></div><div class="field"><label>Observação <span class="optional-label">opcional</span></label><input name="notes" maxlength="500" placeholder="Grupo ou responsável pelo convite"></div><button type="submit" class="btn btn-primary btn-block">Autorizar e-mail</button></form><div class="beta-access-list">${accessRows}</div></details>
+        <details class="admin-section-card" open><summary><div><strong>Acessos do beta</strong><small>Autorize, bloqueie ou exclua permanentemente.</small></div><span>${accessList.length}</span></summary><form id="betaAccessForm" class="beta-access-form"><div class="field"><label>E-mail da conta Google</label><input type="email" name="email" required autocomplete="off" placeholder="membro@gmail.com"></div><div class="field"><label>Observação <span class="optional-label">opcional</span></label><input name="notes" maxlength="500" placeholder="Grupo ou responsável pelo convite"></div><button type="submit" class="btn btn-primary btn-block">Autorizar e-mail</button></form><div class="beta-access-list">${accessRows}</div></details>
 
         <details class="admin-section-card" open><summary><div><strong>Notificações dos usuários</strong><small>Usuários ativos que ainda não vincularam nenhum aparelho.</small></div><span class="push-summary-count ${usersWithoutPush.length ? "warn" : "ok"}">${usersWithoutPush.length}</span></summary><div class="push-status-summary"><strong>${Number(s.push_users_active || 0)} com push ativo</strong><small>${usersWithoutPush.length} usuário(s) ativo(s) sem notificações.</small></div><div class="push-status-list">${pushRows}</div></details>
 
@@ -2214,6 +2247,12 @@
               this.toast(error.message || "Não foi possível alterar o acesso.", true);
             }
           }));
+          $$('[data-delete-beta-index]', root).forEach(button => button.addEventListener("click", () => {
+            const item = accessList[Number(button.dataset.deleteBetaIndex)];
+            if (!item) return;
+            close();
+            setTimeout(() => this.openPermanentBetaUserDeletion(item), 0);
+          }));
           $$('[data-error-index]', root).forEach(button => button.addEventListener("click", () => {
             const group = errorGroups[Number(button.dataset.errorIndex)];
             if (group) this.openPlatformErrorDetails(group);
@@ -2243,6 +2282,49 @@
         document.querySelector(".modal-layer")?.remove();
         this.toast(error.message || "Não foi possível carregar o painel.", true);
       }
+    },
+
+    openPermanentBetaUserDeletion(item) {
+      if (!this.state.is_platform_admin) return this.toast("Acesso restrito à administração da plataforma.", true);
+      const email = String(item?.email || "").trim().toLowerCase();
+      const displayName = item?.user_name || email;
+      if (!email) return this.toast("Usuário inválido.", true);
+
+      const accountText = item?.user_id
+        ? "A conta será removida definitivamente do Supabase Auth. Os vínculos ativos, assinaturas push, avaliações feitas e dados pessoais do jogador serão removidos ou anonimizados."
+        : "Este e-mail ainda não criou uma conta. A autorização pendente será removida definitivamente da lista do beta.";
+
+      this.modal("Excluir membro do beta", `<form id="permanentBetaDeleteForm" class="form-grid"><div class="destructive-warning"><span>!</span><div><strong>Exclusão permanente e irreversível</strong><p>${escapeHtml(accountText)}</p></div></div><div class="permanent-delete-summary"><strong>${escapeHtml(displayName)}</strong><small>${escapeHtml(email)} · ${Number(item?.groups_count || 0)} grupo(s)</small></div>${item?.user_id ? '<div class="notice"><strong>Tratamento dos grupos</strong><br>A administração será transferida automaticamente quando houver outro integrante. Grupos sem nenhum outro membro serão excluídos. O histórico preservado será anonimizado como “Usuário excluído”.</div>' : ''}<div class="field"><label>Digite o e-mail completo para confirmar</label><input name="confirmation" type="email" required autocomplete="off" placeholder="${escapeHtml(email)}"></div><button class="btn btn-danger btn-block" id="confirmPermanentBetaDelete" disabled>Excluir permanentemente</button></form>`, (root, close) => {
+        const form = $("#permanentBetaDeleteForm", root);
+        const input = form.elements.confirmation;
+        const button = $("#confirmPermanentBetaDelete", root);
+        const validate = () => {
+          button.disabled = String(input.value || "").trim().toLowerCase() !== email;
+        };
+        input.addEventListener("input", validate);
+        form.addEventListener("submit", async event => {
+          event.preventDefault();
+          validate();
+          if (button.disabled) return;
+          button.disabled = true;
+          button.textContent = "Excluindo…";
+          try {
+            const result = await this.repo.deleteBetaUserPermanently(email);
+            close();
+            if (result.invitationOnly) {
+              this.toast("Autorização pendente removida permanentemente.");
+            } else {
+              const summary = result.summary || {};
+              this.toast(`Usuário excluído permanentemente. ${Number(summary.groups_transferred || 0)} grupo(s) transferido(s) e ${Number(summary.groups_deleted || 0)} grupo(s) excluído(s).`);
+            }
+            this.openPlatformAdmin();
+          } catch (error) {
+            button.disabled = false;
+            button.textContent = "Excluir permanentemente";
+            this.toast(error.message || "Não foi possível excluir o usuário permanentemente.", true);
+          }
+        });
+      });
     },
 
     async openPlatformErrorDetails(group) {

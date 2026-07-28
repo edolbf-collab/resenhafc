@@ -1,10 +1,10 @@
 {
   "channel": "beta",
   "version": "Beta 1.0",
-  "build": 127,
-  "database": 124,
-  "edge": 104,
+  "build": 128,
+  "database": 128,
+  "edge": 105,
   "mandatory": false,
-  "notes": "Build 127: 20 escudos de grupo recriados individualmente, com área de segurança e transparência ajustadas para evitar recortes feios no app; cache e referências atualizados para a nova pasta de avatares.",
-  "label": "Beta 1.0 Build 127"
+  "notes": "Exclusão permanente de membros do beta fechado pelo Painel Beta, com confirmação reforçada, remoção da conta do Supabase Auth, anonimização do histórico, transferência automática de grupos e auditoria sem dados pessoais em texto claro.",
+  "label": "Beta 1.0 Build 128"
 }

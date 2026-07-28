@@ -1,3 +1,12 @@
+# Beta 1.0 Build 128
+
+- exclusão permanente de membros pelo Painel Beta;
+- remoção definitiva do usuário no Supabase Auth por Edge Function;
+- transferência automática de grupos ou exclusão de grupos órfãos;
+- anonimização de jogadores históricos;
+- auditoria da operação sem dados pessoais em texto claro;
+- README atualizado.
+
 ## Beta 1.0 Build 119
 
 Reconstrução do carregamento do Supabase com base na Build 115, mantendo a instalação Android da Build 116.

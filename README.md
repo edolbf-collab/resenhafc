@@ -1,58 +1,93 @@
-# Resenha FC — Beta 1.0 Build 127
+# Resenha FC — Beta 1.0 Build 128
 
-Build 127 preparada para publicação no GitHub, baseada na **Build 126 corrigida**.
+Build 128 preparada para publicação no GitHub, baseada na **Build 127**.
 
 ## Destaque desta build
 
-A Build 127 substitui integralmente os 20 escudos de grupo por uma nova coleção recriada **individualmente**, com acabamento mais profissional, melhor nitidez e **área de segurança transparente** para evitar os recortes feios observados no app durante a renderização.
+A administração da plataforma passa a contar com dois mecanismos distintos no **Painel Beta**:
 
-## O que foi atualizado na Build 127
+- **Bloquear/Reativar:** mantém a conta cadastrada, mas controla imediatamente o acesso ao beta;
+- **Excluir permanentemente:** remove a autorização do beta e, quando a conta já existe, apaga o usuário do Supabase Auth.
 
-- recriação individual dos **20 ícones de grupo**;
-- novos arquivos PNG com transparência e folga visual para uso seguro no app;
-- nova pasta de assets: `assets/group-avatars-build-127`;
-- atualização de `group-avatars-data.js` mantendo as mesmas chaves `badge-01` a `badge-20`;
-- atualização de `service-worker.js` com novo cache e pré-cache dos novos avatares;
-- atualização de `app.js`, `index.html` e `version.json` para **Build 127**;
-- inclusão do documento `ATUALIZACAO-BETA-1.0-BUILD-127.md`;
-- atualização deste `README.md`, que estava desatualizado no repositório.
+## Exclusão permanente
 
-## Resumo das builds mais recentes
+A exclusão permanente fica disponível exclusivamente para o administrador da plataforma na seção **Acessos do beta**.
+
+O fluxo possui proteção reforçada:
+
+1. o administrador seleciona **Excluir permanentemente**;
+2. o sistema apresenta as consequências da operação;
+3. é obrigatório digitar o e-mail completo do usuário;
+4. a Edge Function confirma novamente se o solicitante é administrador da plataforma;
+5. a conta é bloqueada antes do processo destrutivo;
+6. o histórico que precisa permanecer é anonimizado;
+7. a conta é removida do Supabase Auth;
+8. a autorização é removida da tabela `beta_access`.
+
+### Tratamento dos grupos
+
+- quando há outro integrante, a administração é transferida automaticamente;
+- a preferência de transferência é: organizador, tesoureiro e membro mais antigo;
+- grupos em que o usuário excluído é o único integrante são removidos;
+- registros históricos preservados passam a identificar o jogador como **Usuário excluído**.
+
+### Dados removidos ou anonimizados
+
+- conta do Supabase Auth;
+- acesso ao beta;
+- vínculos ativos com grupos;
+- assinaturas push;
+- foto, apelido e identificação pessoal nos jogadores históricos;
+- avaliações feitas pelo usuário;
+- feedbacks e logs operacionais associados ao usuário.
+
+A auditoria da exclusão armazena somente hashes do e-mail e do identificador do usuário, sem manter esses dados em texto claro.
+
+## Arquivos e componentes da Build 128
+
+- `app.js` — interface, confirmação e chamada da exclusão permanente;
+- `styles.css` — ações separadas de bloquear e excluir;
+- `service-worker.js` — cache da Build 128;
+- `version.json` — identificação da Build 128;
+- `backend/backend-migration-beta-1.0-build-128.sql`;
+- `backend/backend-healthcheck-beta-1.0-build-128.sql`;
+- `supabase/functions/delete-beta-user/index.ts`;
+- `supabase/config.toml` — configuração da nova Edge Function;
+- `ATUALIZACAO-BETA-1.0-BUILD-128.md`;
+- `ATUALIZACAO-EDGE-FUNCTION-BUILD-105.md`.
+
+## Resumo das builds recentes
 
 ### Build 124
-- aplicação dos 20 ícones de grupos aprovados;
-- inclusão, no Painel Beta, do cartão **Notificações** com a lista de usuários que ainda não ativaram push (admin do sistema).
+- painel de usuários com e sem notificações push;
+- banco atualizado para Build 124.
 
 ### Build 125
-- recriação integral dos 20 ícones de grupos em arte própria, com exportação em PNG transparente e preservação das chaves `badge-01` a `badge-20`.
+- recriação dos ícones de grupos em PNG transparente.
 
 ### Build 126 corrigida
-- correção da identidade interna da versão para Build 126;
-- renovação de cache;
-- alinhamento de arquivos essenciais de publicação.
+- correção da identidade interna da versão e renovação do cache.
 
 ### Build 127
-- nova recriação profissional dos 20 ícones, agora com composição individual e margem de segurança para evitar clipping visual no app.
+- vinte escudos recriados individualmente, com margem transparente de segurança;
+- atualização do README.
 
-## Publicação desta build
+### Build 128
+- exclusão permanente de membros do beta;
+- anonimização de histórico;
+- transferência automática da administração dos grupos;
+- nova Edge Function protegida por autenticação e autorização administrativa.
 
-Publique estes arquivos atualizados:
+## Ordem de implantação
 
-- `app.js`
-- `index.html`
-- `group-avatars-data.js`
-- `service-worker.js`
-- `version.json`
-- pasta `assets/group-avatars-build-127/`
-- `README.md`
-- `ATUALIZACAO-BETA-1.0-BUILD-127.md`
+1. Execute `backend/backend-migration-beta-1.0-build-128.sql`.
+2. Execute `backend/backend-healthcheck-beta-1.0-build-128.sql`.
+3. Publique a Edge Function `delete-beta-user`.
+4. Envie os arquivos do pacote incremental para a raiz do GitHub.
+5. Preserve o `supabase-config.js` atualmente publicado.
 
-## Banco e Edge Functions
+## Versões esperadas
 
-- **Banco esperado:** Build 124
-- **Edge Function esperada:** Build 104
-- **Migrações SQL:** nenhuma alteração nesta build
-
-## Observação
-
-As chaves dos escudos foram mantidas. Portanto, grupos já vinculados a `badge-01` até `badge-20` continuam funcionando sem necessidade de ajuste no banco.
+- **Frontend:** Build 128
+- **Banco:** Build 128
+- **Edge Functions:** Build 105
