@@ -1,3 +1,28 @@
+# Resenha FC — Beta 1.0 Build 129
+
+Build 129 baseada na Build 128.
+
+## Novidades
+
+- nova ordem dos grupos no detalhe dos eventos ativos: **Começam jogando**, **Não vão**, **Espera inicial** e **Pendente de confirmação**;
+- substituição visual do antigo grupo **Talvez**;
+- identificação dos membros ativos que ainda não responderam;
+- botão de lembrete push individual para administrador e organizador;
+- validação no servidor para impedir lembrete a quem já respondeu;
+- atualização da Edge Function `publish-announcement` para Build 106.
+
+## Versões
+
+- Frontend: Build 129
+- Banco: Build 128
+- Edge Functions: Build 106
+
+## Publicação
+
+Use preferencialmente o pacote incremental. Preserve o arquivo `supabase-config.js` publicado e mantenha a Edge Function `delete-beta-user` separada. A função `publish-announcement` deve ser republicada com o código da Build 106.
+
+---
+
 # Resenha FC — Beta 1.0 Build 128
 
 Build 128 preparada para publicação no GitHub, baseada na **Build 127**.

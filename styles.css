@@ -538,3 +538,9 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
   max-width: 100%;
   max-height: 100%;
 }
+
+
+/* Beta 1.0 Build 129 — pendências de confirmação e lembrete individual */
+.pending-confirmation-title{align-items:flex-end}.pending-confirmation-title small{max-width:48%;text-align:right}.pending-confirmation-list{gap:8px}.pending-confirmation-row{border-color:rgba(244,189,62,.18);background:rgba(244,189,62,.025)}
+.attendance-reminder-button{flex:0 0 auto;min-width:72px;display:grid;grid-template-columns:auto auto;align-items:center;justify-content:center;gap:5px;padding:8px 9px;border:1px solid rgba(244,189,62,.34);border-radius:11px;background:rgba(244,189,62,.08);color:#ffd17d;font:inherit;font-size:.66rem;font-weight:900;cursor:pointer}.attendance-reminder-button span{font-size:.78rem}.attendance-reminder-button b{font-size:.64rem}.attendance-reminder-button:hover{background:rgba(244,189,62,.14)}.attendance-reminder-button:disabled{opacity:.65;cursor:wait}.pending-confirmation-row .list-main small{color:#d8b97a}
+@media(max-width:380px){.pending-confirmation-title{display:grid;align-items:start}.pending-confirmation-title small{max-width:none;text-align:left}.attendance-reminder-button{min-width:64px;padding:8px 7px}.attendance-reminder-button b{display:none}}

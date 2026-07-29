@@ -1,3 +1,11 @@
+# Beta 1.0 Build 129
+
+- reorganiza os balões de presença no detalhe do evento ativo;
+- substitui “Talvez” por “Pendente de confirmação”;
+- identifica membros sem resposta registrada;
+- adiciona lembrete push individual para administrador e organizador;
+- atualiza `publish-announcement` para Edge Build 106.
+
 # Beta 1.0 Build 128
 
 - exclusão permanente de membros pelo Painel Beta;

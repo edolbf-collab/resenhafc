@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const APP_RELEASE = Object.freeze({ channel: "beta", version: "Beta 1.0", build: 128, database: 128, edge: 105 });
+  const APP_RELEASE = Object.freeze({ channel: "beta", version: "Beta 1.0", build: 129, database: 128, edge: 106 });
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
   const uid = () => crypto.randomUUID?.() || "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
@@ -38,7 +38,7 @@
   const avatarKey = value => /^badge-(0[1-9]|1[0-9]|20)$/.test(String(value || "")) ? String(value) : "badge-01";
   const groupAvatarUrl = key => {
     const normalized = avatarKey(key);
-    return window.RESENHA_GROUP_AVATARS?.[normalized] || assetUrl(`assets/group-avatars/${normalized}.png?v=beta128r1`);
+    return window.RESENHA_GROUP_AVATARS?.[normalized] || assetUrl(`assets/group-avatars/${normalized}.png?v=beta129r1`);
   };
   const positionOptions = ["Goleiro", "Zagueiro", "Lateral", "Volante", "Meia", "Atacante", "Coringa"];
   const roleLabels = { owner: "Administrador", admin: "Administrador", organizer: "Organizador", treasurer: "Tesoureiro", member: "Membro" };
@@ -586,6 +586,16 @@
       });
     }
 
+    async notifyAttendanceReminder(groupId, matchId, playerId) {
+      return this.invokeNotification({
+        action: "attendance-reminder",
+        groupId,
+        matchId,
+        playerId,
+        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Sao_Paulo"
+      });
+    }
+
     async notifyChargeCreated(groupId, chargeId) {
       return this.invokeNotification({
         action: "charge-created",
@@ -860,7 +870,7 @@
         if (!(image instanceof HTMLImageElement) || !image.matches("[data-group-avatar]")) return;
         if (image.dataset.fallbackApplied === "true") return;
         image.dataset.fallbackApplied = "true";
-        image.src = window.RESENHA_GROUP_AVATARS?.["badge-01"] || assetUrl("assets/group-avatars/badge-01.png?v=beta128r1");
+        image.src = window.RESENHA_GROUP_AVATARS?.["badge-01"] || assetUrl("assets/group-avatars/badge-01.png?v=beta129r1");
       }, true);
     },
 
@@ -1623,10 +1633,21 @@
       if (!match) return;
       const future = new Date(match.starts_at) > new Date();
       const recurring = Number(match.recurrence_total || 1) > 1;
-      const grouped = { confirmed: [], maybe: [], waitlist: [], out: [] };
-      this.attendanceFor(id).forEach(item => grouped[item.status]?.push(item));
+      const matchAttendance = this.attendanceFor(id);
+      const grouped = { confirmed: [], waitlist: [], out: [] };
+      matchAttendance.forEach(item => grouped[item.status]?.push(item));
       grouped.waitlist.sort((a, b) => Number(a.waitlist_position || 9999) - Number(b.waitlist_position || 9999));
-      const pendingPlayers = this.activePlayers().filter(player => !this.attendanceFor(id).some(item => item.player_id === player.id));
+      const attendanceByPlayer = new Map(matchAttendance.map(item => [item.player_id, item]));
+      const pendingMembers = future
+        ? this.state.members
+            .map(member => ({ member, player: this.memberPlayer(member) }))
+            .filter(item => item.player && item.player.active !== false && !this.isGuest(item.player))
+            .filter(item => {
+              const attendance = attendanceByPlayer.get(item.player.id);
+              return !attendance || ["pending", "maybe"].includes(attendance.status);
+            })
+            .sort((a, b) => String(a.player.name || "").localeCompare(String(b.player.name || ""), "pt-BR"))
+        : [];
       const confirmedCount = grouped.confirmed.length;
       const barbecueParticipants = this.attendanceFor(id).filter(item => item.bbq);
       const barbecueGuestsTotal = barbecueParticipants.reduce((sum, item) => sum + Number(item.bbq_guests || 0), 0);
@@ -1652,6 +1673,13 @@
         return `<div class="card list-row attendance-list-row">${this.personAvatar(player)}<div class="list-main"><strong>${escapeHtml(player.name)}</strong><small>${escapeHtml(player.primary_position || "Sem posição")}</small>${managerNote}</div><div class="attendance-row-trailing">${bbqBadge}${guestBadge}${trailing}</div></div>`;
       };
       const groupHtml = (title, key) => `<div class="section-title"><h2>${title} (${grouped[key].length})</h2></div><div class="list">${grouped[key].map(item => attendanceRow(item, key)).join("") || '<div class="card empty">Nenhum.</div>'}</div>`;
+      const pendingRow = ({ member, player }) => {
+        const canSendReminder = future && this.canManageMatches() && Boolean(member?.user_id || player?.user_id);
+        return `<div class="card list-row attendance-list-row pending-confirmation-row">${this.personAvatar(player)}<div class="list-main"><strong>${escapeHtml(player.name)}</strong><small>${escapeHtml(player.primary_position || "Sem posição")} · ainda não respondeu</small></div>${canSendReminder ? `<button type="button" class="attendance-reminder-button" data-remind-attendance="${match.id}" data-player-id="${player.id}" data-player-name="${escapeHtml(player.name)}" aria-label="Enviar lembrete de confirmação para ${escapeHtml(player.name)}"><span aria-hidden="true">🔔</span><b>Lembrar</b></button>` : '<span class="status-pill status-maybe">Pendente</span>'}</div>`;
+      };
+      const pendingHtml = future
+        ? `<div class="section-title pending-confirmation-title"><h2>Pendente de confirmação (${pendingMembers.length})</h2><small>Sem resposta de presença ou ausência.</small></div><div class="list pending-confirmation-list">${pendingMembers.map(pendingRow).join("") || '<div class="card empty">Todos os membros já responderam.</div>'}</div>`
+        : "";
       const recurringInfo = recurring ? `<div class="recurrence-detail"><span>↻</span><div><strong>Pelada semanal recorrente</strong><small>Esta data pertence a uma série criada automaticamente.</small></div></div>` : "";
 
       const drawStatus = match.waitlist_drawn_at
@@ -1668,10 +1696,10 @@
           : "";
 
       const managerControls = future && this.canManageMatches()
-        ? `<section class="attendance-manager-section"><div class="section-title"><h2>Gestão da escala</h2><small>${pendingPlayers.length} sem resposta.</small></div><div class="attendance-manager-actions"><button class="btn btn-secondary" data-manage-attendance="${match.id}">Gerenciar presenças</button></div></section>`
+        ? `<section class="attendance-manager-section"><div class="section-title"><h2>Gestão da escala</h2><small>${pendingMembers.length} sem resposta.</small></div><div class="attendance-manager-actions"><button class="btn btn-secondary" data-manage-attendance="${match.id}">Gerenciar presenças</button></div></section>`
         : "";
       const deleteControls = future && this.canManageMatches() ? `<div class="delete-match-actions"><button class="btn btn-danger btn-block delete-match-button" data-delete-match="${match.id}">${recurring ? "Excluir somente esta data" : "Excluir jogo agendado"}</button>${recurring ? `<button class="btn btn-danger-outline btn-block" data-delete-series="${match.id}">Excluir esta e as próximas</button>` : ""}<p class="danger-help">A exclusão só é permitida antes do horário. Peladas realizadas permanecem no histórico.</p></div>` : "";
-      this.modal(match.title, `<div class="match-detail-banner"><span class="status-pill ${future ? "status-maybe" : "status-confirmed"}">${future ? "Agendado" : "Histórico"}</span><strong>${escapeHtml(shortDate(match.starts_at))}</strong><p>${escapeHtml(match.location)}</p>${match.notes ? `<small>${escapeHtml(match.notes)}</small>` : ""}</div>${recurringInfo}${managerControls}${drawSection}${bbqExpanded}<div class="actions">${future ? `<button class="btn btn-primary" data-modal-rsvp="${match.id}">Minha presença</button>` : ""}${this.canManageMatches() ? `<button class="btn btn-secondary" data-modal-teams="${match.id}">Separar times</button>` : ""}</div>${deleteControls}${groupHtml("Começam jogando", "confirmed")}${groupHtml("Espera inicial", "waitlist")}${groupHtml("Talvez", "maybe")}${groupHtml("Não vão", "out")}`, (root, close) => {
+      this.modal(match.title, `<div class="match-detail-banner"><span class="status-pill ${future ? "status-maybe" : "status-confirmed"}">${future ? "Agendado" : "Histórico"}</span><strong>${escapeHtml(shortDate(match.starts_at))}</strong><p>${escapeHtml(match.location)}</p>${match.notes ? `<small>${escapeHtml(match.notes)}</small>` : ""}</div>${recurringInfo}${managerControls}${drawSection}${bbqExpanded}<div class="actions">${future ? `<button class="btn btn-primary" data-modal-rsvp="${match.id}">Minha presença</button>` : ""}${this.canManageMatches() ? `<button class="btn btn-secondary" data-modal-teams="${match.id}">Separar times</button>` : ""}</div>${deleteControls}${groupHtml("Começam jogando", "confirmed")}${groupHtml("Não vão", "out")}${groupHtml("Espera inicial", "waitlist")}${pendingHtml}`, (root, close) => {
         $("[data-modal-rsvp]", root)?.addEventListener("click", () => {
           close();
           this.openRsvp(match.id);
@@ -1680,6 +1708,32 @@
         $("[data-manage-attendance]", root)?.addEventListener("click", () => {
           close();
           this.openAttendanceManager(match.id);
+        });
+        $$('[data-remind-attendance]', root).forEach(button => {
+          button.addEventListener("click", async () => {
+            const playerId = String(button.dataset.playerId || "");
+            const playerName = String(button.dataset.playerName || "membro");
+            if (!playerId || button.disabled) return;
+            if (!confirm(`Enviar uma notificação individual para ${playerName}, solicitando a confirmação de presença?`)) return;
+            const originalHtml = button.innerHTML;
+            button.disabled = true;
+            button.innerHTML = '<span aria-hidden="true">…</span><b>Enviando</b>';
+            try {
+              const result = await this.repo.notifyAttendanceReminder(this.state.currentGroupId, match.id, playerId);
+              if (Number(result.sent || 0) > 0) {
+                button.innerHTML = '<span aria-hidden="true">✓</span><b>Enviado</b>';
+                this.toast(`Lembrete enviado para ${playerName}.`);
+              } else {
+                button.disabled = false;
+                button.innerHTML = originalHtml;
+                this.toast(`${playerName} ainda não possui notificações ativas em nenhum aparelho.`, true);
+              }
+            } catch (error) {
+              button.disabled = false;
+              button.innerHTML = originalHtml;
+              this.toast(error?.message || "Não foi possível enviar o lembrete.", true);
+            }
+          });
         });
         $("[data-open-waitlist-draw]", root)?.addEventListener("click", () => {
           close();
