@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const APP_RELEASE = Object.freeze({ channel: "beta", version: "Beta 1.0", build: 129, database: 128, edge: 106 });
+  const APP_RELEASE = Object.freeze({ channel: "beta", version: "Beta 1.0", build: 130, database: 130, edge: 106 });
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
   const uid = () => crypto.randomUUID?.() || "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
@@ -38,9 +38,23 @@
   const avatarKey = value => /^badge-(0[1-9]|1[0-9]|20)$/.test(String(value || "")) ? String(value) : "badge-01";
   const groupAvatarUrl = key => {
     const normalized = avatarKey(key);
-    return window.RESENHA_GROUP_AVATARS?.[normalized] || assetUrl(`assets/group-avatars/${normalized}.png?v=beta129r1`);
+    return window.RESENHA_GROUP_AVATARS?.[normalized] || assetUrl(`assets/group-avatars/${normalized}.png?v=beta130r1`);
   };
   const positionOptions = ["Goleiro", "Zagueiro", "Lateral", "Volante", "Meia", "Atacante", "Coringa"];
+  const isPrimaryGoalkeeper = player => String(player?.primary_position || "") === "Goleiro";
+  const canPlayGoalkeeper = player => Boolean(player && (isPrimaryGoalkeeper(player) || player.goalkeeper));
+  const goalkeeperGloveIcon = (player, options = {}) => {
+    if (!canPlayGoalkeeper(player)) return "";
+    const designated = Boolean(options.designated);
+    const label = designated
+      ? "Goleiro definido para este time"
+      : isPrimaryGoalkeeper(player)
+        ? "Goleiro principal"
+        : "Também pode jogar no gol";
+    const classes = ["goalkeeper-glove-icon", isPrimaryGoalkeeper(player) ? "is-primary" : "is-alternate", designated ? "is-designated" : ""].filter(Boolean).join(" ");
+    return `<span class="${classes}" title="${label}" aria-label="${label}"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M7 10V5.8a1.5 1.5 0 0 1 3 0V10 4.3a1.5 1.5 0 0 1 3 0V10 5.1a1.5 1.5 0 0 1 3 0V11 7.2a1.5 1.5 0 0 1 3 0v7.1c0 4.3-2.7 7-6.7 7H11c-2.7 0-4.8-1.2-6.2-3.5l-2.1-3.4a1.8 1.8 0 0 1 2.8-2.2L7 13.5V10Z"/><path d="M8.2 21.2h7.6"/></svg></span>`;
+  };
+  const playerPositionHtml = (player, options = {}) => `<span class="player-position-inline"><span>${escapeHtml(player?.primary_position || "Sem posição")}</span>${goalkeeperGloveIcon(player, options)}</span>`;
   const roleLabels = { owner: "Administrador", admin: "Administrador", organizer: "Organizador", treasurer: "Tesoureiro", member: "Membro" };
   const roleClass = role => `role-${role || "member"}`;
   const oauthErrorFromLocation = () => {
@@ -870,7 +884,7 @@
         if (!(image instanceof HTMLImageElement) || !image.matches("[data-group-avatar]")) return;
         if (image.dataset.fallbackApplied === "true") return;
         image.dataset.fallbackApplied = "true";
-        image.src = window.RESENHA_GROUP_AVATARS?.["badge-01"] || assetUrl("assets/group-avatars/badge-01.png?v=beta129r1");
+        image.src = window.RESENHA_GROUP_AVATARS?.["badge-01"] || assetUrl("assets/group-avatars/badge-01.png?v=beta130r1");
       }, true);
     },
 
@@ -1092,12 +1106,17 @@
       const confirmed = this.confirmedFor(match.id).map(item => this.player(item.player_id)).filter(Boolean);
       const assignments = this.state.assignments.filter(item => item.match_id === match.id);
       const teams = [...new Set(assignments.map(item => item.team_name))];
-      return `<div class="page-head"><div><span class="page-kicker">ESCALAÇÃO</span><h1>Times</h1><p>${escapeHtml(match.title)} · ${confirmed.length} confirmados</p></div>${this.canManageMatches() ? `<button class="btn btn-primary btn-small" data-action="draw-teams" data-id="${match.id}">${assignments.length ? "Rebalancear" : "Separar"}</button>` : ""}</div><div class="content-stack"><div class="notice"><strong>Equilíbrio confidencial</strong><br>O servidor considera posição, goleiros e média das avaliações. Organizadores conseguem formar os times sem visualizar as notas.</div>${teams.length ? `<div class="team-grid">${teams.map(name => this.teamCard(name, assignments)).join("")}</div>` : `<div class="card empty"><strong>Times ainda não formados</strong><span>${confirmed.length < 2 ? "Aguarde mais confirmações." : "Use o botão Separar para gerar equipes equilibradas."}</span></div>`}</div><div class="section-title"><h2>Confirmados</h2></div><div class="list">${confirmed.map(player => this.playerRow(player, { showRating: this.canSeeRatings() })).join("") || '<div class="card empty">Nenhum confirmado.</div>'}</div>`;
+      return `<div class="page-head"><div><span class="page-kicker">ESCALAÇÃO</span><h1>Times</h1><p>${escapeHtml(match.title)} · ${confirmed.length} confirmados</p></div>${this.canManageMatches() ? `<button class="btn btn-primary btn-small" data-action="draw-teams" data-id="${match.id}">${assignments.length ? "Rebalancear" : "Separar"}</button>` : ""}</div><div class="content-stack"><div class="notice"><strong>Equilíbrio confidencial</strong><br>O servidor prioriza goleiros principais e, quando necessário, completa a posição com quem marcou “Também posso jogar no gol”. Sem opções suficientes, o sorteio continua normalmente. As avaliações permanecem confidenciais.</div>${teams.length ? `<div class="team-grid">${teams.map(name => this.teamCard(name, assignments)).join("")}</div>` : `<div class="card empty"><strong>Times ainda não formados</strong><span>${confirmed.length < 2 ? "Aguarde mais confirmações." : "Use o botão Separar para gerar equipes equilibradas."}</span></div>`}</div><div class="section-title"><h2>Confirmados</h2></div><div class="list">${confirmed.map(player => this.playerRow(player, { showRating: this.canSeeRatings() })).join("") || '<div class="card empty">Nenhum confirmado.</div>'}</div>`;
     },
 
     teamCard(name, assignments) {
-      const members = assignments.filter(item => item.team_name === name).sort((a, b) => a.slot - b.slot).map(item => this.player(item.player_id)).filter(Boolean);
-      return `<section class="card team-card"><div class="team-head"><div class="team-shirt">${name.includes("Verde") ? "🟢" : name.includes("Azul") ? "🔵" : name.includes("Laranja") ? "🟠" : "⚪"}</div><strong>${escapeHtml(name)}</strong><small>${members.length} jogadores</small></div>${members.map(player => { const summary = this.ratingSummary(player.id); return `<div class="team-player">${this.personAvatar(player)}<div class="list-main"><strong>${escapeHtml(player.nickname || player.name)}</strong><small>${escapeHtml(player.primary_position || "Sem posição")}${summary?.average ? ` · nota ${summary.average.toFixed(1)}` : ""}</small></div><div class="team-player-trailing">${this.isGuest(player) ? '<span class="guest-badge">Convidado</span>' : ""}${player.goalkeeper ? '<span class="score-pill">GOL</span>' : ""}</div></div>`; }).join("")}</section>`;
+      const members = assignments
+        .filter(item => item.team_name === name)
+        .sort((a, b) => a.slot - b.slot)
+        .map(assignment => ({ assignment, player: this.player(assignment.player_id) }))
+        .filter(item => Boolean(item.player));
+      const definedGoalkeeper = members.some(item => item.assignment.assigned_goalkeeper === true);
+      return `<section class="card team-card"><div class="team-head"><div class="team-shirt">${name.includes("Verde") ? "🟢" : name.includes("Azul") ? "🔵" : name.includes("Laranja") ? "🟠" : "⚪"}</div><strong>${escapeHtml(name)}</strong><small>${members.length} jogadores${definedGoalkeeper ? " · goleiro definido" : " · sem goleiro definido"}</small></div>${members.map(({ player, assignment }) => { const summary = this.ratingSummary(player.id); return `<div class="team-player ${assignment.assigned_goalkeeper ? "is-assigned-goalkeeper" : ""}">${this.personAvatar(player)}<div class="list-main"><strong>${escapeHtml(player.nickname || player.name)}</strong><small>${playerPositionHtml(player, { designated: assignment.assigned_goalkeeper === true })}${summary?.average ? ` · nota ${summary.average.toFixed(1)}` : ""}</small></div><div class="team-player-trailing">${this.isGuest(player) ? '<span class="guest-badge">Convidado</span>' : ""}</div></div>`; }).join("")}</section>`;
     },
 
     membersPage() {
@@ -1113,17 +1132,17 @@
       const summary = this.ratingSummary(player.id);
       const isMe = member.user_id === this.state.profile.id;
       const canManageMember = this.canManageMatches() && !isMe && !["admin", "owner"].includes(member.role);
-      return `<article class="card member-row member-row-compact ${canManageMember ? "member-row-manageable" : ""}" ${canManageMember ? `data-action="manage-member" data-user-id="${member.user_id}" role="button" tabindex="0" aria-label="Gerenciar ${escapeHtml(player.name)}"` : ""}>${this.personAvatar(player)}<div class="list-main"><strong>${escapeHtml(player.name)}${isMe ? ' <span class="you-label">você</span>' : ""}</strong><small>${escapeHtml(player.primary_position || "Sem posição")}${player.nickname ? ` · ${escapeHtml(player.nickname)}` : ""}</small></div><div class="member-trailing"><span class="role-pill ${roleClass(member.role)}">${escapeHtml(roleLabels[member.role] || "Membro")}</span>${this.canSeeRatings() ? `<small class="private-score">${summary?.average ? `★ ${summary.average.toFixed(1)} (${summary.count})` : "Sem notas"}</small>` : ""}${canManageMember ? '<span class="member-manage-chevron">›</span>' : ""}</div></article>`;
+      return `<article class="card member-row member-row-compact ${canManageMember ? "member-row-manageable" : ""}" ${canManageMember ? `data-action="manage-member" data-user-id="${member.user_id}" role="button" tabindex="0" aria-label="Gerenciar ${escapeHtml(player.name)}"` : ""}>${this.personAvatar(player)}<div class="list-main"><strong>${escapeHtml(player.name)}${isMe ? ' <span class="you-label">você</span>' : ""}</strong><small>${playerPositionHtml(player)}${player.nickname ? ` · ${escapeHtml(player.nickname)}` : ""}</small></div><div class="member-trailing"><span class="role-pill ${roleClass(member.role)}">${escapeHtml(roleLabels[member.role] || "Membro")}</span>${this.canSeeRatings() ? `<small class="private-score">${summary?.average ? `★ ${summary.average.toFixed(1)} (${summary.count})` : "Sem notas"}</small>` : ""}${canManageMember ? '<span class="member-manage-chevron">›</span>' : ""}</div></article>`;
     },
 
     privateRatingsPanel() {
       const rated = this.activePlayers().map(player => ({ player, summary: this.ratingSummary(player.id) })).filter(item => item.summary?.count).sort((a, b) => b.summary.average - a.summary.average);
-      return `<div class="section-title"><h2>Painel privado de notas</h2><span class="private-badge">🔒 Administrador</span></div><section class="card private-panel">${rated.length ? rated.map((item, index) => `<div class="rating-summary-row"><span class="rank-pos">${index + 1}</span>${this.personAvatar(item.player)}<div class="list-main"><strong>${escapeHtml(item.player.name)}</strong><small>${escapeHtml(item.player.primary_position)} · ${item.summary.count} avaliação(ões)</small></div><strong>${item.summary.average.toFixed(2)}</strong></div>`).join("") : '<div class="empty"><strong>Nenhuma média disponível</strong><span>As notas aparecerão após os membros avaliarem o elenco.</span></div>'}</section>`;
+      return `<div class="section-title"><h2>Painel privado de notas</h2><span class="private-badge">🔒 Administrador</span></div><section class="card private-panel">${rated.length ? rated.map((item, index) => `<div class="rating-summary-row"><span class="rank-pos">${index + 1}</span>${this.personAvatar(item.player)}<div class="list-main"><strong>${escapeHtml(item.player.name)}</strong><small>${playerPositionHtml(item.player)} · ${item.summary.count} avaliação(ões)</small></div><strong>${item.summary.average.toFixed(2)}</strong></div>`).join("") : '<div class="empty"><strong>Nenhuma média disponível</strong><span>As notas aparecerão após os membros avaliarem o elenco.</span></div>'}</section>`;
     },
 
     playerRow(player, options = {}) {
       const summary = options.showRating ? this.ratingSummary(player.id) : null;
-      return `<div class="card list-row">${this.personAvatar(player)}<div class="list-main"><strong>${escapeHtml(player.name)}</strong><small>${escapeHtml(player.primary_position || "Sem posição")} · ${player.games || 0} jogos</small></div>${summary?.average ? `<span class="score-pill">★ ${summary.average.toFixed(1)}</span>` : ""}</div>`;
+      return `<div class="card list-row">${this.personAvatar(player)}<div class="list-main"><strong>${escapeHtml(player.name)}</strong><small>${playerPositionHtml(player)} · ${player.games || 0} jogos</small></div>${summary?.average ? `<span class="score-pill">★ ${summary.average.toFixed(1)}</span>` : ""}</div>`;
     },
 
     financePage() {
@@ -1499,7 +1518,7 @@
       if (member.user_id === this.state.profile.id) return this.toast("Você não pode remover a si mesmo por esta opção.", true);
       if (["admin", "owner"].includes(member.role)) return this.toast("O administrador único não pode ser removido. Transfira a administração primeiro.", true);
       const player = this.memberPlayer(member) || { name: "Membro", primary_position: "Sem posição" };
-      this.modal("Gerenciar membro", `<div class="member-manager-summary">${this.personAvatar(player)}<div><strong>${escapeHtml(player.name)}</strong><small>${escapeHtml(player.primary_position || "Sem posição")} · ${escapeHtml(roleLabels[member.role] || "Membro")}</small></div></div><div class="notice"><strong>Histórico preservado</strong><br>A remoção encerra imediatamente o acesso ao grupo e às notificações. Presenças, avaliações, pagamentos e registros anteriores permanecem no histórico.</div><button id="removeMemberButton" class="btn btn-danger btn-block">Remover do grupo</button>`, (root, close) => {
+      this.modal("Gerenciar membro", `<div class="member-manager-summary">${this.personAvatar(player)}<div><strong>${escapeHtml(player.name)}</strong><small>${playerPositionHtml(player)} · ${escapeHtml(roleLabels[member.role] || "Membro")}</small></div></div><div class="notice"><strong>Histórico preservado</strong><br>A remoção encerra imediatamente o acesso ao grupo e às notificações. Presenças, avaliações, pagamentos e registros anteriores permanecem no histórico.</div><button id="removeMemberButton" class="btn btn-danger btn-block">Remover do grupo</button>`, (root, close) => {
         $("#removeMemberButton", root)?.addEventListener("click", async event => {
           if (!confirm(`Remover ${player.name} deste grupo? O acesso será encerrado imediatamente.`)) return;
           const button = event.currentTarget;
@@ -1528,7 +1547,7 @@
       this.modal("Avaliar membros", `<div class="notice"><strong>Avaliação confidencial</strong><br>Dê uma nota de 1 a 10 considerando o desempenho geral no futebol. Somente o administrador visualiza médias e quantidade de avaliações.</div><form id="memberRatingsForm" class="ratings-form">${players.map(player => {
         const existing = this.myRating(player.id);
         const value = existing?.score || 7;
-        return `<div class="rating-input-row">${this.personAvatar(player)}<div class="rating-control"><div><strong>${escapeHtml(player.name)}</strong><span data-rating-value="${player.id}">${Number(value).toFixed(1)}</span></div><small>${escapeHtml(player.primary_position || "Sem posição")}</small><input type="range" min="1" max="10" step="0.5" value="${value}" name="rating_${player.id}" data-rating-slider="${player.id}"></div></div>`;
+        return `<div class="rating-input-row">${this.personAvatar(player)}<div class="rating-control"><div><strong>${escapeHtml(player.name)}</strong><span data-rating-value="${player.id}">${Number(value).toFixed(1)}</span></div><small>${playerPositionHtml(player)}</small><input type="range" min="1" max="10" step="0.5" value="${value}" name="rating_${player.id}" data-rating-slider="${player.id}"></div></div>`;
       }).join("")}<button class="btn btn-primary btn-block">Enviar avaliações</button></form>`, (root, close) => {
         $$('[data-rating-slider]', root).forEach(slider => slider.addEventListener("input", event => {
           $(`[data-rating-value="${event.currentTarget.dataset.ratingSlider}"]`, root).textContent = Number(event.currentTarget.value).toFixed(1);
@@ -1670,12 +1689,12 @@
         const managerNote = item.status_change_source === "manager" ? '<small class="attendance-managed-note">ajustado pela organização</small>' : "";
         const bbqBadge = item.bbq ? '<span class="bbq-attendance-badge" title="Participará do churrasco" aria-label="Participará do churrasco">♨</span>' : "";
         const guestBadge = this.isGuest(player) ? '<span class="guest-badge">Convidado</span>' : "";
-        return `<div class="card list-row attendance-list-row">${this.personAvatar(player)}<div class="list-main"><strong>${escapeHtml(player.name)}</strong><small>${escapeHtml(player.primary_position || "Sem posição")}</small>${managerNote}</div><div class="attendance-row-trailing">${bbqBadge}${guestBadge}${trailing}</div></div>`;
+        return `<div class="card list-row attendance-list-row">${this.personAvatar(player)}<div class="list-main"><strong>${escapeHtml(player.name)}</strong><small>${playerPositionHtml(player)}</small>${managerNote}</div><div class="attendance-row-trailing">${bbqBadge}${guestBadge}${trailing}</div></div>`;
       };
       const groupHtml = (title, key) => `<div class="section-title"><h2>${title} (${grouped[key].length})</h2></div><div class="list">${grouped[key].map(item => attendanceRow(item, key)).join("") || '<div class="card empty">Nenhum.</div>'}</div>`;
       const pendingRow = ({ member, player }) => {
         const canSendReminder = future && this.canManageMatches() && Boolean(member?.user_id || player?.user_id);
-        return `<div class="card list-row attendance-list-row pending-confirmation-row">${this.personAvatar(player)}<div class="list-main"><strong>${escapeHtml(player.name)}</strong><small>${escapeHtml(player.primary_position || "Sem posição")} · ainda não respondeu</small></div>${canSendReminder ? `<button type="button" class="attendance-reminder-button" data-remind-attendance="${match.id}" data-player-id="${player.id}" data-player-name="${escapeHtml(player.name)}" aria-label="Enviar lembrete de confirmação para ${escapeHtml(player.name)}"><span aria-hidden="true">🔔</span><b>Lembrar</b></button>` : '<span class="status-pill status-maybe">Pendente</span>'}</div>`;
+        return `<div class="card list-row attendance-list-row pending-confirmation-row">${this.personAvatar(player)}<div class="list-main"><strong>${escapeHtml(player.name)}</strong><small>${playerPositionHtml(player)} · ainda não respondeu</small></div>${canSendReminder ? `<button type="button" class="attendance-reminder-button" data-remind-attendance="${match.id}" data-player-id="${player.id}" data-player-name="${escapeHtml(player.name)}" aria-label="Enviar lembrete de confirmação para ${escapeHtml(player.name)}"><span aria-hidden="true">🔔</span><b>Lembrar</b></button>` : '<span class="status-pill status-maybe">Pendente</span>'}</div>`;
       };
       const pendingHtml = future
         ? `<div class="section-title pending-confirmation-title"><h2>Pendente de confirmação (${pendingMembers.length})</h2><small>Sem resposta de presença ou ausência.</small></div><div class="list pending-confirmation-list">${pendingMembers.map(pendingRow).join("") || '<div class="card empty">Todos os membros já responderam.</div>'}</div>`
@@ -1808,7 +1827,7 @@
       const eligiblePlayers = eligibleAttendance.map(item => this.player(item.player_id)).filter(Boolean).sort((a, b) => String(a.name).localeCompare(String(b.name), "pt-BR"));
       if (eligiblePlayers.length < 2) return this.toast("São necessárias ao menos duas presenças confirmadas para realizar o sorteio.", true);
       const currentWaitlist = new Set(eligibleAttendance.filter(item => item.status === "waitlist").map(item => item.player_id));
-      const rows = eligiblePlayers.map(player => `<label class="draw-player-row"><input type="checkbox" name="draw_player" value="${player.id}" checked><span class="draw-player-check">✓</span>${this.personAvatar(player, "draw-player-avatar")}<span class="list-main"><strong>${escapeHtml(player.name)}</strong><small>${escapeHtml(player.primary_position || "Sem posição")}${currentWaitlist.has(player.id) ? " · atualmente na espera" : ""}</small></span>${this.isGuest(player) ? '<span class="guest-badge">Convidado</span>' : ""}</label>`).join("");
+      const rows = eligiblePlayers.map(player => `<label class="draw-player-row"><input type="checkbox" name="draw_player" value="${player.id}" checked><span class="draw-player-check">✓</span>${this.personAvatar(player, "draw-player-avatar")}<span class="list-main"><strong>${escapeHtml(player.name)}</strong><small>${playerPositionHtml(player)}${currentWaitlist.has(player.id) ? " · atualmente na espera" : ""}</small></span>${this.isGuest(player) ? '<span class="guest-badge">Convidado</span>' : ""}</label>`).join("");
       const initialCount = Math.max(1, Math.min(currentWaitlist.size || 1, eligiblePlayers.length - 1));
       this.modal("Sorteio da espera", `<form id="waitlistDrawForm" class="form-grid"><div class="notice"><strong>${escapeHtml(match.title)}</strong><br>Escolha exatamente quem participará do sorteio. O sorteio pode ser realizado mesmo sem exceder o limite da pelada.</div><div class="draw-selection-head"><strong>Participantes do sorteio</strong><button type="button" class="text-button" id="toggleDrawPlayers">Desmarcar todos</button></div><div class="draw-player-list">${rows}</div><div class="field"><label>Quantos começarão na espera</label><input type="number" name="waitlist_count" min="1" max="${eligiblePlayers.length - 1}" value="${initialCount}" required inputmode="numeric"><small id="drawCountHelp">Selecione ao menos 2 participantes.</small></div><div class="field"><label>Forma de exibição</label><div class="radio-grid draw-mode-grid"><label class="radio-card"><input type="radio" name="draw_mode" value="instant" checked>Instantâneo</label><label class="radio-card"><input type="radio" name="draw_mode" value="reveal">Revelação</label></div></div><button class="btn btn-primary btn-block">Realizar sorteio</button></form>`, (root, close) => {
         const form = $("#waitlistDrawForm", root);
@@ -1899,7 +1918,7 @@
         const current = attendance.get(player.id);
         const status = current?.status || "pending";
         const waitLabel = `Espera${current?.waitlist_position ? ` #${current.waitlist_position}` : ""}`;
-        return `<label class="attendance-manager-row">${this.personAvatar(player, "attendance-manager-avatar")}<span><strong>${escapeHtml(player.name)}</strong><small>${escapeHtml(player.primary_position || "Sem posição")}</small></span><select name="attendance_${player.id}" data-player-id="${player.id}" data-original-status="${status}" aria-label="Presença de ${escapeHtml(player.name)}"><option value="pending" ${status === "pending" ? "selected" : ""}>Sem resposta</option><option value="confirmed" ${status === "confirmed" ? "selected" : ""}>Confirmado</option><option value="maybe" ${status === "maybe" ? "selected" : ""}>Talvez</option><option value="out" ${status === "out" ? "selected" : ""}>Ausente</option>${status === "waitlist" ? `<option value="waitlist" selected disabled>${waitLabel}</option>` : ""}</select></label>`;
+        return `<label class="attendance-manager-row">${this.personAvatar(player, "attendance-manager-avatar")}<span><strong>${escapeHtml(player.name)}</strong><small>${playerPositionHtml(player)}</small></span><select name="attendance_${player.id}" data-player-id="${player.id}" data-original-status="${status}" aria-label="Presença de ${escapeHtml(player.name)}"><option value="pending" ${status === "pending" ? "selected" : ""}>Sem resposta</option><option value="confirmed" ${status === "confirmed" ? "selected" : ""}>Confirmado</option><option value="maybe" ${status === "maybe" ? "selected" : ""}>Talvez</option><option value="out" ${status === "out" ? "selected" : ""}>Ausente</option>${status === "waitlist" ? `<option value="waitlist" selected disabled>${waitLabel}</option>` : ""}</select></label>`;
       }).join("");
       this.modal("Gerenciar presenças", `<form id="attendanceManagerForm" class="form-grid"><div class="notice"><strong>${escapeHtml(match.title)}</strong><br>Administrador e organizador podem registrar respostas recebidas fora do aplicativo. A espera inicial continua sendo definida pelo sorteio.</div><div class="attendance-manager-list">${rows}</div><button class="btn btn-primary btn-block">Salvar alterações</button></form>`, (root, close) => {
         $("#attendanceManagerForm", root).addEventListener("submit", async event => {
@@ -1980,7 +1999,7 @@
       this.state = this.repo.state;
       this.route = "teams";
       this.render();
-      this.toast("Times equilibrados por posição e avaliação.");
+      this.toast("Times separados com prioridade para goleiros principais e cobertura por jogadores aptos ao gol.");
     },
 
     openFinanceForm() {
@@ -2097,7 +2116,7 @@
       const rows = guests.map(player => {
         const match = this.state.matches.find(item => item.id === player.guest_match_id);
         const eventLabel = match ? `${match.title} · ${shortDate(match.starts_at)}` : "Evento indisponível";
-        return `<button type="button" class="card list-row guest-manage-row" data-edit-guest="${player.id}">${this.personAvatar(player)}<div class="list-main"><strong>${escapeHtml(player.name)}</strong><small>${escapeHtml(player.primary_position)} · ${escapeHtml(eventLabel)}</small></div><span class="guest-badge">Convidado</span><strong>›</strong></button>`;
+        return `<button type="button" class="card list-row guest-manage-row" data-edit-guest="${player.id}">${this.personAvatar(player)}<div class="list-main"><strong>${escapeHtml(player.name)}</strong><small>${playerPositionHtml(player)} · ${escapeHtml(eventLabel)}</small></div><span class="guest-badge">Convidado</span><strong>›</strong></button>`;
       }).join("");
       this.modal("Convidados por evento", `<button class="btn btn-primary btn-block" id="addPlayer">+ Incluir convidado</button><div class="section-title"><h2>Convidados cadastrados</h2><small>Visíveis somente no evento escolhido.</small></div><div class="list">${rows || '<div class="card empty">Nenhum convidado cadastrado.</div>'}</div>`, root => {
         $("#addPlayer", root)?.addEventListener("click", event => {

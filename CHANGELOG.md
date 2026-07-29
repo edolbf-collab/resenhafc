@@ -1,3 +1,12 @@
+## Beta 1.0 Build 130 — 2026-07-29
+
+- Prioridade para goleiros cuja posição principal é Goleiro.
+- Cobertura de vagas restantes com jogadores que marcaram “Também posso jogar no gol”.
+- Formação dos times continua normalmente quando não há goleiros suficientes.
+- Novo campo `team_assignments.assigned_goalkeeper`.
+- Luva discreta ao lado da posição em membros, eventos e times.
+- Frontend 130, Banco 130 e Edge 106.
+
 # Beta 1.0 Build 129
 
 - reorganiza os balões de presença no detalhe do evento ativo;

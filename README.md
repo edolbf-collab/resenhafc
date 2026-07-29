@@ -1,4 +1,13 @@
-# Resenha FC — Beta 1.0 Build 129
+# Resenha FC — Beta 1.0 Build 130
+
+## Destaques da Build 130
+
+- prioridade para goleiros principais na separação dos times;
+- preenchimento das vagas restantes com jogadores que marcaram “Também posso jogar no gol”;
+- continuidade normal do sorteio quando não houver goleiros suficientes;
+- definição persistida do goleiro de cada time;
+- luva discreta ao lado da posição nos cartões de membros, eventos e times;
+- Frontend 130, Banco 130 e Edge 106.
 
 Build 129 baseada na Build 128.
 

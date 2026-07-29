@@ -1,10 +1,10 @@
 {
   "channel": "beta",
   "version": "Beta 1.0",
-  "build": 129,
-  "database": 128,
+  "build": 130,
+  "database": 130,
   "edge": 106,
   "mandatory": false,
-  "notes": "Reorganiza os grupos de presença nos eventos ativos, cria a lista Pendente de confirmação e permite lembrete push individual por administrador ou organizador.",
-  "label": "Beta 1.0 Build 129"
+  "notes": "Prioriza goleiros de posição na separação dos times, usa jogadores com a opção Também posso jogar no gol apenas para preencher vagas restantes e exibe uma luva discreta ao lado da posição nos cartões de membros e eventos.",
+  "label": "Beta 1.0 Build 130"
 }
