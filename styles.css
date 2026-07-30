@@ -556,3 +556,18 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .team-player.is-assigned-goalkeeper .goalkeeper-glove-icon{transform:scale(1.04)}
 .attendance-list-row .player-position-inline,.pending-confirmation-row .player-position-inline,.member-row .player-position-inline{gap:3px}
 @media(max-width:380px){.goalkeeper-glove-icon{width:12px;height:12px;flex-basis:12px}}
+
+/* Beta 1.0 Build 131 — edição de eventos, sorteio removível e quantidade de times */
+.optional-label{display:inline-flex;align-items:center;margin-left:5px;padding:2px 6px;border-radius:999px;background:rgba(255,255,255,.06);color:var(--muted);font-size:8px;letter-spacing:.35px;text-transform:uppercase}
+.field-help{margin-top:-5px;color:var(--muted);font-size:10px;line-height:1.45}
+.draw-management-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.draw-management-actions .btn{min-height:40px;padding:9px 10px;font-size:10.5px}
+.match-detail-capacity{display:flex;flex-wrap:wrap;gap:6px;margin:9px 0 2px}
+.match-detail-capacity span{display:inline-flex;align-items:center;gap:3px;padding:5px 8px;border-radius:999px;background:rgba(255,255,255,.055);color:var(--muted);font-size:9px}
+.match-detail-capacity strong{color:var(--text);font-size:9.5px}
+.team-config-card{display:grid;gap:12px;margin-bottom:14px;padding:15px}
+.team-config-copy{display:grid;gap:4px}.team-config-copy strong{font-size:14px}.team-config-copy small,.team-config-reference{color:var(--muted);font-size:10px;line-height:1.4}
+.team-config-controls{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center}
+.team-config-controls select{width:100%;min-height:43px;border-radius:12px;border:1px solid var(--line);background:#081b26;color:var(--text);padding:9px 11px}
+.team-config-controls .btn{min-width:112px;min-height:43px}
+@media(max-width:390px){.draw-management-actions,.team-config-controls{grid-template-columns:1fr}.team-config-controls .btn{width:100%}}

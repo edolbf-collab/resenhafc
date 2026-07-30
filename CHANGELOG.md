@@ -1,3 +1,15 @@
+## Beta 1.0 Build 131
+
+- adiciona exclusão do sorteio da espera por administrador e organizador;
+- restaura os jogadores da espera para confirmados ao excluir o resultado;
+- permite editar máximo de jogadores, jogadores por time e observações de eventos futuros;
+- torna jogadores por time um dado opcional;
+- adiciona seleção da quantidade de times na aba Times;
+- persiste a quantidade escolhida e a utiliza em Separar e Rebalancear;
+- mantém a prioridade de goleiros da Build 130;
+- banco esperado: Build 131;
+- Edge Functions permanecem na Build 106.
+
 ## Beta 1.0 Build 130 — 2026-07-29
 
 - Prioridade para goleiros cuja posição principal é Goleiro.

@@ -1,10 +1,10 @@
 {
   "channel": "beta",
   "version": "Beta 1.0",
-  "build": 130,
-  "database": 130,
+  "build": 131,
+  "database": 131,
   "edge": 106,
   "mandatory": false,
-  "notes": "Prioriza goleiros de posição na separação dos times, usa jogadores com a opção Também posso jogar no gol apenas para preencher vagas restantes e exibe uma luva discreta ao lado da posição nos cartões de membros e eventos.",
-  "label": "Beta 1.0 Build 130"
+  "notes": "Permite excluir o sorteio da espera, editar o máximo de jogadores, a referência opcional de jogadores por time e as observações, além de definir a quantidade de times antes da separação.",
+  "label": "Beta 1.0 Build 131"
 }

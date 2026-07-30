@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const APP_RELEASE = Object.freeze({ channel: "beta", version: "Beta 1.0", build: 130, database: 130, edge: 106 });
+  const APP_RELEASE = Object.freeze({ channel: "beta", version: "Beta 1.0", build: 131, database: 131, edge: 106 });
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
   const uid = () => crypto.randomUUID?.() || "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
@@ -38,7 +38,7 @@
   const avatarKey = value => /^badge-(0[1-9]|1[0-9]|20)$/.test(String(value || "")) ? String(value) : "badge-01";
   const groupAvatarUrl = key => {
     const normalized = avatarKey(key);
-    return window.RESENHA_GROUP_AVATARS?.[normalized] || assetUrl(`assets/group-avatars/${normalized}.png?v=beta130r1`);
+    return window.RESENHA_GROUP_AVATARS?.[normalized] || assetUrl(`assets/group-avatars/${normalized}.png?v=beta131r1`);
   };
   const positionOptions = ["Goleiro", "Zagueiro", "Lateral", "Volante", "Meia", "Atacante", "Coringa"];
   const isPrimaryGoalkeeper = player => String(player?.primary_position || "") === "Goleiro";
@@ -426,6 +426,25 @@
       return data || {};
     }
 
+    async clearMatchWaitlistDraw(matchId) {
+      const { data, error } = await this.client.rpc("clear_match_waitlist_draw", { p_match_id: matchId });
+      if (error) throw error;
+      await this.loadGroup(this.state.currentGroupId, { subscribe: false });
+      return data || {};
+    }
+
+    async updateMatchSettings(matchId, payload) {
+      const { data, error } = await this.client.rpc("update_match_settings", {
+        p_match_id: matchId,
+        p_max_players: Number(payload.maxPlayers),
+        p_players_per_team: payload.playersPerTeam == null ? null : Number(payload.playersPerTeam),
+        p_notes: payload.notes || ""
+      });
+      if (error) throw error;
+      await this.loadGroup(this.state.currentGroupId, { subscribe: false });
+      return data || {};
+    }
+
     async createMatchGuest(payload) {
       const { data, error } = await this.client.rpc("create_match_guest", {
         p_match_id: payload.matchId,
@@ -476,8 +495,11 @@
       return this.loadGroup(this.state.currentGroupId, { subscribe: false });
     }
 
-    async balanceTeams(matchId) {
-      const { error } = await this.client.rpc("balance_match_teams", { p_match_id: matchId });
+    async balanceTeams(matchId, teamCount) {
+      const { error } = await this.client.rpc("balance_match_teams_with_count", {
+        p_match_id: matchId,
+        p_team_count: Number(teamCount)
+      });
       if (error) throw error;
       return this.loadGroup(this.state.currentGroupId, { subscribe: false });
     }
@@ -772,6 +794,7 @@
     launchGroupId: "",
     launchAnnouncementId: "",
     launchMatchId: "",
+    selectedTeamMatchId: "",
     swRegistration: null,
     updateAvailable: null,
     lastSyncAt: null,
@@ -884,7 +907,7 @@
         if (!(image instanceof HTMLImageElement) || !image.matches("[data-group-avatar]")) return;
         if (image.dataset.fallbackApplied === "true") return;
         image.dataset.fallbackApplied = "true";
-        image.src = window.RESENHA_GROUP_AVATARS?.["badge-01"] || assetUrl("assets/group-avatars/badge-01.png?v=beta130r1");
+        image.src = window.RESENHA_GROUP_AVATARS?.["badge-01"] || assetUrl("assets/group-avatars/badge-01.png?v=beta131r1");
       }, true);
     },
 
@@ -1101,12 +1124,24 @@
     },
 
     teamsPage() {
-      const match = this.nextMatch() || this.pastMatches()[0];
+      const selected = this.state.matches.find(item => item.id === this.selectedTeamMatchId);
+      const match = selected || this.nextMatch() || this.pastMatches()[0];
       if (!match) return `<div class="page-head"><div><span class="page-kicker">ESCALAÇÃO</span><h1>Times</h1><p>Separação por posição e avaliação.</p></div></div><div class="card empty"><strong>Sem jogo disponível</strong><span>Agende uma pelada antes de montar os times.</span></div>`;
+      this.selectedTeamMatchId = match.id;
       const confirmed = this.confirmedFor(match.id).map(item => this.player(item.player_id)).filter(Boolean);
       const assignments = this.state.assignments.filter(item => item.match_id === match.id);
       const teams = [...new Set(assignments.map(item => item.team_name))];
-      return `<div class="page-head"><div><span class="page-kicker">ESCALAÇÃO</span><h1>Times</h1><p>${escapeHtml(match.title)} · ${confirmed.length} confirmados</p></div>${this.canManageMatches() ? `<button class="btn btn-primary btn-small" data-action="draw-teams" data-id="${match.id}">${assignments.length ? "Rebalancear" : "Separar"}</button>` : ""}</div><div class="content-stack"><div class="notice"><strong>Equilíbrio confidencial</strong><br>O servidor prioriza goleiros principais e, quando necessário, completa a posição com quem marcou “Também posso jogar no gol”. Sem opções suficientes, o sorteio continua normalmente. As avaliações permanecem confidenciais.</div>${teams.length ? `<div class="team-grid">${teams.map(name => this.teamCard(name, assignments)).join("")}</div>` : `<div class="card empty"><strong>Times ainda não formados</strong><span>${confirmed.length < 2 ? "Aguarde mais confirmações." : "Use o botão Separar para gerar equipes equilibradas."}</span></div>`}</div><div class="section-title"><h2>Confirmados</h2></div><div class="list">${confirmed.map(player => this.playerRow(player, { showRating: this.canSeeRatings() })).join("") || '<div class="card empty">Nenhum confirmado.</div>'}</div>`;
+      const maximumTeams = Math.min(12, Math.max(2, confirmed.length));
+      const inferredTeams = match.players_per_team
+        ? Math.max(2, Math.ceil(confirmed.length / Math.max(2, Number(match.players_per_team))))
+        : 2;
+      const selectedTeamCount = Math.min(maximumTeams, Math.max(2, Number(match.team_count || inferredTeams || 2)));
+      const teamOptions = Array.from({ length: Math.max(0, maximumTeams - 1) }, (_, index) => index + 2)
+        .map(count => `<option value="${count}" ${count === selectedTeamCount ? "selected" : ""}>${count} times</option>`).join("");
+      const configPanel = this.canManageMatches()
+        ? `<section class="card team-config-card"><div class="team-config-copy"><strong>Quantidade de times</strong><small>Defina quantas equipes serão formadas nesta partida. A escolha fica salva para novos rebalanceamentos.</small></div><div class="team-config-controls"><select id="teamCountSelect" aria-label="Quantidade de times" ${confirmed.length < 2 ? "disabled" : ""}>${teamOptions}</select><button type="button" class="btn btn-primary" data-action="configure-teams" data-id="${match.id}" ${confirmed.length < 2 ? "disabled" : ""}>${assignments.length ? "Rebalancear" : "Separar"}</button></div>${match.players_per_team ? `<small class="team-config-reference">Referência informada no evento: ${Number(match.players_per_team)} jogadores por time.</small>` : '<small class="team-config-reference">O evento não possui quantidade fixa de jogadores por time.</small>'}</section>`
+        : "";
+      return `<div class="page-head"><div><span class="page-kicker">ESCALAÇÃO</span><h1>Times</h1><p>${escapeHtml(match.title)} · ${confirmed.length} confirmados</p></div></div>${configPanel}<div class="content-stack"><div class="notice"><strong>Equilíbrio confidencial</strong><br>O servidor prioriza goleiros principais e, quando necessário, completa a posição com quem marcou “Também posso jogar no gol”. Sem opções suficientes, a separação continua normalmente. As avaliações permanecem confidenciais.</div>${teams.length ? `<div class="team-grid">${teams.map(name => this.teamCard(name, assignments)).join("")}</div>` : `<div class="card empty"><strong>Times ainda não formados</strong><span>${confirmed.length < 2 ? "Aguarde mais confirmações." : "Escolha a quantidade de times e use o botão Separar."}</span></div>`}</div><div class="section-title"><h2>Confirmados</h2></div><div class="list">${confirmed.map(player => this.playerRow(player, { showRating: this.canSeeRatings() })).join("") || '<div class="card empty">Nenhum confirmado.</div>'}</div>`;
     },
 
     teamCard(name, assignments) {
@@ -1208,7 +1243,8 @@
           "new-match": () => this.openMatchForm(),
           "open-match": () => this.openMatchDetails(data.id),
           rsvp: () => this.openRsvp(data.id || this.nextMatch()?.id),
-          "draw-teams": () => this.drawTeams(data.id),
+          "draw-teams": () => this.openTeamsForMatch(data.id),
+          "configure-teams": () => this.drawTeams(data.id, Number($("#teamCountSelect")?.value || 2)),
           "new-finance": () => this.openFinanceForm(),
           "delete-finance": () => this.deleteFinanceEntry(data.type, data.id),
           "rate-members": () => this.openMemberRatings(),
@@ -1597,7 +1633,7 @@
       const date = new Date(Date.now() + 7 * 86400000);
       date.setHours(20, 0, 0, 0);
       const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
-      this.modal("Agendar pelada", `<form id="matchForm" class="form-grid"><div class="field"><label>Título</label><input name="title" required value="Pelada semanal"></div><div class="field"><label>Data e hora da primeira pelada</label><input name="starts_at" type="datetime-local" min="${new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)}" required value="${local}"></div><div class="field"><label>Local</label><input name="location" required placeholder="Arena e número da quadra"></div><div class="field-row"><div class="field"><label>Máximo de jogadores</label><input name="max_players" type="number" min="4" max="60" value="12"></div><div class="field"><label>Jogadores por time</label><input name="players_per_team" type="number" min="2" max="11" value="6"></div></div><label class="check-row recurrence-toggle"><input name="repeat_weekly" type="checkbox"> Repetir esta pelada toda semana</label><div class="recurrence-panel" id="recurrencePanel" hidden><div class="field"><label>Quantidade total de peladas</label><input name="occurrences" type="number" min="2" max="52" value="8" inputmode="numeric"><small>Será criada uma ocorrência a cada 7 dias, sempre no mesmo horário.</small></div><div class="recurrence-preview" id="recurrencePreview">8 peladas semanais serão agendadas.</div></div><div class="field"><label>Observações</label><textarea name="notes" placeholder="Uniforme, prazo, regras..."></textarea></div><button class="btn btn-primary btn-block">Criar programação</button></form>`, (root, close) => {
+      this.modal("Agendar pelada", `<form id="matchForm" class="form-grid"><div class="field"><label>Título</label><input name="title" required value="Pelada semanal"></div><div class="field"><label>Data e hora da primeira pelada</label><input name="starts_at" type="datetime-local" min="${new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)}" required value="${local}"></div><div class="field"><label>Local</label><input name="location" required placeholder="Arena e número da quadra"></div><div class="field-row"><div class="field"><label>Máximo de jogadores</label><input name="max_players" type="number" min="4" max="60" value="12" required></div><div class="field"><label>Jogadores por time <span class="optional-label">opcional</span></label><input name="players_per_team" type="number" min="2" max="11" placeholder="Definir depois"></div></div><div class="field-help">A quantidade de times será escolhida na aba Times. O número por time serve apenas como referência do evento.</div><label class="check-row recurrence-toggle"><input name="repeat_weekly" type="checkbox"> Repetir esta pelada toda semana</label><div class="recurrence-panel" id="recurrencePanel" hidden><div class="field"><label>Quantidade total de peladas</label><input name="occurrences" type="number" min="2" max="52" value="8" inputmode="numeric"><small>Será criada uma ocorrência a cada 7 dias, sempre no mesmo horário.</small></div><div class="recurrence-preview" id="recurrencePreview">8 peladas semanais serão agendadas.</div></div><div class="field"><label>Observações</label><textarea name="notes" placeholder="Uniforme, prazo, regras..."></textarea></div><button class="btn btn-primary btn-block">Criar programação</button></form>`, (root, close) => {
         const repeat = $('[name="repeat_weekly"]', root);
         const panel = $("#recurrencePanel", root);
         const occurrencesInput = $('[name="occurrences"]', root);
@@ -1615,6 +1651,8 @@
           const form = new FormData(event.currentTarget);
           const startsAt = new Date(form.get("starts_at"));
           if (startsAt <= new Date()) return this.toast("Escolha uma data futura.", true);
+          const rawPlayersPerTeam = String(form.get("players_per_team") || "").trim();
+          const playersPerTeam = rawPlayersPerTeam ? Number(rawPlayersPerTeam) : null;
           const occurrences = repeat.checked ? Math.max(2, Math.min(52, Number(form.get("occurrences") || 8))) : 1;
           const submit = event.submitter;
           submit.disabled = true;
@@ -1625,7 +1663,7 @@
             startsAt: startsAt.toISOString(),
             location: form.get("location"),
             maxPlayers: Number(form.get("max_players")),
-            playersPerTeam: Number(form.get("players_per_team")),
+            playersPerTeam,
             bbqEnabled: false,
             bbqPrice: 0,
             notes: form.get("notes") || "",
@@ -1705,7 +1743,7 @@
         ? `<div class="draw-status ready"><span>✓</span><div><strong>Sorteio realizado</strong><small>${grouped.waitlist.length} pessoa(s) na espera inicial. O resultado permanece salvo até um novo sorteio.</small></div></div>`
         : `<div class="draw-status"><span>⇅</span><div><strong>Nenhum sorteio realizado</strong><small>Selecione livremente os participantes e quantos começarão na espera.</small></div></div>`;
       const drawSection = future
-        ? `<section class="match-draw-section"><div class="section-title"><h2>Sorteio da espera</h2><small>Independente do limite de participantes.</small></div>${drawStatus}${this.canManageMatches() ? `<button class="btn btn-secondary btn-block" data-open-waitlist-draw="${match.id}">${match.waitlist_drawn_at ? "Refazer sorteio" : "Configurar sorteio"}</button>` : ""}</section>`
+        ? `<section class="match-draw-section"><div class="section-title"><h2>Sorteio da espera</h2><small>Independente do limite de participantes.</small></div>${drawStatus}${this.canManageMatches() ? `<div class="draw-management-actions"><button class="btn btn-secondary" data-open-waitlist-draw="${match.id}">${match.waitlist_drawn_at ? "Refazer sorteio" : "Configurar sorteio"}</button>${match.waitlist_drawn_at ? `<button class="btn btn-danger-outline" data-clear-waitlist-draw="${match.id}">Excluir sorteio</button>` : ""}</div>` : ""}</section>`
         : grouped.waitlist.length ? `<section class="match-draw-section"><div class="section-title"><h2>Resultado da espera</h2></div>${drawStatus}</section>` : "";
 
       const bbqExpanded = match.bbq_enabled
@@ -1715,15 +1753,17 @@
           : "";
 
       const managerControls = future && this.canManageMatches()
-        ? `<section class="attendance-manager-section"><div class="section-title"><h2>Gestão da escala</h2><small>${pendingMembers.length} sem resposta.</small></div><div class="attendance-manager-actions"><button class="btn btn-secondary" data-manage-attendance="${match.id}">Gerenciar presenças</button></div></section>`
+        ? `<section class="attendance-manager-section"><div class="section-title"><h2>Gestão da escala</h2><small>${pendingMembers.length} sem resposta.</small></div><div class="attendance-manager-actions"><button class="btn btn-secondary" data-manage-attendance="${match.id}">Gerenciar presenças</button><button class="btn btn-secondary" data-edit-match="${match.id}">Editar evento</button></div></section>`
         : "";
       const deleteControls = future && this.canManageMatches() ? `<div class="delete-match-actions"><button class="btn btn-danger btn-block delete-match-button" data-delete-match="${match.id}">${recurring ? "Excluir somente esta data" : "Excluir jogo agendado"}</button>${recurring ? `<button class="btn btn-danger-outline btn-block" data-delete-series="${match.id}">Excluir esta e as próximas</button>` : ""}<p class="danger-help">A exclusão só é permitida antes do horário. Peladas realizadas permanecem no histórico.</p></div>` : "";
-      this.modal(match.title, `<div class="match-detail-banner"><span class="status-pill ${future ? "status-maybe" : "status-confirmed"}">${future ? "Agendado" : "Histórico"}</span><strong>${escapeHtml(shortDate(match.starts_at))}</strong><p>${escapeHtml(match.location)}</p>${match.notes ? `<small>${escapeHtml(match.notes)}</small>` : ""}</div>${recurringInfo}${managerControls}${drawSection}${bbqExpanded}<div class="actions">${future ? `<button class="btn btn-primary" data-modal-rsvp="${match.id}">Minha presença</button>` : ""}${this.canManageMatches() ? `<button class="btn btn-secondary" data-modal-teams="${match.id}">Separar times</button>` : ""}</div>${deleteControls}${groupHtml("Começam jogando", "confirmed")}${groupHtml("Não vão", "out")}${groupHtml("Espera inicial", "waitlist")}${pendingHtml}`, (root, close) => {
+      const eventCapacity = `<div class="match-detail-capacity"><span>Máximo: <strong>${Number(match.max_players)}</strong></span><span>Por time: <strong>${match.players_per_team ? Number(match.players_per_team) : "não definido"}</strong></span>${match.team_count ? `<span>Times: <strong>${Number(match.team_count)}</strong></span>` : ""}</div>`;
+      this.modal(match.title, `<div class="match-detail-banner"><span class="status-pill ${future ? "status-maybe" : "status-confirmed"}">${future ? "Agendado" : "Histórico"}</span><strong>${escapeHtml(shortDate(match.starts_at))}</strong><p>${escapeHtml(match.location)}</p>${eventCapacity}${match.notes ? `<small>${escapeHtml(match.notes)}</small>` : ""}</div>${recurringInfo}${managerControls}${drawSection}${bbqExpanded}<div class="actions">${future ? `<button class="btn btn-primary" data-modal-rsvp="${match.id}">Minha presença</button>` : ""}${this.canManageMatches() ? `<button class="btn btn-secondary" data-modal-teams="${match.id}">Abrir Times</button>` : ""}</div>${deleteControls}${groupHtml("Começam jogando", "confirmed")}${groupHtml("Não vão", "out")}${groupHtml("Espera inicial", "waitlist")}${pendingHtml}`, (root, close) => {
         $("[data-modal-rsvp]", root)?.addEventListener("click", () => {
           close();
           this.openRsvp(match.id);
         });
-        $("[data-modal-teams]", root)?.addEventListener("click", async () => { close(); await this.drawTeams(match.id); });
+        $("[data-modal-teams]", root)?.addEventListener("click", () => { close(); this.openTeamsForMatch(match.id); });
+        $("[data-edit-match]", root)?.addEventListener("click", () => { close(); this.openMatchEditForm(match.id); });
         $("[data-manage-attendance]", root)?.addEventListener("click", () => {
           close();
           this.openAttendanceManager(match.id);
@@ -1757,6 +1797,15 @@
         $("[data-open-waitlist-draw]", root)?.addEventListener("click", () => {
           close();
           this.openWaitlistDraw(match.id);
+        });
+        $("[data-clear-waitlist-draw]", root)?.addEventListener("click", async () => {
+          if (!confirm("Excluir o sorteio realizado? Os membros da espera inicial voltarão para Começam jogando e os times separados serão apagados.")) return;
+          await this.repo.clearMatchWaitlistDraw(match.id);
+          this.state = this.repo.state;
+          close();
+          this.render();
+          this.openMatchDetails(match.id);
+          this.toast("Sorteio excluído. A espera inicial foi desfeita.");
         });
         const bbqParticipantsToggle = $("[data-toggle-bbq-participants]", root);
         if (bbqParticipantsToggle) {
@@ -1817,6 +1866,41 @@
         this.launchMatchId = "";
         history.replaceState({}, document.title, appBaseUrl());
       }
+    },
+
+    openMatchEditForm(matchId) {
+      if (!this.canManageMatches()) return this.toast("Somente administrador e organizador podem editar eventos.", true);
+      const match = this.state.matches.find(item => item.id === matchId);
+      if (!match) return this.toast("Evento não encontrado.", true);
+      if (new Date(match.starts_at) <= new Date()) return this.toast("Eventos já iniciados permanecem no histórico e não podem ser editados.", true);
+      const recurring = Number(match.recurrence_total || 1) > 1;
+      this.modal("Editar evento", `<form id="matchEditForm" class="form-grid"><div class="notice"><strong>${escapeHtml(match.title)}</strong><br>${recurring ? "As alterações serão aplicadas somente a esta ocorrência da série." : "Altere os dados operacionais deste evento."}</div><div class="field-row"><div class="field"><label>Máximo de jogadores</label><input name="max_players" type="number" min="4" max="60" value="${Number(match.max_players)}" required></div><div class="field"><label>Jogadores por time <span class="optional-label">opcional</span></label><input name="players_per_team" type="number" min="2" max="11" value="${match.players_per_team == null ? "" : Number(match.players_per_team)}" placeholder="Não definido"></div></div><div class="field-help">A quantidade de times é definida separadamente na aba Times.</div><div class="field"><label>Observações</label><textarea name="notes" placeholder="Uniforme, prazo, regras...">${escapeHtml(match.notes || "")}</textarea></div><button class="btn btn-primary btn-block">Salvar alterações</button></form>`, (root, close) => {
+        $("#matchEditForm", root).addEventListener("submit", async event => {
+          event.preventDefault();
+          const form = new FormData(event.currentTarget);
+          const rawPlayersPerTeam = String(form.get("players_per_team") || "").trim();
+          const submit = event.submitter;
+          submit.disabled = true;
+          submit.textContent = "Salvando...";
+          await this.repo.updateMatchSettings(matchId, {
+            maxPlayers: Number(form.get("max_players")),
+            playersPerTeam: rawPlayersPerTeam ? Number(rawPlayersPerTeam) : null,
+            notes: form.get("notes") || ""
+          });
+          this.state = this.repo.state;
+          close();
+          this.render();
+          this.openMatchDetails(matchId);
+          this.toast("Dados do evento atualizados.");
+        });
+      });
+    },
+
+    openTeamsForMatch(matchId) {
+      if (matchId) this.selectedTeamMatchId = matchId;
+      this.route = "teams";
+      this.render();
+      window.scrollTo({ top: 0, behavior: "smooth" });
     },
 
     openWaitlistDraw(matchId) {
@@ -1988,18 +2072,24 @@
       });
     },
 
-    async drawTeams(matchId) {
+    async drawTeams(matchId, teamCount) {
       if (!this.canManageMatches()) return this.toast("Seu perfil não pode formar os times.", true);
       const match = this.state.matches.find(item => item.id === matchId);
-      if (match && this.confirmedFor(matchId).length > Number(match.max_players)) {
+      const confirmedCount = this.confirmedFor(matchId).length;
+      if (!match) return this.toast("Evento não encontrado.", true);
+      if (confirmedCount > Number(match.max_players)) {
         this.openMatchDetails(matchId);
         return this.toast("Faça o sorteio da espera inicial antes de separar os times.", true);
       }
-      await this.repo.balanceTeams(matchId);
+      const requestedTeams = Number(teamCount || match.team_count || 2);
+      if (!Number.isInteger(requestedTeams) || requestedTeams < 2 || requestedTeams > 12) return this.toast("Escolha uma quantidade válida de times.", true);
+      if (requestedTeams > confirmedCount) return this.toast("A quantidade de times não pode ser maior que a de jogadores confirmados.", true);
+      await this.repo.balanceTeams(matchId, requestedTeams);
       this.state = this.repo.state;
+      this.selectedTeamMatchId = matchId;
       this.route = "teams";
       this.render();
-      this.toast("Times separados com prioridade para goleiros principais e cobertura por jogadores aptos ao gol.");
+      this.toast(`${requestedTeams} times separados com prioridade para goleiros principais.`);
     },
 
     openFinanceForm() {

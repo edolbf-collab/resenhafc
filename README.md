@@ -1,3 +1,43 @@
+# Resenha FC — Beta 1.0 Build 131
+
+## Destaques da Build 131
+
+- administrador e organizador podem **excluir um sorteio da espera já realizado**, além de refazê-lo;
+- ao excluir o sorteio, os jogadores da espera retornam para **Começam jogando** e as separações de times vinculadas ao evento são apagadas;
+- eventos futuros passam a permitir edição do **número máximo de jogadores**, da referência de **jogadores por time** e das **observações**;
+- a quantidade de jogadores por time passa a ser opcional na criação e na edição do evento;
+- a aba **Times** passa a exigir a escolha da quantidade de equipes antes de separar ou rebalancear;
+- a quantidade escolhida fica registrada no evento e é respeitada nos novos rebalanceamentos;
+- a prioridade de goleiros principais e jogadores aptos ao gol permanece ativa para qualquer quantidade de times.
+
+## Versões
+
+- Frontend: Build 131
+- Banco: Build 131
+- Edge Functions: Build 106
+
+## Publicação
+
+1. Execute `backend/backend-migration-beta-1.0-build-131.sql`.
+2. Execute `backend/backend-healthcheck-beta-1.0-build-131.sql`.
+3. Publique os arquivos do pacote incremental na raiz do GitHub.
+4. Preserve o `supabase-config.js` já publicado.
+5. Não é necessário alterar `publish-announcement` nem `delete-beta-user`.
+
+## Arquivos principais alterados
+
+- `app.js`;
+- `styles.css`;
+- `index.html`;
+- `service-worker.js`;
+- `group-avatars-data.js`;
+- `version.json`;
+- `backend/backend-migration-beta-1.0-build-131.sql`;
+- `backend/backend-healthcheck-beta-1.0-build-131.sql`;
+- `backend/backend-auditoria-eventos-times-beta-1.0-build-131.sql`.
+
+---
+
 # Resenha FC — Beta 1.0 Build 130
 
 ## Destaques da Build 130
