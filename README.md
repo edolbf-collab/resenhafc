@@ -1,3 +1,42 @@
+# Resenha FC — Beta 1.0 Build 132
+
+## Destaques da Build 132
+
+- adiciona **Desfazer separação** na aba **Times** para administrador e organizador;
+- o botão aparece somente quando já existem equipes formadas;
+- a operação remove os times e as definições de goleiro da separação atual;
+- confirmações, ausências, sorteio da espera, dados do evento e quantidade configurada de times são preservados;
+- a ação exige confirmação e é registrada no log operacional;
+- depois de desfazer, o evento pode ser separado novamente normalmente.
+
+## Versões
+
+- Frontend: Build 132
+- Banco: Build 132
+- Edge Functions: Build 106
+
+## Publicação
+
+1. Execute `backend/backend-migration-beta-1.0-build-132.sql`.
+2. Execute `backend/backend-healthcheck-beta-1.0-build-132.sql`.
+3. Publique os arquivos do pacote incremental na raiz do GitHub.
+4. Preserve o `supabase-config.js` já publicado.
+5. Não altere `publish-announcement` nem `delete-beta-user`.
+
+## Arquivos principais alterados
+
+- `app.js`;
+- `styles.css`;
+- `index.html`;
+- `service-worker.js`;
+- `group-avatars-data.js`;
+- `version.json`;
+- `backend/backend-migration-beta-1.0-build-132.sql`;
+- `backend/backend-healthcheck-beta-1.0-build-132.sql`;
+- `backend/backend-auditoria-times-beta-1.0-build-132.sql`.
+
+---
+
 # Resenha FC — Beta 1.0 Build 131
 
 ## Destaques da Build 131

@@ -1,3 +1,12 @@
+## Beta 1.0 Build 132
+
+- adicionada a opção **Desfazer separação** na aba Times;
+- disponível para administrador e organizador quando há times formados;
+- remove somente `team_assignments`, preservando presenças, sorteio da espera e `team_count`;
+- nova RPC protegida `clear_match_team_assignments`;
+- novo log operacional `match_teams_cleared`;
+- Frontend 132, Banco 132 e Edge Functions 106.
+
 ## Beta 1.0 Build 131
 
 - adiciona exclusão do sorteio da espera por administrador e organizador;

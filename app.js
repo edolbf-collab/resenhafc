@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const APP_RELEASE = Object.freeze({ channel: "beta", version: "Beta 1.0", build: 131, database: 131, edge: 106 });
+  const APP_RELEASE = Object.freeze({ channel: "beta", version: "Beta 1.0", build: 132, database: 132, edge: 106 });
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
   const uid = () => crypto.randomUUID?.() || "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
@@ -38,7 +38,7 @@
   const avatarKey = value => /^badge-(0[1-9]|1[0-9]|20)$/.test(String(value || "")) ? String(value) : "badge-01";
   const groupAvatarUrl = key => {
     const normalized = avatarKey(key);
-    return window.RESENHA_GROUP_AVATARS?.[normalized] || assetUrl(`assets/group-avatars/${normalized}.png?v=beta131r1`);
+    return window.RESENHA_GROUP_AVATARS?.[normalized] || assetUrl(`assets/group-avatars/${normalized}.png?v=beta132r1`);
   };
   const positionOptions = ["Goleiro", "Zagueiro", "Lateral", "Volante", "Meia", "Atacante", "Coringa"];
   const isPrimaryGoalkeeper = player => String(player?.primary_position || "") === "Goleiro";
@@ -504,6 +504,15 @@
       return this.loadGroup(this.state.currentGroupId, { subscribe: false });
     }
 
+    async clearMatchTeams(matchId) {
+      const { data, error } = await this.client.rpc("clear_match_team_assignments", {
+        p_match_id: matchId
+      });
+      if (error) throw error;
+      await this.loadGroup(this.state.currentGroupId, { subscribe: false });
+      return data || {};
+    }
+
     async recordPayment(record, charge = null) {
       const { error } = await this.client.rpc("record_payment", {
         p_group_id: record.group_id,
@@ -907,7 +916,7 @@
         if (!(image instanceof HTMLImageElement) || !image.matches("[data-group-avatar]")) return;
         if (image.dataset.fallbackApplied === "true") return;
         image.dataset.fallbackApplied = "true";
-        image.src = window.RESENHA_GROUP_AVATARS?.["badge-01"] || assetUrl("assets/group-avatars/badge-01.png?v=beta131r1");
+        image.src = window.RESENHA_GROUP_AVATARS?.["badge-01"] || assetUrl("assets/group-avatars/badge-01.png?v=beta132r1");
       }, true);
     },
 
@@ -1139,7 +1148,7 @@
       const teamOptions = Array.from({ length: Math.max(0, maximumTeams - 1) }, (_, index) => index + 2)
         .map(count => `<option value="${count}" ${count === selectedTeamCount ? "selected" : ""}>${count} times</option>`).join("");
       const configPanel = this.canManageMatches()
-        ? `<section class="card team-config-card"><div class="team-config-copy"><strong>Quantidade de times</strong><small>Defina quantas equipes serão formadas nesta partida. A escolha fica salva para novos rebalanceamentos.</small></div><div class="team-config-controls"><select id="teamCountSelect" aria-label="Quantidade de times" ${confirmed.length < 2 ? "disabled" : ""}>${teamOptions}</select><button type="button" class="btn btn-primary" data-action="configure-teams" data-id="${match.id}" ${confirmed.length < 2 ? "disabled" : ""}>${assignments.length ? "Rebalancear" : "Separar"}</button></div>${match.players_per_team ? `<small class="team-config-reference">Referência informada no evento: ${Number(match.players_per_team)} jogadores por time.</small>` : '<small class="team-config-reference">O evento não possui quantidade fixa de jogadores por time.</small>'}</section>`
+        ? `<section class="card team-config-card"><div class="team-config-copy"><strong>Quantidade de times</strong><small>Defina quantas equipes serão formadas nesta partida. A escolha fica salva para novos rebalanceamentos.</small></div><div class="team-config-controls"><select id="teamCountSelect" aria-label="Quantidade de times" ${confirmed.length < 2 ? "disabled" : ""}>${teamOptions}</select><div class="team-config-actions"><button type="button" class="btn btn-primary" data-action="configure-teams" data-id="${match.id}" ${confirmed.length < 2 ? "disabled" : ""}>${assignments.length ? "Rebalancear" : "Separar"}</button>${assignments.length ? `<button type="button" class="btn btn-secondary team-clear-button" data-action="clear-teams" data-id="${match.id}">Desfazer separação</button>` : ""}</div></div>${assignments.length ? '<small class="team-config-reference">Desfazer remove somente os times formados. Confirmações, sorteio da espera e quantidade configurada de times são preservados.</small>' : match.players_per_team ? `<small class="team-config-reference">Referência informada no evento: ${Number(match.players_per_team)} jogadores por time.</small>` : '<small class="team-config-reference">O evento não possui quantidade fixa de jogadores por time.</small>'}</section>`
         : "";
       return `<div class="page-head"><div><span class="page-kicker">ESCALAÇÃO</span><h1>Times</h1><p>${escapeHtml(match.title)} · ${confirmed.length} confirmados</p></div></div>${configPanel}<div class="content-stack"><div class="notice"><strong>Equilíbrio confidencial</strong><br>O servidor prioriza goleiros principais e, quando necessário, completa a posição com quem marcou “Também posso jogar no gol”. Sem opções suficientes, a separação continua normalmente. As avaliações permanecem confidenciais.</div>${teams.length ? `<div class="team-grid">${teams.map(name => this.teamCard(name, assignments)).join("")}</div>` : `<div class="card empty"><strong>Times ainda não formados</strong><span>${confirmed.length < 2 ? "Aguarde mais confirmações." : "Escolha a quantidade de times e use o botão Separar."}</span></div>`}</div><div class="section-title"><h2>Confirmados</h2></div><div class="list">${confirmed.map(player => this.playerRow(player, { showRating: this.canSeeRatings() })).join("") || '<div class="card empty">Nenhum confirmado.</div>'}</div>`;
     },
@@ -1245,6 +1254,7 @@
           rsvp: () => this.openRsvp(data.id || this.nextMatch()?.id),
           "draw-teams": () => this.openTeamsForMatch(data.id),
           "configure-teams": () => this.drawTeams(data.id, Number($("#teamCountSelect")?.value || 2)),
+          "clear-teams": () => this.undoTeamSeparation(data.id),
           "new-finance": () => this.openFinanceForm(),
           "delete-finance": () => this.deleteFinanceEntry(data.type, data.id),
           "rate-members": () => this.openMemberRatings(),
@@ -2090,6 +2100,27 @@
       this.route = "teams";
       this.render();
       this.toast(`${requestedTeams} times separados com prioridade para goleiros principais.`);
+    },
+
+    async undoTeamSeparation(matchId) {
+      if (!this.canManageMatches()) return this.toast("Seu perfil não pode desfazer a separação dos times.", true);
+      const match = this.state.matches.find(item => item.id === matchId);
+      if (!match) return this.toast("Evento não encontrado.", true);
+      const assignments = this.state.assignments.filter(item => item.match_id === matchId);
+      if (!assignments.length) return this.toast("Este evento não possui uma separação de times ativa.", true);
+      const teamCount = new Set(assignments.map(item => item.team_name)).size;
+      const playerCount = assignments.length;
+      const confirmed = window.confirm(`Deseja desfazer a separação de ${teamCount} time(s) com ${playerCount} jogador(es)?
+
+As confirmações, o sorteio da espera e a quantidade configurada de times serão preservados.`);
+      if (!confirmed) return;
+      const result = await this.repo.clearMatchTeams(matchId);
+      this.state = this.repo.state;
+      this.selectedTeamMatchId = matchId;
+      this.route = "teams";
+      this.render();
+      const removed = Number(result.cleared_assignments || playerCount);
+      this.toast(`Separação desfeita. ${removed} jogador(es) retornaram à lista de confirmados.`);
     },
 
     openFinanceForm() {

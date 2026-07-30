@@ -571,3 +571,11 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .team-config-controls select{width:100%;min-height:43px;border-radius:12px;border:1px solid var(--line);background:#081b26;color:var(--text);padding:9px 11px}
 .team-config-controls .btn{min-width:112px;min-height:43px}
 @media(max-width:390px){.draw-management-actions,.team-config-controls{grid-template-columns:1fr}.team-config-controls .btn{width:100%}}
+
+
+/* Beta 1.0 Build 132 — desfazer separação dos times */
+.team-config-actions{display:flex;align-items:stretch;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+.team-config-actions .btn{flex:1 1 132px}
+.team-clear-button{border-color:rgba(255,255,255,.16);color:#d8e4e8}
+.team-clear-button:hover{border-color:rgba(255,255,255,.28);background:rgba(255,255,255,.075)}
+@media(max-width:520px){.team-config-controls{grid-template-columns:1fr}.team-config-actions{width:100%}.team-config-actions .btn{width:100%;flex-basis:100%}}
