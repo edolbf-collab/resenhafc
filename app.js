@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const APP_RELEASE = Object.freeze({ channel: "beta", version: "Beta 1.0", build: 133, database: 133, edge: 106 });
+  const APP_RELEASE = Object.freeze({ channel: "beta", version: "Beta 1.0", build: 134, database: 134, edge: 106 });
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
   const uid = () => crypto.randomUUID?.() || "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
@@ -38,7 +38,7 @@
   const avatarKey = value => /^badge-(0[1-9]|1[0-9]|20)$/.test(String(value || "")) ? String(value) : "badge-01";
   const groupAvatarUrl = key => {
     const normalized = avatarKey(key);
-    return window.RESENHA_GROUP_AVATARS?.[normalized] || assetUrl(`assets/group-avatars/${normalized}.png?v=beta133r1`);
+    return window.RESENHA_GROUP_AVATARS?.[normalized] || assetUrl(`assets/group-avatars/${normalized}.png?v=beta134r1`);
   };
   const positionOptions = ["Goleiro", "Zagueiro", "Lateral", "Volante", "Meia", "Atacante", "Coringa"];
   const isPrimaryGoalkeeper = player => String(player?.primary_position || "") === "Goleiro";
@@ -824,6 +824,7 @@
     launchAnnouncementId: "",
     launchMatchId: "",
     selectedTeamMatchId: "",
+    selectedTeamMatchHistoryMode: false,
     swRegistration: null,
     updateAvailable: null,
     lastSyncAt: null,
@@ -897,7 +898,12 @@
       document.addEventListener("click", event => {
         const nav = event.target.closest("[data-route]");
         if (nav) {
-          this.route = nav.dataset.route;
+          const targetRoute = nav.dataset.route;
+          if (targetRoute === "teams") {
+            this.selectedTeamMatchId = "";
+            this.selectedTeamMatchHistoryMode = false;
+          }
+          this.route = targetRoute;
           this.render();
           window.scrollTo({ top: 0, behavior: "smooth" });
         }
@@ -936,7 +942,7 @@
         if (!(image instanceof HTMLImageElement) || !image.matches("[data-group-avatar]")) return;
         if (image.dataset.fallbackApplied === "true") return;
         image.dataset.fallbackApplied = "true";
-        image.src = window.RESENHA_GROUP_AVATARS?.["badge-01"] || assetUrl("assets/group-avatars/badge-01.png?v=beta133r1");
+        image.src = window.RESENHA_GROUP_AVATARS?.["badge-01"] || assetUrl("assets/group-avatars/badge-01.png?v=beta134r1");
       }, true);
     },
 
@@ -1037,11 +1043,14 @@
         .filter(item => item.status === "waitlist")
         .sort((a, b) => Number(a.waitlist_position || 9999) - Number(b.waitlist_position || 9999) || new Date(a.responded_at) - new Date(b.responded_at));
     },
+    isHistoricalMatch(match) {
+      return Boolean(match && (new Date(match.starts_at) <= new Date() || match.status === "finished"));
+    },
     upcomingMatches() {
-      return (this.state?.matches || []).filter(match => new Date(match.starts_at) > new Date() && match.status !== "cancelled").sort((a, b) => new Date(a.starts_at) - new Date(b.starts_at));
+      return (this.state?.matches || []).filter(match => !this.isHistoricalMatch(match) && !["cancelled", "finished"].includes(match.status)).sort((a, b) => new Date(a.starts_at) - new Date(b.starts_at));
     },
     pastMatches() {
-      return (this.state?.matches || []).filter(match => new Date(match.starts_at) <= new Date() || match.status === "finished").sort((a, b) => new Date(b.starts_at) - new Date(a.starts_at));
+      return (this.state?.matches || []).filter(match => this.isHistoricalMatch(match)).sort((a, b) => new Date(b.starts_at) - new Date(a.starts_at));
     },
     nextMatch() { return this.upcomingMatches()[0] || null; },
     ratingSummary(playerId) {
@@ -1157,19 +1166,38 @@
       const date = new Date(match.starts_at);
       const confirmed = this.confirmedFor(match.id);
       const waitlist = this.waitlistFor(match.id);
-      const future = date > new Date();
+      const future = !this.isHistoricalMatch(match);
       const recurring = Number(match.recurrence_total || 1) > 1;
       return `<article class="card match-card" data-action="open-match" data-id="${match.id}" role="button" tabindex="0" aria-label="Abrir detalhes de ${escapeHtml(match.title)}"><div class="match-top"><div class="match-date"><small>${date.toLocaleDateString("pt-BR", { month: "short" }).replace(".", "").toUpperCase()}</small><strong>${String(date.getDate()).padStart(2, "0")}</strong></div><div class="match-info"><h3>${escapeHtml(match.title)}</h3><p>${escapeHtml(shortDate(match.starts_at))}<br>${escapeHtml(match.location)}</p>${recurring ? '<span class="recurrence-chip">↻ Semanal</span>' : ""}${match.bbq_enabled ? '<span class="bbq-chip">Churrasco</span>' : ""}</div><span class="status-pill ${future ? "status-maybe" : "status-confirmed"}">${future ? "Agendado" : "Histórico"}</span></div><div class="match-footer"><div class="avatar-stack">${confirmed.slice(0, 5).map(item => `<span>${initials(this.player(item.player_id)?.name)}</span>`).join("")}${confirmed.length > 5 ? `<span>+${confirmed.length - 5}</span>` : ""}</div><span class="match-open-label">${confirmed.length}/${match.max_players} começam${waitlist.length ? ` · ${waitlist.length} espera` : ""} <b>›</b></span></div></article>`;
     },
 
     teamsPage() {
-      const selected = this.state.matches.find(item => item.id === this.selectedTeamMatchId);
-      const match = selected || this.nextMatch() || this.pastMatches()[0];
-      if (!match) return `<div class="page-head"><div><span class="page-kicker">ESCALAÇÃO</span><h1>Times</h1><p>Separação por posição e avaliação.</p></div></div><div class="card empty"><strong>Sem jogo disponível</strong><span>Agende uma pelada antes de montar os times.</span></div>`;
+      const explicitlySelected = this.state.matches.find(item => item.id === this.selectedTeamMatchId) || null;
+      const historicalMatch = this.selectedTeamMatchHistoryMode && this.isHistoricalMatch(explicitlySelected)
+        ? explicitlySelected
+        : null;
+      const selectedFutureMatch = !this.selectedTeamMatchHistoryMode && explicitlySelected && !this.isHistoricalMatch(explicitlySelected)
+        ? explicitlySelected
+        : null;
+      const match = historicalMatch || selectedFutureMatch || this.nextMatch();
+
+      if (!match) {
+        this.selectedTeamMatchId = "";
+        this.selectedTeamMatchHistoryMode = false;
+        return `<div class="page-head"><div><span class="page-kicker">ESCALAÇÃO</span><h1>Times</h1><p>Separação por posição e avaliação.</p></div></div><div class="card empty"><strong>Nenhum evento futuro disponível</strong><span>Os times de jogos já realizados ficam disponíveis somente no histórico de cada evento, pelo botão Abrir Times.</span></div>`;
+      }
+
+      const historical = this.isHistoricalMatch(match);
       this.selectedTeamMatchId = match.id;
+      this.selectedTeamMatchHistoryMode = historical;
       const confirmed = this.confirmedFor(match.id).map(item => this.player(item.player_id)).filter(Boolean);
       const assignments = this.state.assignments.filter(item => item.match_id === match.id);
       const teams = [...new Set(assignments.map(item => item.team_name))];
+
+      if (historical) {
+        return `<div class="page-head"><div><span class="page-kicker">HISTÓRICO DA PARTIDA</span><h1>Times</h1><p>${escapeHtml(match.title)} · ${escapeHtml(shortDate(match.starts_at))}</p></div><button type="button" class="btn btn-secondary btn-small" data-route="matches">Voltar aos jogos</button></div><div class="content-stack"><div class="notice notice-history"><strong>Registro somente para consulta</strong><br>A partida já foi finalizada. A divisão permanece preservada no histórico e não pode mais ser rebalanceada ou desfeita.</div>${teams.length ? `<div class="team-grid">${teams.map(name => this.teamCard(name, assignments)).join("")}</div>` : `<div class="card empty"><strong>Nenhuma separação registrada</strong><span>Este evento foi finalizado sem uma divisão de times salva.</span></div>`}</div>`;
+      }
+
       const maximumTeams = Math.min(12, Math.max(2, confirmed.length));
       const inferredTeams = match.players_per_team
         ? Math.max(2, Math.ceil(confirmed.length / Math.max(2, Number(match.players_per_team))))
@@ -1730,7 +1758,7 @@
     openMatchDetails(id) {
       const match = this.state.matches.find(item => item.id === id);
       if (!match) return;
-      const future = new Date(match.starts_at) > new Date();
+      const future = !this.isHistoricalMatch(match);
       const recurring = Number(match.recurrence_total || 1) > 1;
       const matchAttendance = this.attendanceFor(id);
       const grouped = { confirmed: [], waitlist: [], out: [] };
@@ -1799,7 +1827,9 @@
         : "";
       const deleteControls = future && this.canManageMatches() ? `<div class="delete-match-actions"><button class="btn btn-danger btn-block delete-match-button" data-delete-match="${match.id}">${recurring ? "Excluir somente esta data" : "Excluir jogo agendado"}</button>${recurring ? `<button class="btn btn-danger-outline btn-block" data-delete-series="${match.id}">Excluir esta e as próximas</button>` : ""}<p class="danger-help">A exclusão só é permitida antes do horário. Peladas realizadas permanecem no histórico.</p></div>` : "";
       const eventCapacity = `<div class="match-detail-capacity"><span>Máximo: <strong>${Number(match.max_players)}</strong></span><span>Por time: <strong>${match.players_per_team ? Number(match.players_per_team) : "não definido"}</strong></span>${match.team_count ? `<span>Times: <strong>${Number(match.team_count)}</strong></span>` : ""}</div>`;
-      this.modal(match.title, `<div class="match-detail-banner"><span class="status-pill ${future ? "status-maybe" : "status-confirmed"}">${future ? "Agendado" : "Histórico"}</span><strong>${escapeHtml(shortDate(match.starts_at))}</strong><p>${escapeHtml(match.location)}</p>${eventCapacity}${match.notes ? `<small>${escapeHtml(match.notes)}</small>` : ""}</div>${recurringInfo}${managerControls}${drawSection}${bbqExpanded}<div class="actions">${future ? `<button class="btn btn-primary" data-modal-rsvp="${match.id}">Minha presença</button>` : ""}${this.canManageMatches() ? `<button class="btn btn-secondary" data-modal-teams="${match.id}">Abrir Times</button>` : ""}</div>${deleteControls}${groupHtml("Começam jogando", "confirmed")}${groupHtml("Não vão", "out")}${groupHtml("Espera inicial", "waitlist")}${pendingHtml}`, (root, close) => {
+      const hasSavedTeams = this.state.assignments.some(item => item.match_id === match.id);
+      const canOpenTeams = future ? (this.canManageMatches() || hasSavedTeams) : hasSavedTeams;
+      this.modal(match.title, `<div class="match-detail-banner"><span class="status-pill ${future ? "status-maybe" : "status-confirmed"}">${future ? "Agendado" : "Histórico"}</span><strong>${escapeHtml(shortDate(match.starts_at))}</strong><p>${escapeHtml(match.location)}</p>${eventCapacity}${match.notes ? `<small>${escapeHtml(match.notes)}</small>` : ""}</div>${recurringInfo}${managerControls}${drawSection}${bbqExpanded}<div class="actions">${future ? `<button class="btn btn-primary" data-modal-rsvp="${match.id}">Minha presença</button>` : ""}${canOpenTeams ? `<button class="btn btn-secondary" data-modal-teams="${match.id}">Abrir Times</button>` : ""}</div>${deleteControls}${groupHtml("Começam jogando", "confirmed")}${groupHtml("Não vão", "out")}${groupHtml("Espera inicial", "waitlist")}${pendingHtml}`, (root, close) => {
         $("[data-modal-rsvp]", root)?.addEventListener("click", () => {
           close();
           this.openRsvp(match.id);
@@ -1939,7 +1969,9 @@
     },
 
     openTeamsForMatch(matchId) {
+      const match = this.state.matches.find(item => item.id === matchId) || null;
       if (matchId) this.selectedTeamMatchId = matchId;
+      this.selectedTeamMatchHistoryMode = this.isHistoricalMatch(match);
       this.route = "teams";
       this.render();
       window.scrollTo({ top: 0, behavior: "smooth" });
@@ -2153,6 +2185,7 @@
       const match = this.state.matches.find(item => item.id === matchId);
       const confirmedCount = this.confirmedFor(matchId).length;
       if (!match) return this.toast("Evento não encontrado.", true);
+      if (this.isHistoricalMatch(match)) return this.toast("Times de eventos finalizados são somente para consulta.", true);
       if (confirmedCount > Number(match.max_players)) {
         this.openMatchDetails(matchId);
         return this.toast("Faça o sorteio da espera inicial antes de separar os times.", true);
@@ -2163,6 +2196,7 @@
       await this.repo.balanceTeams(matchId, requestedTeams);
       this.state = this.repo.state;
       this.selectedTeamMatchId = matchId;
+      this.selectedTeamMatchHistoryMode = false;
       this.route = "teams";
       this.render();
       this.toast(`${requestedTeams} times separados com prioridade para goleiros principais.`);
@@ -2172,6 +2206,7 @@
       if (!this.canManageMatches()) return this.toast("Seu perfil não pode desfazer a separação dos times.", true);
       const match = this.state.matches.find(item => item.id === matchId);
       if (!match) return this.toast("Evento não encontrado.", true);
+      if (this.isHistoricalMatch(match)) return this.toast("A separação de um evento finalizado não pode ser desfeita.", true);
       const assignments = this.state.assignments.filter(item => item.match_id === matchId);
       if (!assignments.length) return this.toast("Este evento não possui uma separação de times ativa.", true);
       const teamCount = new Set(assignments.map(item => item.team_name)).size;
@@ -2183,6 +2218,7 @@ As confirmações, o sorteio da espera e a quantidade configurada de times serã
       const result = await this.repo.clearMatchTeams(matchId);
       this.state = this.repo.state;
       this.selectedTeamMatchId = matchId;
+      this.selectedTeamMatchHistoryMode = false;
       this.route = "teams";
       this.render();
       const removed = Number(result.cleared_assignments || playerCount);

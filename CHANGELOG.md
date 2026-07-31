@@ -1,3 +1,13 @@
+# Resenha FC — Changelog
+
+## Beta 1.0 Build 134
+
+- eventos finalizados deixam de aparecer como escalação ativa na aba Times;
+- times históricos ficam acessíveis pelo botão Abrir Times dentro do evento realizado;
+- histórico de times passa a ser somente leitura;
+- rebalanceamento e desfazimento são bloqueados no frontend e no banco após o evento;
+- botões Vou e Não vou recebem realces verde e vermelho, com seleção reforçada.
+
 ## Beta 1.0 Build 133
 
 - substitui o botão único de presença por `Vou` e `Não vou` no cartão principal;

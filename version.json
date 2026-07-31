@@ -1,10 +1,10 @@
 {
   "channel": "beta",
   "version": "Beta 1.0",
-  "build": 133,
-  "database": 133,
+  "build": 134,
+  "database": 134,
   "edge": 106,
   "mandatory": false,
-  "notes": "Substitui o botão único de presença por respostas diretas de jogo e churrasco no cartão principal, com opções Vou e Não vou independentes e alteráveis.",
-  "label": "Beta 1.0 Build 133"
+  "notes": "Eventos finalizados exibem os times somente em modo histórico, sem rebalancear ou desfazer, e os botões Vou/Não vou recebem realce verde e vermelho com seleção mais evidente.",
+  "label": "Beta 1.0 Build 134"
 }

@@ -1,3 +1,42 @@
+# Resenha FC — Beta 1.0 Build 134
+
+## Destaques da Build 134
+
+- remove eventos finalizados do fluxo ativo da aba **Times**;
+- preserva a separação exclusivamente no histórico do evento, acessível por **Abrir Times**;
+- exibe times históricos em modo somente leitura, sem **Rebalancear** ou **Desfazer separação**;
+- protege as RPCs para impedir alterações nos times depois do início ou encerramento do evento;
+- aplica realce verde ao botão **Vou** e vermelho ao botão **Não vou**;
+- reforça visualmente a opção selecionada no jogo e no churrasco.
+
+## Versões
+
+- Frontend: Build 134
+- Banco: Build 134
+- Edge Functions: Build 106
+
+## Publicação
+
+1. Execute `backend/backend-migration-beta-1.0-build-134.sql`.
+2. Execute `backend/backend-healthcheck-beta-1.0-build-134.sql`.
+3. Publique os arquivos do pacote incremental na raiz do GitHub.
+4. Preserve o `supabase-config.js` já publicado.
+5. Não altere `publish-announcement` nem `delete-beta-user`.
+
+## Arquivos principais alterados
+
+- `app.js`;
+- `styles.css`;
+- `index.html`;
+- `service-worker.js`;
+- `group-avatars-data.js`;
+- `version.json`;
+- `backend/backend-migration-beta-1.0-build-134.sql`;
+- `backend/backend-healthcheck-beta-1.0-build-134.sql`;
+- `backend/backend-auditoria-times-historico-beta-1.0-build-134.sql`.
+
+---
+
 # Resenha FC — Beta 1.0 Build 133
 
 ## Destaques da Build 133
