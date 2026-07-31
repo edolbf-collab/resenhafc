@@ -1,4 +1,42 @@
-# Resenha FC — Beta 1.0 Build 132
+# Resenha FC — Beta 1.0 Build 133
+
+## Destaques da Build 133
+
+- substitui o botão único **Confirmar presença** por duas opções diretas: **Vou** e **Não vou**;
+- as respostas do jogo aparecem no cartão principal do próximo evento e podem ser alteradas;
+- quando houver churrasco configurado, o cartão exibe uma segunda linha independente com **Vou** e **Não vou**;
+- quando não houver churrasco, a segunda linha não é mostrada;
+- não utiliza **Entrar na espera**, preservando as regras próprias e o sorteio de cada grupo;
+- cria registro independente para a resposta do churrasco, sem obrigar o usuário a responder o jogo primeiro;
+- mantém o modal **Respostas** como alternativa para revisão.
+
+## Versões
+
+- Frontend: Build 133
+- Banco: Build 133
+- Edge Functions: Build 106
+
+## Publicação
+
+1. Execute `backend/backend-migration-beta-1.0-build-133.sql`.
+2. Execute `backend/backend-healthcheck-beta-1.0-build-133.sql`.
+3. Publique os arquivos do pacote incremental na raiz do GitHub.
+4. Preserve o `supabase-config.js` já publicado.
+5. Não altere `publish-announcement` nem `delete-beta-user`.
+
+## Arquivos principais alterados
+
+- `app.js`;
+- `styles.css`;
+- `index.html`;
+- `service-worker.js`;
+- `group-avatars-data.js`;
+- `version.json`;
+- `backend/backend-migration-beta-1.0-build-133.sql`;
+- `backend/backend-healthcheck-beta-1.0-build-133.sql`;
+- `backend/backend-auditoria-respostas-beta-1.0-build-133.sql`.
+
+---
 
 ## Destaques da Build 132
 

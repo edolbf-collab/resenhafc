@@ -1,10 +1,10 @@
 {
   "channel": "beta",
   "version": "Beta 1.0",
-  "build": 132,
-  "database": 132,
+  "build": 133,
+  "database": 133,
   "edge": 106,
   "mandatory": false,
-  "notes": "Adiciona na aba Times a opção de desfazer uma separação já realizada, preservando confirmações, sorteio da espera e quantidade configurada de equipes.",
-  "label": "Beta 1.0 Build 132"
+  "notes": "Substitui o botão único de presença por respostas diretas de jogo e churrasco no cartão principal, com opções Vou e Não vou independentes e alteráveis.",
+  "label": "Beta 1.0 Build 133"
 }

@@ -579,3 +579,22 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .team-clear-button{border-color:rgba(255,255,255,.16);color:#d8e4e8}
 .team-clear-button:hover{border-color:rgba(255,255,255,.28);background:rgba(255,255,255,.075)}
 @media(max-width:520px){.team-config-controls{grid-template-columns:1fr}.team-config-actions{width:100%}.team-config-actions .btn{width:100%;flex-basis:100%}}
+
+
+/* Beta 1.0 Build 133 — respostas de jogo e churrasco no cartão principal */
+.home-response-stack{display:grid;gap:6px;margin-top:2px}
+.home-response-row{display:grid;grid-template-columns:62px minmax(0,1fr);align-items:center;gap:7px}
+.home-response-label{font-size:8.5px;font-weight:900;text-transform:uppercase;letter-spacing:.65px;color:#b7c8cc}
+.home-response-actions{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.home-response-button{min-height:33px;border-radius:11px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.055);color:#dce8ea;display:flex;align-items:center;justify-content:center;gap:5px;padding:6px 8px;font:inherit;font-size:10.5px;font-weight:900;cursor:pointer;transition:.15s ease}
+.home-response-button>span{width:16px;height:16px;border-radius:6px;display:grid;place-items:center;background:rgba(255,255,255,.07);font-size:11px}
+.home-response-button.is-positive.is-selected{border-color:rgba(92,210,61,.58);background:rgba(92,210,61,.18);color:#dffff0;box-shadow:inset 0 0 0 1px rgba(92,210,61,.14)}
+.home-response-button.is-negative.is-selected{border-color:rgba(255,112,122,.52);background:rgba(255,93,103,.14);color:#ffd9dc;box-shadow:inset 0 0 0 1px rgba(255,93,103,.1)}
+.home-response-button:active{transform:scale(.985)}
+.response-modal-section{display:grid;gap:8px;padding:12px;border:1px solid var(--line);border-radius:15px;background:rgba(255,255,255,.025)}
+.response-modal-section>strong{font-size:12px}
+.response-modal-section>small{margin-top:-5px;color:var(--muted);font-size:9.5px}
+.response-radio-card{display:flex;align-items:center;gap:8px;min-height:44px}
+.response-radio-card span{font-weight:850}
+@media(max-height:720px){.home-response-stack{gap:4px}.home-response-row{grid-template-columns:56px minmax(0,1fr);gap:5px}.home-response-button{min-height:29px;padding:4px 6px;font-size:9.5px}.home-response-button>span{width:14px;height:14px;font-size:9px}.home-response-label{font-size:7.6px}.home-hero .hero-numbers{margin:4px 0}}
+@media(max-width:360px){.home-response-row{grid-template-columns:52px minmax(0,1fr)}.home-response-button{font-size:9px;padding-inline:5px}}

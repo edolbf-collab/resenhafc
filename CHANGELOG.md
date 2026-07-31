@@ -1,3 +1,14 @@
+## Beta 1.0 Build 133
+
+- substitui o botão único de presença por `Vou` e `Não vou` no cartão principal;
+- adiciona resposta independente de churrasco com `Vou` e `Não vou`;
+- oculta os controles de churrasco quando o evento não possui confraternização configurada;
+- mantém as respostas alteráveis e visualmente destacadas;
+- não cria a ação `Entrar na espera`;
+- adiciona `bbq_responded` e `bbq_responded_at` em `match_attendance`;
+- cria as RPCs protegidas `set_my_match_game_response` e `set_my_match_bbq_response`;
+- Frontend 133, Banco 133 e Edge Functions 106.
+
 ## Beta 1.0 Build 132
 
 - adicionada a opção **Desfazer separação** na aba Times;

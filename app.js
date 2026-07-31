@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const APP_RELEASE = Object.freeze({ channel: "beta", version: "Beta 1.0", build: 132, database: 132, edge: 106 });
+  const APP_RELEASE = Object.freeze({ channel: "beta", version: "Beta 1.0", build: 133, database: 133, edge: 106 });
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
   const uid = () => crypto.randomUUID?.() || "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
@@ -38,7 +38,7 @@
   const avatarKey = value => /^badge-(0[1-9]|1[0-9]|20)$/.test(String(value || "")) ? String(value) : "badge-01";
   const groupAvatarUrl = key => {
     const normalized = avatarKey(key);
-    return window.RESENHA_GROUP_AVATARS?.[normalized] || assetUrl(`assets/group-avatars/${normalized}.png?v=beta132r1`);
+    return window.RESENHA_GROUP_AVATARS?.[normalized] || assetUrl(`assets/group-avatars/${normalized}.png?v=beta133r1`);
   };
   const positionOptions = ["Goleiro", "Zagueiro", "Lateral", "Volante", "Meia", "Atacante", "Coringa"];
   const isPrimaryGoalkeeper = player => String(player?.primary_position || "") === "Goleiro";
@@ -399,6 +399,26 @@
         p_bbq: Boolean(payload.bbq),
         p_bbq_guests: Number(payload.bbqGuests || 0),
         p_bbq_note: payload.bbqNote || ""
+      });
+      if (error) throw error;
+      await this.loadGroup(this.state.currentGroupId, { subscribe: false });
+      return data || {};
+    }
+
+    async setMyGameResponse(matchId, status) {
+      const { data, error } = await this.client.rpc("set_my_match_game_response", {
+        p_match_id: matchId,
+        p_status: status
+      });
+      if (error) throw error;
+      await this.loadGroup(this.state.currentGroupId, { subscribe: false });
+      return data || {};
+    }
+
+    async setMyBbqResponse(matchId, attending) {
+      const { data, error } = await this.client.rpc("set_my_match_bbq_response", {
+        p_match_id: matchId,
+        p_bbq: Boolean(attending)
       });
       if (error) throw error;
       await this.loadGroup(this.state.currentGroupId, { subscribe: false });
@@ -916,7 +936,7 @@
         if (!(image instanceof HTMLImageElement) || !image.matches("[data-group-avatar]")) return;
         if (image.dataset.fallbackApplied === "true") return;
         image.dataset.fallbackApplied = "true";
-        image.src = window.RESENHA_GROUP_AVATARS?.["badge-01"] || assetUrl("assets/group-avatars/badge-01.png?v=beta132r1");
+        image.src = window.RESENHA_GROUP_AVATARS?.["badge-01"] || assetUrl("assets/group-avatars/badge-01.png?v=beta133r1");
       }, true);
     },
 
@@ -1097,6 +1117,16 @@
       const overflow = Math.max(0, confirmed.length - Number(match?.max_players || 0));
       const notice = [...this.state.announcements].sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0];
       const administrator = this.memberPlayer(this.adminMember());
+      const player = this.myPlayer();
+      const myAttendance = match && player
+        ? attendance.find(item => item.player_id === player.id) || null
+        : null;
+      const gameAnswer = ["confirmed", "waitlist"].includes(myAttendance?.status)
+        ? "confirmed"
+        : myAttendance?.status === "out" ? "out" : "";
+      const bbqAnswered = Boolean(myAttendance?.bbq_responded);
+      const responseButton = (scope, value, label, selected, icon) => `<button type="button" class="home-response-button ${selected ? "is-selected" : ""} ${value === "out" || value === "no" ? "is-negative" : "is-positive"}" data-action="home-${scope}-response" data-id="${match?.id || ""}" data-value="${value}" aria-pressed="${selected ? "true" : "false"}"><span aria-hidden="true">${icon}</span>${label}</button>`;
+      const responsePanel = match ? `<div class="home-response-stack" aria-label="Respostas do evento"><div class="home-response-row"><span class="home-response-label">Jogo</span><div class="home-response-actions">${responseButton("game", "confirmed", "Vou", gameAnswer === "confirmed", "✓")}${responseButton("game", "out", "Não vou", gameAnswer === "out", "×")}</div></div>${match.bbq_enabled ? `<div class="home-response-row"><span class="home-response-label">Churrasco</span><div class="home-response-actions">${responseButton("bbq", "yes", "Vou", bbqAnswered && myAttendance?.bbq === true, "✓")}${responseButton("bbq", "no", "Não vou", bbqAnswered && myAttendance?.bbq === false, "×")}</div></div>` : ""}</div>` : "";
       const emblem = this.canManageGroup()
         ? `<button class="hero-avatar-button" data-action="group-settings" aria-label="Personalizar grupo">${this.groupAvatar(group, "hero-group-avatar")}</button>`
         : this.groupAvatar(group, "hero-group-avatar");
@@ -1104,11 +1134,11 @@
         <section class="stadium-hero home-hero">
           <div class="stadium-lights"></div>
           <div class="group-identity">${emblem}<div><span class="eyebrow">${escapeHtml(roleLabels[this.currentRole()])}</span><h1>${escapeHtml(group.name)}</h1><p>Administrador: ${escapeHtml(administrator?.name || "Não identificado")}</p></div></div>
-          ${match ? `<div class="next-match-panel"><div class="next-match-heading"><div><span class="match-kicker">PRÓXIMA PELADA</span><h2>${escapeHtml(match.title)}</h2></div><button class="match-detail-link" data-action="open-match" data-id="${match.id}">Detalhes</button></div><p>${escapeHtml(shortDate(match.starts_at))} · ${escapeHtml(match.location)}</p><div class="hero-numbers"><div><strong>${confirmed.length}</strong><small>confirmados</small></div><div><strong>${match.max_players}</strong><small>começam</small></div><div><strong>${overflow || waitlist.length || Math.max(0, Number(match.max_players) - confirmed.length)}</strong><small>${overflow ? "excedentes" : waitlist.length ? "em espera" : "restantes"}</small></div></div><button class="btn btn-primary btn-block home-rsvp" data-action="rsvp" data-id="${match.id}">Confirmar presença</button></div>` : `<div class="next-match-panel empty-match-panel"><span class="match-kicker">AGENDA LIVRE</span><h2>Nenhuma pelada marcada</h2><p>Organizadores podem criar o próximo jogo.</p>${this.canManageMatches() ? '<button class="btn btn-primary btn-small" data-action="new-match">Agendar pelada</button>' : ""}</div>`}
+          ${match ? `<div class="next-match-panel"><div class="next-match-heading"><div><span class="match-kicker">PRÓXIMA PELADA</span><h2>${escapeHtml(match.title)}</h2></div><button class="match-detail-link" data-action="open-match" data-id="${match.id}">Detalhes</button></div><p>${escapeHtml(shortDate(match.starts_at))} · ${escapeHtml(match.location)}</p><div class="hero-numbers"><div><strong>${confirmed.length}</strong><small>confirmados</small></div><div><strong>${match.max_players}</strong><small>começam</small></div><div><strong>${overflow || waitlist.length || Math.max(0, Number(match.max_players) - confirmed.length)}</strong><small>${overflow ? "excedentes" : waitlist.length ? "em espera" : "restantes"}</small></div></div>${responsePanel}</div>` : `<div class="next-match-panel empty-match-panel"><span class="match-kicker">AGENDA LIVRE</span><h2>Nenhuma pelada marcada</h2><p>Organizadores podem criar o próximo jogo.</p>${this.canManageMatches() ? '<button class="btn btn-primary btn-small" data-action="new-match">Agendar pelada</button>' : ""}</div>`}
         </section>
         ${notice ? `<button class="home-notice" data-action="announcement-center" data-id="${notice.id}"><span>📣</span><div><strong>${escapeHtml(notice.title)}</strong><small>${escapeHtml(notice.body)}</small></div><b>›</b></button>` : ""}
         <div class="home-quick-grid">
-          <button class="quick-card" data-action="rsvp" data-id="${match?.id || ""}"><span class="quick-icon">✓</span><span><strong>Presença</strong><small>Confirme sua participação</small></span></button>
+          <button class="quick-card" data-action="rsvp" data-id="${match?.id || ""}"><span class="quick-icon">✓</span><span><strong>Respostas</strong><small>Revise jogo e churrasco</small></span></button>
           <button class="quick-card" data-route="teams"><span class="quick-icon">⇄</span><span><strong>Times</strong><small>Equilíbrio do elenco</small></span></button>
           <button class="quick-card" data-route="members"><span class="quick-icon">★</span><span><strong>Membros</strong><small>Posições e notas</small></span></button>
           <button class="quick-card" data-action="invite"><span class="quick-icon">↗</span><span><strong>Convidar</strong><small>WhatsApp e código</small></span></button>
@@ -1252,6 +1282,8 @@
           "new-match": () => this.openMatchForm(),
           "open-match": () => this.openMatchDetails(data.id),
           rsvp: () => this.openRsvp(data.id || this.nextMatch()?.id),
+          "home-game-response": () => this.setHomeGameResponse(data.id, data.value),
+          "home-bbq-response": () => this.setHomeBbqResponse(data.id, data.value),
           "draw-teams": () => this.openTeamsForMatch(data.id),
           "configure-teams": () => this.drawTeams(data.id, Number($("#teamCountSelect")?.value || 2)),
           "clear-teams": () => this.undoTeamSeparation(data.id),
@@ -2036,48 +2068,82 @@
       });
     },
 
+    async setHomeGameResponse(matchId, value) {
+      const match = this.state.matches.find(item => item.id === matchId);
+      if (!match) return this.toast("Evento não encontrado.", true);
+      if (new Date(match.starts_at) <= new Date()) return this.toast("A confirmação está encerrada para jogos do histórico.", true);
+      const player = this.myPlayer();
+      if (!player) return this.toast("Seu perfil de jogador não foi encontrado.", true);
+      const requestedStatus = value === "out" ? "out" : "confirmed";
+      const current = this.attendanceFor(matchId).find(item => item.player_id === player.id) || null;
+      const currentAnswer = ["confirmed", "waitlist"].includes(current?.status) ? "confirmed" : current?.status === "out" ? "out" : "";
+      if (currentAnswer === requestedStatus) return this.toast(requestedStatus === "confirmed" ? "Sua presença já está marcada." : "Sua ausência já está marcada.");
+      const result = await this.repo.setMyGameResponse(matchId, requestedStatus);
+      this.state = this.repo.state;
+      this.render();
+      const effectiveStatus = result.status || requestedStatus;
+      if (effectiveStatus === "confirmed" && !["confirmed", "waitlist"].includes(current?.status)) {
+        try {
+          await this.repo.notifyAttendanceConfirmed(this.state.currentGroupId, matchId, player.id);
+        } catch (error) {
+          console.warn("Presença confirmada, mas a notificação falhou:", error);
+        }
+      }
+      if (effectiveStatus === "waitlist") this.toast("Resposta registrada. Sua situação seguirá a regra de espera definida para o evento.");
+      else this.toast(requestedStatus === "confirmed" ? "Presença confirmada." : "Ausência confirmada.");
+    },
+
+    async setHomeBbqResponse(matchId, value) {
+      const match = this.state.matches.find(item => item.id === matchId);
+      if (!match) return this.toast("Evento não encontrado.", true);
+      if (!match.bbq_enabled) return this.toast("Este evento não possui churrasco configurado.", true);
+      if (new Date(match.starts_at) <= new Date()) return this.toast("A confirmação do churrasco está encerrada.", true);
+      const player = this.myPlayer();
+      if (!player) return this.toast("Seu perfil de jogador não foi encontrado.", true);
+      const attending = value === "yes";
+      const current = this.attendanceFor(matchId).find(item => item.player_id === player.id) || null;
+      if (current?.bbq_responded && Boolean(current.bbq) === attending) return this.toast(attending ? "Sua participação no churrasco já está marcada." : "Sua ausência no churrasco já está marcada.");
+      await this.repo.setMyBbqResponse(matchId, attending);
+      this.state = this.repo.state;
+      this.render();
+      this.toast(attending ? "Participação no churrasco confirmada." : "Ausência no churrasco confirmada.");
+    },
+
     openRsvp(matchId) {
       const match = this.state.matches.find(item => item.id === matchId);
       if (!match) return this.toast("Crie um jogo primeiro.", true);
       if (new Date(match.starts_at) <= new Date()) return this.toast("A confirmação está encerrada para jogos do histórico.", true);
       const player = this.myPlayer();
       if (!player) return this.toast("Seu perfil de jogador não foi encontrado.", true);
-      const current = this.state.attendance.find(item => item.match_id === matchId && item.player_id === player.id) || {};
-      const hadMaybeStatus = current.status === "maybe";
-      const selectedStatus = current.status === "waitlist" ? "confirmed" : hadMaybeStatus ? "" : current.status;
-      const waitlistNotice = current.status === "waitlist" ? `<div class="notice attendance-waitlist-notice"><strong>Você está na espera inicial</strong><br>Posição atual: ${Number(current.waitlist_position || 0) || "a definir"}. Ao escolher “Vou jogar”, sua intenção de participar será mantida.</div>` : "";
-      const definitiveAnswerNotice = hadMaybeStatus ? `<div class="notice"><strong>Escolha uma resposta definitiva</strong><br>A opção “Talvez” foi removida. Confirme se você vai ou não vai participar.</div>` : "";
-      this.modal("Confirmar presença", `<form id="rsvpForm" class="form-grid"><div class="notice"><strong>${escapeHtml(match.title)}</strong><br>${escapeHtml(shortDate(match.starts_at))} · ${escapeHtml(match.location)}</div>${waitlistNotice}${definitiveAnswerNotice}<div class="radio-grid">${[["confirmed", "Vou jogar"], ["out", "Não vou"]].map(([value, label]) => `<label class="radio-card"><input type="radio" name="status" value="${value}" required ${selectedStatus === value || (!current.status && value === "confirmed") ? "checked" : ""}>${label}</label>`).join("")}</div>${match.bbq_enabled ? `<label class="check-row"><input type="checkbox" name="bbq" ${current.bbq ? "checked" : ""}> Participarei do churrasco</label><div class="field"><label>Acompanhantes</label><input type="number" name="bbq_guests" min="0" max="20" value="${current.bbq_guests || 0}"></div><div class="field"><label>O que vou levar</label><input name="bbq_note" value="${escapeHtml(current.bbq_note || "")}" placeholder="Refrigerante, pão de alho..."></div>` : ""}<button class="btn btn-primary btn-block">Salvar resposta</button></form>`, (root, close) => {
+      const current = this.attendanceFor(matchId).find(item => item.player_id === player.id) || {};
+      const selectedStatus = ["confirmed", "waitlist"].includes(current.status) ? "confirmed" : current.status === "out" ? "out" : "";
+      const waitlistNotice = current.status === "waitlist" ? `<div class="notice attendance-waitlist-notice"><strong>Você está na espera inicial</strong><br>Ao manter “Vou”, sua intenção de participar permanece registrada conforme a regra do evento.</div>` : "";
+      const gameOptions = [["confirmed", "Vou"], ["out", "Não vou"]].map(([value, label]) => `<label class="radio-card response-radio-card"><input type="radio" name="status" value="${value}" required ${selectedStatus === value ? "checked" : ""}><span>${label}</span></label>`).join("");
+      const bbqOptions = match.bbq_enabled ? `<div class="response-modal-section"><strong>Churrasco</strong><small>Esta resposta é independente da presença no jogo.</small><div class="radio-grid">${[["yes", "Vou"], ["no", "Não vou"]].map(([value, label]) => `<label class="radio-card response-radio-card"><input type="radio" name="bbq_status" value="${value}" ${current.bbq_responded && ((value === "yes") === Boolean(current.bbq)) ? "checked" : ""}><span>${label}</span></label>`).join("")}</div></div>` : "";
+      this.modal("Minhas respostas", `<form id="rsvpForm" class="form-grid"><div class="notice"><strong>${escapeHtml(match.title)}</strong><br>${escapeHtml(shortDate(match.starts_at))} · ${escapeHtml(match.location)}</div>${waitlistNotice}<div class="response-modal-section"><strong>Jogo</strong><small>Informe se participará desta partida.</small><div class="radio-grid">${gameOptions}</div></div>${bbqOptions}<button class="btn btn-primary btn-block">Salvar respostas</button></form>`, (root, close) => {
         $("#rsvpForm", root).addEventListener("submit", async event => {
           event.preventDefault();
           const form = new FormData(event.currentTarget);
           const requestedStatus = String(form.get("status") || "");
-          if (!["confirmed", "out"].includes(requestedStatus)) return this.toast("Escolha se você vai ou não vai participar.", true);
+          const bbqStatus = String(form.get("bbq_status") || "");
+          if (!["confirmed", "out"].includes(requestedStatus)) return this.toast("Escolha se você vai ou não vai participar do jogo.", true);
           const submit = event.submitter;
           submit.disabled = true;
           submit.textContent = "Salvando...";
-          const result = await this.repo.setMyAttendance(matchId, {
-            status: requestedStatus,
-            bbq: form.get("bbq") === "on",
-            bbqGuests: Number(form.get("bbq_guests") || 0),
-            bbqNote: form.get("bbq_note") || ""
-          });
+          const result = await this.repo.setMyGameResponse(matchId, requestedStatus);
+          if (match.bbq_enabled && ["yes", "no"].includes(bbqStatus)) await this.repo.setMyBbqResponse(matchId, bbqStatus === "yes");
           this.state = this.repo.state;
           close();
           this.render();
           const effectiveStatus = result.status || requestedStatus;
-          if (effectiveStatus === "confirmed" && current.status !== "confirmed") {
+          if (effectiveStatus === "confirmed" && !["confirmed", "waitlist"].includes(current.status)) {
             try {
               await this.repo.notifyAttendanceConfirmed(this.state.currentGroupId, matchId, player.id);
             } catch (error) {
               console.warn("Presença confirmada, mas a notificação falhou:", error);
             }
           }
-          if (effectiveStatus === "waitlist") {
-            this.toast(`Limite inicial preenchido. Você está na posição ${Number(result.waitlist_position || 0) || "final"} da espera.`);
-          } else {
-            this.toast("Presença atualizada.");
-          }
+          this.toast(effectiveStatus === "waitlist" ? "Respostas atualizadas. Sua situação seguirá a regra de espera do evento." : "Respostas atualizadas.");
         });
       });
     },
