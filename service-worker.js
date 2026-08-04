@@ -1,33 +1,33 @@
-const SW_BUILD = 137;
-const CACHE = "resenha-fc-beta-1.0-build-137-r1";
+const SW_BUILD = 138;
+const CACHE = "tamo-on-beta-1.0-build-138-r1";
 const ASSETS = [
   "/",
   "/index.html",
-  "/styles.css?v=beta137r1",
-  "/app.js?v=beta137r1",
-  "/pwa-bootstrap.js?v=beta137r1",
+  "/styles.css?v=beta138r1",
+  "/app.js?v=beta138r1",
+  "/pwa-bootstrap.js?v=beta138r1",
   "/supabase-config.js?v=0.3.3",
-  "/group-avatars-data.js?v=beta137r1",
-  "/assets/group-avatars-build-127/badge-01.png?v=beta137r1",
-  "/assets/group-avatars-build-127/badge-02.png?v=beta137r1",
-  "/assets/group-avatars-build-127/badge-03.png?v=beta137r1",
-  "/assets/group-avatars-build-127/badge-04.png?v=beta137r1",
-  "/assets/group-avatars-build-127/badge-05.png?v=beta137r1",
-  "/assets/group-avatars-build-127/badge-06.png?v=beta137r1",
-  "/assets/group-avatars-build-127/badge-07.png?v=beta137r1",
-  "/assets/group-avatars-build-127/badge-08.png?v=beta137r1",
-  "/assets/group-avatars-build-127/badge-09.png?v=beta137r1",
-  "/assets/group-avatars-build-127/badge-10.png?v=beta137r1",
-  "/assets/group-avatars-build-127/badge-11.png?v=beta137r1",
-  "/assets/group-avatars-build-127/badge-12.png?v=beta137r1",
-  "/assets/group-avatars-build-127/badge-13.png?v=beta137r1",
-  "/assets/group-avatars-build-127/badge-14.png?v=beta137r1",
-  "/assets/group-avatars-build-127/badge-15.png?v=beta137r1",
-  "/assets/group-avatars-build-127/badge-16.png?v=beta137r1",
-  "/assets/group-avatars-build-127/badge-17.png?v=beta137r1",
-  "/assets/group-avatars-build-127/badge-18.png?v=beta137r1",
-  "/assets/group-avatars-build-127/badge-19.png?v=beta137r1",
-  "/assets/group-avatars-build-127/badge-20.png?v=beta137r1",
+  "/group-avatars-data.js?v=beta138r1",
+  "/assets/group-avatars-build-127/badge-01.png?v=beta138r1",
+  "/assets/group-avatars-build-127/badge-02.png?v=beta138r1",
+  "/assets/group-avatars-build-127/badge-03.png?v=beta138r1",
+  "/assets/group-avatars-build-127/badge-04.png?v=beta138r1",
+  "/assets/group-avatars-build-127/badge-05.png?v=beta138r1",
+  "/assets/group-avatars-build-127/badge-06.png?v=beta138r1",
+  "/assets/group-avatars-build-127/badge-07.png?v=beta138r1",
+  "/assets/group-avatars-build-127/badge-08.png?v=beta138r1",
+  "/assets/group-avatars-build-127/badge-09.png?v=beta138r1",
+  "/assets/group-avatars-build-127/badge-10.png?v=beta138r1",
+  "/assets/group-avatars-build-127/badge-11.png?v=beta138r1",
+  "/assets/group-avatars-build-127/badge-12.png?v=beta138r1",
+  "/assets/group-avatars-build-127/badge-13.png?v=beta138r1",
+  "/assets/group-avatars-build-127/badge-14.png?v=beta138r1",
+  "/assets/group-avatars-build-127/badge-15.png?v=beta138r1",
+  "/assets/group-avatars-build-127/badge-16.png?v=beta138r1",
+  "/assets/group-avatars-build-127/badge-17.png?v=beta138r1",
+  "/assets/group-avatars-build-127/badge-18.png?v=beta138r1",
+  "/assets/group-avatars-build-127/badge-19.png?v=beta138r1",
+  "/assets/group-avatars-build-127/badge-20.png?v=beta138r1",
   "/manifest.json",
   "/offline.html",
   "/version.json",
@@ -36,8 +36,6 @@ const ASSETS = [
   "/resenhafc-maskable-192.png",
   "/resenhafc-maskable-512.png",
   "/apple-touch-icon.png",
-  "/login-logo-transparent-v0311.png",
-  "/brand/brand-mark-transparent-v0311.png"
 ];
 
 self.addEventListener("install", event => event.waitUntil((async () => {
@@ -85,12 +83,12 @@ self.addEventListener("push", event => {
   try { payload = event.data?.json() || {}; }
   catch { payload = { body: event.data?.text() || "Novo aviso do grupo." }; }
 
-  const title = payload.title || "Resenha FC";
+  const title = payload.title || "Tâmo On";
   const options = {
     body: payload.body || "Novo aviso do grupo.",
     icon: payload.icon || "./icons/icon-192-v023.png",
     badge: payload.badge || "./icons/icon-96.png",
-    tag: payload.tag || "resenha-fc-aviso",
+    tag: payload.tag || "tamo-on-aviso",
     renotify: true,
     data: payload.data || { url: payload.url || "./?page=home" },
     vibrate: [120, 60, 120],

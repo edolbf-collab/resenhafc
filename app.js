@@ -1,8 +1,8 @@
 (() => {
   "use strict";
 
-  const APP_RELEASE = Object.freeze({ channel: "beta", version: "Beta 1.0", build: 137, database: 136, edge: 108 });
-  const APP_ASSET_TOKEN = "beta137r1";
+  const APP_RELEASE = Object.freeze({ channel: "beta", version: "Beta 1.0", build: 138, database: 136, edge: 108 });
+  const APP_ASSET_TOKEN = "beta138r1";
   const createEmptyState = () => ({
     profile: null,
     groups: [],
@@ -58,7 +58,7 @@
   const avatarKey = value => /^badge-(0[1-9]|1[0-9]|20)$/.test(String(value || "")) ? String(value) : "badge-01";
   const groupAvatarUrl = key => {
     const normalized = avatarKey(key);
-    return window.RESENHA_GROUP_AVATARS?.[normalized] || assetUrl(`assets/group-avatars/${normalized}.png?v=beta137r1`);
+    return window.RESENHA_GROUP_AVATARS?.[normalized] || assetUrl(`assets/group-avatars/${normalized}.png?v=beta138r1`);
   };
   const positionOptions = ["Goleiro", "Zagueiro", "Lateral", "Volante", "Meia", "Atacante", "Coringa"];
   const isPrimaryGoalkeeper = player => String(player?.primary_position || "") === "Goleiro";
@@ -896,7 +896,7 @@
         if (this.ready) return;
         loader.classList.add("is-slow");
         const text = $("[data-boot-message]", loader);
-        if (text) text.textContent = navigator.onLine ? "Sincronizando os dados do grupo…" : "Aguardando conexão com a internet…";
+        if (text) text.textContent = navigator.onLine ? "Sincronizando seu grupo…" : "Aguardando conexão com a internet…";
       }, 4500);
     },
 
@@ -1102,7 +1102,7 @@
         if (!(image instanceof HTMLImageElement) || !image.matches("[data-group-avatar]")) return;
         if (image.dataset.fallbackApplied === "true") return;
         image.dataset.fallbackApplied = "true";
-        image.src = window.RESENHA_GROUP_AVATARS?.["badge-01"] || assetUrl("assets/group-avatars/badge-01.png?v=beta137r1");
+        image.src = window.RESENHA_GROUP_AVATARS?.["badge-01"] || assetUrl("assets/group-avatars/badge-01.png?v=beta138r1");
       }, true);
     },
 
@@ -1240,8 +1240,15 @@
       const groupImg = $("#groupAvatar");
       if (groupImg) {
         groupImg.dataset.fallbackApplied = "false";
-        groupImg.src = group ? groupAvatarUrl(group.avatar_key) : assetUrl("brand/brand-mark-transparent-v0311.png");
-        groupImg.alt = group ? `Escudo de ${group.name}` : "Resenha FC";
+        if (group) {
+          groupImg.hidden = false;
+          groupImg.src = groupAvatarUrl(group.avatar_key);
+          groupImg.alt = `Escudo de ${group.name}`;
+        } else {
+          groupImg.hidden = true;
+          groupImg.removeAttribute("src");
+          groupImg.alt = "";
+        }
       }
       $("#groupName").textContent = group?.name || "Crie ou entre em um grupo";
       $("#syncLabel").textContent = group ? `${roleLabels[this.currentRole()]} · nuvem ativa` : "Conta conectada";
@@ -1461,7 +1468,7 @@
       const pushConfigured = Boolean(String(window.RESENHA_CONFIG?.vapidPublicKey || "").trim());
       const pushText = !pushSupported() ? "Este navegador não oferece notificações push." : !pushConfigured ? "Conclua a configuração VAPID." : "Receba avisos mesmo com o aplicativo fechado.";
       const adminTools = this.state.is_platform_admin ? '<div class="section-title"><h2>Operação do beta</h2><small>Acesso exclusivo da plataforma.</small></div><button class="card menu-row admin-menu-row" data-action="platform-admin"><span class="menu-icon">◉</span><div class="list-main"><strong>Painel Beta</strong><small>Saúde, métricas, feedbacks e logs.</small></div><strong>›</strong></button><button class="card menu-row admin-menu-row" data-action="export"><span class="menu-icon">⇩</span><div class="list-main"><strong>Exportar backup integral do grupo</strong><small>Arquivo JSON restrito à administração da plataforma.</small></div><strong>›</strong></button>' : "";
-      return `<div class="page-head"><div><span class="page-kicker">CONFIGURAÇÕES</span><h1>Mais</h1><p>Administração, suporte e dados da conta.</p></div></div><div class="list"><button class="card menu-row" data-action="profile"><span class="menu-icon">⚽</span><div class="list-main"><strong>Meu perfil de jogador</strong><small>Nome, apelido e posição.</small></div><strong>›</strong></button><button class="card menu-row" data-action="notification-settings"><span class="menu-icon">🔔</span><div class="list-main"><strong>Notificações no celular</strong><small>${escapeHtml(pushText)}</small></div><strong>›</strong></button><button class="card menu-row" data-action="announcement-center"><span class="menu-icon">📣</span><div class="list-main"><strong>Central de avisos</strong><small>Consulte os comunicados do grupo.</small></div><strong>›</strong></button><button class="card menu-row" data-action="invite"><span class="menu-icon">↗</span><div class="list-main"><strong>Convidar pelo WhatsApp</strong><small>Código ${escapeHtml(group.invite_code)}</small></div><strong>›</strong></button>${this.canManageGroup() ? '<button class="card menu-row" data-action="group-settings"><span class="menu-icon">🛡</span><div class="list-main"><strong>Personalizar grupo</strong><small>Nome, escudo e administração.</small></div><strong>›</strong></button><button class="card menu-row" data-action="manage-roles"><span class="menu-icon">♟</span><div class="list-main"><strong>Gerenciar funções</strong><small>Administrador, organizador e tesoureiro.</small></div><strong>›</strong></button>' : ""}${this.canManageMatches() ? '<button class="card menu-row" data-action="announcement"><span class="menu-icon">!</span><div class="list-main"><strong>Publicar aviso</strong><small>Enviar comunicado e notificação ao elenco.</small></div><strong>›</strong></button><button class="card menu-row" data-action="players"><span class="menu-icon">+</span><div class="list-main"><strong>Jogadores sem acesso</strong><small>Cadastrar convidado eventual.</small></div><strong>›</strong></button>' : ""}<div class="section-title"><h2>Suporte do beta</h2></div><button class="card menu-row feedback-row" data-action="report-problem"><span class="menu-icon">⚑</span><div class="list-main"><strong>Reportar problema</strong><small>Envie o relato com diagnóstico automático.</small></div><strong>›</strong></button><button class="card menu-row" data-action="about-diagnostics"><span class="menu-icon">i</span><div class="list-main"><strong>Sobre e diagnóstico</strong><small>Versão, sincronização, push e atualização.</small></div><strong>›</strong></button>${adminTools}<button class="card menu-row danger-row" data-action="sign-out"><span class="menu-icon danger-avatar">↪</span><div class="list-main"><strong>Sair da conta</strong><small>Desconectar e escolher outra conta Google.</small></div><strong>›</strong></button></div><div class="version-card">Resenha FC ${APP_RELEASE.version} · Build ${APP_RELEASE.build} · Beta fechado</div>`;
+      return `<div class="page-head"><div><span class="page-kicker">CONFIGURAÇÕES</span><h1>Mais</h1><p>Administração, suporte e dados da conta.</p></div></div><div class="list"><button class="card menu-row" data-action="profile"><span class="menu-icon">⚽</span><div class="list-main"><strong>Meu perfil de jogador</strong><small>Nome, apelido e posição.</small></div><strong>›</strong></button><button class="card menu-row" data-action="notification-settings"><span class="menu-icon">🔔</span><div class="list-main"><strong>Notificações no celular</strong><small>${escapeHtml(pushText)}</small></div><strong>›</strong></button><button class="card menu-row" data-action="announcement-center"><span class="menu-icon">📣</span><div class="list-main"><strong>Central de avisos</strong><small>Consulte os comunicados do grupo.</small></div><strong>›</strong></button><button class="card menu-row" data-action="invite"><span class="menu-icon">↗</span><div class="list-main"><strong>Convidar pelo WhatsApp</strong><small>Código ${escapeHtml(group.invite_code)}</small></div><strong>›</strong></button>${this.canManageGroup() ? '<button class="card menu-row" data-action="group-settings"><span class="menu-icon">🛡</span><div class="list-main"><strong>Personalizar grupo</strong><small>Nome, escudo e administração.</small></div><strong>›</strong></button><button class="card menu-row" data-action="manage-roles"><span class="menu-icon">♟</span><div class="list-main"><strong>Gerenciar funções</strong><small>Administrador, organizador e tesoureiro.</small></div><strong>›</strong></button>' : ""}${this.canManageMatches() ? '<button class="card menu-row" data-action="announcement"><span class="menu-icon">!</span><div class="list-main"><strong>Publicar aviso</strong><small>Enviar comunicado e notificação ao elenco.</small></div><strong>›</strong></button><button class="card menu-row" data-action="players"><span class="menu-icon">+</span><div class="list-main"><strong>Jogadores sem acesso</strong><small>Cadastrar convidado eventual.</small></div><strong>›</strong></button>' : ""}<div class="section-title"><h2>Suporte do beta</h2></div><button class="card menu-row feedback-row" data-action="report-problem"><span class="menu-icon">⚑</span><div class="list-main"><strong>Reportar problema</strong><small>Envie o relato com diagnóstico automático.</small></div><strong>›</strong></button><button class="card menu-row" data-action="about-diagnostics"><span class="menu-icon">i</span><div class="list-main"><strong>Sobre e diagnóstico</strong><small>Versão, sincronização, push e atualização.</small></div><strong>›</strong></button>${adminTools}<button class="card menu-row danger-row" data-action="sign-out"><span class="menu-icon danger-avatar">↪</span><div class="list-main"><strong>Sair da conta</strong><small>Desconectar e escolher outra conta Google.</small></div><strong>›</strong></button></div><div class="version-card">Tâmo On ${APP_RELEASE.version} · Build ${APP_RELEASE.build} · Beta fechado</div>`;
     },
 
     async handleAction(action, data) {
@@ -1512,7 +1519,7 @@
       clearInterval(this.accessCheckTimer);
       const email = this.repo?.state?.profile?.email || "E-mail não identificado";
       const hasIdentifiedEmail = email !== "E-mail não identificado";
-      document.body.innerHTML = `<main class="auth-screen"><section class="auth-panel simple-auth access-denied-panel"><img class="auth-logo" src="login-logo-transparent-v0311.png" alt="Resenha FC"><span class="access-denied-icon">!</span><h1>Aguardando liberação</h1><p>O Resenha FC está em beta fechado. Antes de continuar, a administração precisa autorizar a conta Google usada no login.</p><div class="denied-account-card"><small>CONTA UTILIZADA</small><div><strong id="deniedAccountEmail">${escapeHtml(email)}</strong>${hasIdentifiedEmail ? '<button id="copyDeniedEmail" class="copy-email-button" type="button" aria-label="Copiar e-mail">Copiar</button>' : ''}</div></div><div class="notice auth-error"><strong>Situação do acesso</strong><br><span id="deniedAccessMessage">${escapeHtml(error?.message || "Este e-mail ainda não está autorizado.")}</span></div><div class="access-denied-instructions"><strong>Como liberar</strong><ol><li>Envie o e-mail acima para a administração do beta.</li><li>Aguarde a confirmação de que o acesso foi autorizado.</li><li>Volte a esta tela e toque em <b>Verificar liberação</b>.</li></ol></div><div id="deniedCheckStatus" class="denied-check-status" role="status" aria-live="polite"></div><button id="deniedCheckAccess" class="btn btn-primary btn-block">Verificar liberação</button><button id="deniedSignOut" class="btn btn-secondary btn-block">Sair e usar outra conta</button></section></main><div id="toastRoot" class="toast-root"></div>`;
+      document.body.innerHTML = `<main class="auth-screen"><section class="auth-panel simple-auth access-denied-panel"><div class="brand-wordmark auth-brand-wordmark" role="img" aria-label="Tâmo On"><span class="brand-wordmark-name">Tâmo</span><span class="brand-wordmark-on">ON</span></div><span class="access-denied-icon">!</span><h1>Aguardando liberação</h1><p>O Tâmo On está em beta fechado. Antes de continuar, a administração precisa autorizar a conta Google usada no login.</p><div class="denied-account-card"><small>CONTA UTILIZADA</small><div><strong id="deniedAccountEmail">${escapeHtml(email)}</strong>${hasIdentifiedEmail ? '<button id="copyDeniedEmail" class="copy-email-button" type="button" aria-label="Copiar e-mail">Copiar</button>' : ''}</div></div><div class="notice auth-error"><strong>Situação do acesso</strong><br><span id="deniedAccessMessage">${escapeHtml(error?.message || "Este e-mail ainda não está autorizado.")}</span></div><div class="access-denied-instructions"><strong>Como liberar</strong><ol><li>Envie o e-mail acima para a administração do beta.</li><li>Aguarde a confirmação de que o acesso foi autorizado.</li><li>Volte a esta tela e toque em <b>Verificar liberação</b>.</li></ol></div><div id="deniedCheckStatus" class="denied-check-status" role="status" aria-live="polite"></div><button id="deniedCheckAccess" class="btn btn-primary btn-block">Verificar liberação</button><button id="deniedSignOut" class="btn btn-secondary btn-block">Sair e usar outra conta</button></section></main><div id="toastRoot" class="toast-root"></div>`;
 
       $("#copyDeniedEmail")?.addEventListener("click", async event => {
         try {
@@ -1558,7 +1565,7 @@
 
     renderAuth() {
       const error = oauthErrorFromLocation();
-      document.body.innerHTML = `<main class="auth-screen"><section class="auth-panel"><div class="auth-stadium"><div class="auth-lights"></div><img class="auth-logo" src="login-logo-transparent-v0311.png" alt="Resenha FC" width="178" height="178"><span class="auth-kicker">SUA PELADA. SEU GRUPO. SEU APP.</span></div><div class="auth-copy"><h1>Entre em campo</h1><p>Presença, times equilibrados, membros, caixa e churrasco em um único lugar.</p>${error ? `<div class="notice auth-error"><strong>Falha no login</strong><br>${escapeHtml(error)}</div>` : ""}<div class="google-card"><button id="googleLoginButton" class="google-oauth-button" type="button" aria-label="Continuar com Google"><svg class="google-g" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M21.6 12.23c0-.71-.06-1.4-.18-2.07H12v3.92h5.38a4.6 4.6 0 0 1-2 3.02v2.54h3.23c1.89-1.74 2.99-4.3 2.99-7.41Z"/><path fill="#34A853" d="M12 22c2.7 0 4.96-.9 6.61-2.36l-3.23-2.54c-.9.6-2.04.96-3.38.96-2.6 0-4.81-1.76-5.6-4.13H3.07v2.62A9.99 9.99 0 0 0 12 22Z"/><path fill="#FBBC05" d="M6.4 13.93A6.02 6.02 0 0 1 6.08 12c0-.67.12-1.32.32-1.93V7.45H3.07A10 10 0 0 0 2 12c0 1.61.38 3.14 1.07 4.55l3.33-2.62Z"/><path fill="#EA4335" d="M12 5.94c1.47 0 2.79.51 3.83 1.5l2.87-2.88A9.64 9.64 0 0 0 12 2a9.99 9.99 0 0 0-8.93 5.45l3.33 2.62C7.19 7.7 9.4 5.94 12 5.94Z"/></svg><span>Continuar com Google</span><span class="google-login-spinner" aria-hidden="true"></span></button><p id="googleLoginMessage">Use sua conta Google para continuar. Não há cadastro por e-mail ou senha.</p></div><div class="auth-features"><span>✓ Acesso seguro</span><span>✓ Dados em nuvem</span><span>✓ Sincronização entre celulares</span></div></div></section></main><div id="toastRoot" class="toast-root"></div>`;
+      document.body.innerHTML = `<main class="auth-screen"><section class="auth-panel"><div class="auth-stadium"><div class="auth-lights"></div><div class="brand-wordmark auth-brand-wordmark" role="img" aria-label="Tâmo On"><span class="brand-wordmark-name">Tâmo</span><span class="brand-wordmark-on">ON</span></div><span class="auth-kicker">SUA PELADA. SEU GRUPO. SEU APP.</span></div><div class="auth-copy"><h1>Entre em campo</h1><p>Presença, times equilibrados, membros, caixa e churrasco em um único lugar.</p>${error ? `<div class="notice auth-error"><strong>Falha no login</strong><br>${escapeHtml(error)}</div>` : ""}<div class="google-card"><button id="googleLoginButton" class="google-oauth-button" type="button" aria-label="Continuar com Google"><svg class="google-g" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M21.6 12.23c0-.71-.06-1.4-.18-2.07H12v3.92h5.38a4.6 4.6 0 0 1-2 3.02v2.54h3.23c1.89-1.74 2.99-4.3 2.99-7.41Z"/><path fill="#34A853" d="M12 22c2.7 0 4.96-.9 6.61-2.36l-3.23-2.54c-.9.6-2.04.96-3.38.96-2.6 0-4.81-1.76-5.6-4.13H3.07v2.62A9.99 9.99 0 0 0 12 22Z"/><path fill="#FBBC05" d="M6.4 13.93A6.02 6.02 0 0 1 6.08 12c0-.67.12-1.32.32-1.93V7.45H3.07A10 10 0 0 0 2 12c0 1.61.38 3.14 1.07 4.55l3.33-2.62Z"/><path fill="#EA4335" d="M12 5.94c1.47 0 2.79.51 3.83 1.5l2.87-2.88A9.64 9.64 0 0 0 12 2a9.99 9.99 0 0 0-8.93 5.45l3.33 2.62C7.19 7.7 9.4 5.94 12 5.94Z"/></svg><span>Continuar com Google</span><span class="google-login-spinner" aria-hidden="true"></span></button><p id="googleLoginMessage">Use sua conta Google para continuar. Não há cadastro por e-mail ou senha.</p></div><div class="auth-features"><span>✓ Acesso seguro</span><span>✓ Dados em nuvem</span><span>✓ Sincronização entre celulares</span></div></div></section></main><div id="toastRoot" class="toast-root"></div>`;
       this.setupGoogleLogin();
       if (error && history.replaceState) history.replaceState({}, document.title, location.pathname);
     },
@@ -1591,11 +1598,11 @@
     },
 
     renderConfigurationError() {
-      document.body.innerHTML = `<main class="auth-screen"><section class="auth-panel simple-auth"><img class="auth-logo" src="login-logo-transparent-v0311.png" alt="Resenha FC"><h1>Configuração necessária</h1><p>Preencha Supabase URL e Publishable key no arquivo <code>supabase-config.js</code>.</p><button class="btn btn-primary" data-action="reload">Verificar novamente</button></section></main>`;
+      document.body.innerHTML = `<main class="auth-screen"><section class="auth-panel simple-auth"><div class="brand-wordmark auth-brand-wordmark" role="img" aria-label="Tâmo On"><span class="brand-wordmark-name">Tâmo</span><span class="brand-wordmark-on">ON</span></div><h1>Configuração necessária</h1><p>Preencha Supabase URL e Publishable key no arquivo <code>supabase-config.js</code>.</p><button class="btn btn-primary" data-action="reload">Verificar novamente</button></section></main>`;
     },
 
     renderBackendError(error) {
-      document.body.innerHTML = `<main class="auth-screen"><section class="auth-panel simple-auth"><img class="auth-logo" src="login-logo-transparent-v0311.png" alt="Resenha FC"><h1>Falha na conexão</h1><p>${escapeHtml(error?.message || "Não foi possível acessar o backend.")}</p><button class="btn btn-primary" data-action="reload">Tentar novamente</button></section></main>`;
+      document.body.innerHTML = `<main class="auth-screen"><section class="auth-panel simple-auth"><div class="brand-wordmark auth-brand-wordmark" role="img" aria-label="Tâmo On"><span class="brand-wordmark-name">Tâmo</span><span class="brand-wordmark-on">ON</span></div><h1>Falha na conexão</h1><p>${escapeHtml(error?.message || "Não foi possível acessar o backend.")}</p><button class="btn btn-primary" data-action="reload">Tentar novamente</button></section></main>`;
     },
 
     modal(title, content, onReady) {
@@ -1728,7 +1735,7 @@
       if (!group) return this.openGroupModal();
       const url = new URL(appBaseUrl());
       url.searchParams.set("invite", group.invite_code);
-      const message = `⚽ Você foi convidado para o grupo ${group.name} no Resenha FC!\n\nCódigo de convite: ${group.invite_code}\n\nAcesse ${url.href}\nEntre com sua conta Google e informe o código para participar.`;
+      const message = `⚽ Você foi convidado para o grupo ${group.name} no Tâmo On!\n\nCódigo de convite: ${group.invite_code}\n\nAcesse ${url.href}\nEntre com sua conta Google e informe o código para participar.`;
       this.modal("Convidar para o grupo", `<section class="invite-card">${this.groupAvatar(group, "invite-avatar")}<h3>${escapeHtml(group.name)}</h3><p>Compartilhe o código com quem participará da pelada.</p><div class="invite-code"><strong>${escapeHtml(group.invite_code)}</strong><button id="copyInviteCode" aria-label="Copiar código">⧉</button></div><button class="btn btn-whatsapp btn-block" id="shareWhatsApp">WhatsApp</button><button class="btn btn-secondary btn-block" id="nativeShare">Compartilhar convite</button></section>`, (root) => {
         $("#copyInviteCode", root).addEventListener("click", async () => {
           await navigator.clipboard.writeText(group.invite_code);
@@ -2685,7 +2692,7 @@ As confirmações, o sorteio da espera e a quantidade configurada de times serã
       try { await this.repo.session(); } catch { dbStatus = "Falha"; }
       const sync = this.lastSyncAt ? shortDate(this.lastSyncAt) : "Não registrada";
       const updateText = this.updateAvailable ? "Atualização pendente" : "Sem atualização detectada";
-      this.modal("Sobre e diagnóstico", `<div class="diagnostic-grid"><div class="diagnostic-item ${online ? "ok" : "bad"}"><span></span><div><small>Internet</small><strong>${online ? "Conectado" : "Offline"}</strong></div></div><div class="diagnostic-item ${dbStatus === "Disponível" ? "ok" : "bad"}"><span></span><div><small>Banco e sessão</small><strong>${dbStatus}</strong></div></div><div class="diagnostic-item ${subscription ? "ok" : "warn"}"><span></span><div><small>Push deste aparelho</small><strong>${escapeHtml(subscription ? "Vinculado" : push)}</strong></div></div><div class="diagnostic-item ${this.updateAvailable ? "warn" : "ok"}"><span></span><div><small>Atualização</small><strong>${escapeHtml(updateText)}</strong></div></div></div><div class="system-info-card"><div><span>Aplicativo</span><strong>${APP_RELEASE.version}</strong></div><div><span>Build do aplicativo</span><strong>${APP_RELEASE.build}</strong></div><div><span>Build do HTML</span><strong>${this.htmlBuild() || "—"}</strong></div><div><span>Service worker</span><strong>${escapeHtml(String(window.resenhaPwa?.getState?.().swBuild || "verificando"))}</strong></div><div><span>Banco esperado</span><strong>${APP_RELEASE.database}</strong></div><div><span>Última sincronização</span><strong>${escapeHtml(sync)}</strong></div><div><span>Modo</span><strong>${isStandalone() ? "Instalado" : "Navegador"}</strong></div><div><span>Dispositivo</span><strong>${escapeHtml(deviceLabel())}</strong></div></div><button class="btn btn-secondary btn-block" data-action="check-update">Verificar atualização</button><button class="btn btn-primary btn-block" data-action="report-problem">Reportar problema</button>`, () => {});
+      this.modal("Sobre e diagnóstico", `<div class="diagnostic-grid"><div class="diagnostic-item ${online ? "ok" : "bad"}"><span></span><div><small>Internet</small><strong>${online ? "Conectado" : "Offline"}</strong></div></div><div class="diagnostic-item ${dbStatus === "Disponível" ? "ok" : "bad"}"><span></span><div><small>Banco e sessão</small><strong>${dbStatus}</strong></div></div><div class="diagnostic-item ${subscription ? "ok" : "warn"}"><span></span><div><small>Push deste aparelho</small><strong>${escapeHtml(subscription ? "Vinculado" : push)}</strong></div></div><div class="diagnostic-item ${this.updateAvailable ? "warn" : "ok"}"><span></span><div><small>Atualização</small><strong>${escapeHtml(updateText)}</strong></div></div></div><div class="system-info-card"><div><span>Aplicativo</span><strong>${APP_RELEASE.version}</strong></div><div><span>Build do aplicativo</span><strong>${APP_RELEASE.build}</strong></div><div><span>Build do HTML</span><strong>${this.htmlBuild() || "—"}</strong></div><div><span>Service worker</span><strong>${escapeHtml(String(window.resenhaPwa?.getState?.().swBuild || "verificando"))}</strong></div><div><span>Banco</span><strong>${APP_RELEASE.database}</strong></div><div><span>Última sincronização</span><strong>${escapeHtml(sync)}</strong></div><div><span>Modo</span><strong>${isStandalone() ? "Instalado" : "Navegador"}</strong></div><div><span>Dispositivo</span><strong>${escapeHtml(deviceLabel())}</strong></div></div><button class="btn btn-secondary btn-block" data-action="check-update">Verificar atualização</button><button class="btn btn-primary btn-block" data-action="report-problem">Reportar problema</button>`, () => {});
     },
 
     async openPlatformAdmin() {
@@ -2819,7 +2826,7 @@ As confirmações, o sorteio da espera e a quantidade configurada de times serã
               const blob = new Blob([JSON.stringify({ release: APP_RELEASE, ...exported }, null, 2)], { type: "application/json" });
               const link = document.createElement("a");
               link.href = URL.createObjectURL(blob);
-              link.download = `resenha-fc-beta-operacao-${new Date().toISOString().slice(0,10)}.json`;
+              link.download = `tamo-on-beta-operacao-${new Date().toISOString().slice(0,10)}.json`;
               link.click();
               URL.revokeObjectURL(link.href);
               button.disabled = false;
@@ -2976,7 +2983,7 @@ As confirmações, o sorteio da espera e a quantidade configurada de times serã
       if (!pushSupported()) throw new Error("Este navegador não oferece notificações push.");
       const publicKey = String(window.RESENHA_CONFIG?.vapidPublicKey || "").trim();
       if (!publicKey) throw new Error("A chave pública VAPID ainda não foi configurada.");
-      if (isIos() && !isStandalone()) throw new Error("No iPhone, adicione o Resenha FC à Tela de Início e abra pelo ícone antes de ativar as notificações.");
+      if (isIos() && !isStandalone()) throw new Error("No iPhone, adicione o Tâmo On à Tela de Início e abra pelo ícone antes de ativar as notificações.");
       const permission = await Notification.requestPermission();
       if (permission !== "granted") throw new Error(permission === "denied" ? "As notificações foram bloqueadas nos ajustes do aparelho." : "A permissão para notificações não foi concedida.");
       const registration = await this.ensureServiceWorker();
@@ -3029,7 +3036,7 @@ As confirmações, o sorteio da espera e a quantidade configurada de times serã
 
       const overlay = document.createElement("div");
       overlay.className = "notification-onboarding-overlay";
-      overlay.innerHTML = `<section class="notification-onboarding-card" role="dialog" aria-modal="true" aria-labelledby="notificationOnboardingTitle"><div class="notification-onboarding-icon">🔔</div><h2 id="notificationOnboardingTitle">Ative as notificações</h2><p>Receba avisos do grupo, novas peladas e confirmações de presença mesmo quando o Resenha FC estiver fechado.</p><button type="button" class="btn btn-primary btn-block" id="notificationOnboardingEnable">Ativar agora</button><button type="button" class="notification-onboarding-later" id="notificationOnboardingLater">Agora não</button><small>Você poderá alterar esta opção depois em Mais → Notificações no celular.</small></section>`;
+      overlay.innerHTML = `<section class="notification-onboarding-card" role="dialog" aria-modal="true" aria-labelledby="notificationOnboardingTitle"><div class="notification-onboarding-icon">🔔</div><h2 id="notificationOnboardingTitle">Ative as notificações</h2><p>Receba avisos do grupo, novas peladas e confirmações de presença mesmo quando o Tâmo On estiver fechado.</p><button type="button" class="btn btn-primary btn-block" id="notificationOnboardingEnable">Ativar agora</button><button type="button" class="notification-onboarding-later" id="notificationOnboardingLater">Agora não</button><small>Você poderá alterar esta opção depois em Mais → Notificações no celular.</small></section>`;
       document.body.appendChild(overlay);
       const finish = () => {
         localStorage.setItem(key, "done");
@@ -3054,7 +3061,7 @@ As confirmações, o sorteio da espera e a quantidade configurada de times serã
 
     openSystemNotificationForm() {
       if (!this.state.is_platform_admin) return this.toast("Acesso restrito à administração da plataforma.", true);
-      this.modal("Notificação do sistema", `<form id="systemNotificationForm" class="form-grid"><div class="notice notice-success"><strong>Envio para toda a plataforma</strong><br>A notificação será enviada a todos os aparelhos ativos vinculados ao Resenha FC.</div><div class="field"><label>Título</label><input name="title" required maxlength="80" autocomplete="off" placeholder="Ex.: Atualização disponível"></div><div class="field"><label>Mensagem</label><textarea name="body" required maxlength="500" placeholder="Escreva a comunicação do sistema"></textarea></div><button id="publishSystemNotificationButton" type="submit" class="btn btn-primary btn-block">Enviar para todos</button></form>`, (root, close) => {
+      this.modal("Notificação do sistema", `<form id="systemNotificationForm" class="form-grid"><div class="notice notice-success"><strong>Envio para toda a plataforma</strong><br>A notificação será enviada a todos os aparelhos ativos vinculados ao Tâmo On.</div><div class="field"><label>Título</label><input name="title" required maxlength="80" autocomplete="off" placeholder="Ex.: Atualização disponível"></div><div class="field"><label>Mensagem</label><textarea name="body" required maxlength="500" placeholder="Escreva a comunicação do sistema"></textarea></div><button id="publishSystemNotificationButton" type="submit" class="btn btn-primary btn-block">Enviar para todos</button></form>`, (root, close) => {
         const form = $("#systemNotificationForm", root);
         const button = $("#publishSystemNotificationButton", root);
         form?.addEventListener("submit", async event => {
@@ -3240,7 +3247,7 @@ As confirmações, o sorteio da espera e a quantidade configurada de times serã
         const link = document.createElement("a");
         const safeName = String(group.name || "grupo").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase() || "grupo";
         link.href = url;
-        link.download = `resenha-fc-backup-${safeName}-${new Date().toISOString().slice(0, 10)}.json`;
+        link.download = `tamo-on-backup-${safeName}-${new Date().toISOString().slice(0, 10)}.json`;
         link.click();
         setTimeout(() => URL.revokeObjectURL(url), 0);
         this.toast("Backup integral do grupo gerado.");

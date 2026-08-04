@@ -4,30 +4,29 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#041521">
-  <meta name="app-build" content="137">
+  <meta name="app-build" content="138">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-title" content="Resenha FC">
-  <meta name="description" content="Organização completa de peladas: membros, presença, times, caixa, churrasco e avaliações confidenciais.">
+  <meta name="apple-mobile-web-app-title" content="Tâmo On">
+  <meta name="description" content="Tâmo On organiza grupos esportivos, eventos, presença, times, caixa, churrasco e notificações.">
   <link rel="manifest" href="/manifest.json">
-  <script src="/pwa-bootstrap.js?v=beta137r1"></script>
+  <script src="/pwa-bootstrap.js?v=beta138r1"></script>
   <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon-180x180-v023.png?v=0.3.0">
   <link rel="apple-touch-icon" sizes="167x167" href="apple-touch-icon-167x167-v023.png?v=0.3.0">
   <link rel="apple-touch-icon" sizes="152x152" href="apple-touch-icon-152x152-v023.png?v=0.3.0">
   <link rel="apple-touch-icon" sizes="120x120" href="apple-touch-icon-120x120-v023.png?v=0.3.0">
   <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32x32.png">
   <link rel="icon" type="image/png" sizes="192x192" href="icons/android-chrome-192x192.png">
-  <link rel="preload" as="image" href="login-logo-transparent-v0311.png" type="image/png">
-  <link rel="stylesheet" href="styles.css?v=beta137r1">
-  <title>Resenha FC</title>
+    <link rel="stylesheet" href="styles.css?v=beta138r1">
+  <title>Tâmo On</title>
 </head>
 <body>
   <div id="bootLoader" class="boot-loader" role="status" aria-live="polite" aria-label="Carregando o aplicativo" hidden>
     <div class="boot-loader-card">
-      <img src="brand/brand-mark-transparent-v0311.png" alt="" width="64" height="64">
+      <div class="brand-wordmark boot-loader-brand" role="img" aria-label="Tâmo On"><span class="brand-wordmark-name">Tâmo</span><span class="brand-wordmark-on">ON</span></div>
       <span class="boot-loader-spinner" aria-hidden="true"></span>
-      <strong>Preparando sua resenha</strong>
+      <strong>Ficando ON…</strong>
       <small data-boot-message>Carregando os dados essenciais…</small>
     </div>
   </div>
@@ -36,10 +35,10 @@
     <header class="topbar">
       <div class="group-switcher">
         <button id="groupAvatarButton" class="group-emblem-button" type="button" aria-label="Personalizar grupo">
-          <img id="groupAvatar" class="top-group-avatar" src="brand/brand-mark-transparent-v0311.png" alt="Resenha FC" width="46" height="46" data-group-avatar>
+          <img id="groupAvatar" class="top-group-avatar" alt="" width="46" height="46" data-group-avatar hidden>
         </button>
         <button id="groupButton" class="group-button" type="button" aria-label="Selecionar grupo">
-          <span class="group-copy"><strong id="groupName">Resenha FC</strong><small id="syncLabel">Conectando à nuvem</small></span>
+          <span class="group-copy"><strong id="groupName">Tâmo On</strong><small id="syncLabel">Conectando à nuvem</small></span>
           <span class="chevron" aria-hidden="true">⌄</span>
         </button>
       </div>
@@ -64,9 +63,9 @@
   <div id="modalRoot"></div>
   <div id="toastRoot" class="toast-root" aria-live="assertive"></div>
 
-  <script src="group-avatars-data.js?v=beta137r1"></script>
+  <script src="group-avatars-data.js?v=beta138r1"></script>
   <script src="supabase-config.js?v=0.3.3"></script>
-  <script src="app.js?v=beta137r1"></script>
+  <script src="app.js?v=beta138r1"></script>
   <!-- Cloudflare Web Analytics — instalação manual -->
   <script
     type="module"

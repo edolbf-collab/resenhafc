@@ -1,4 +1,13 @@
-# Resenha FC — Beta 1.0 Build 137
+# Tâmo On — Beta 1.0 Build 138
+
+## Build 138 — identidade e carregamento
+
+- nome visível atualizado para **Tâmo On**;
+- carregamento com wordmark textual e mensagem **Ficando ON…**;
+- sem dependência de imagem externa na tela inicial;
+- Frontend 138, Banco 136, Edge 108;
+- identificadores técnicos legados são preservados por compatibilidade.
+
 
 Linha de base construída sobre a Build 136 r1. Consulte `ATUALIZACAO-BETA-1.0-BUILD-137.md`.
 

@@ -1,10 +1,10 @@
 {
   "channel": "beta",
   "version": "Beta 1.0",
-  "build": 137,
+  "build": 138,
   "database": 136,
   "edge": 108,
   "mandatory": false,
-  "notes": "Inicialização resiliente com estado seguro, carregamento progressivo exibido somente quando necessário, bloqueio de ações antes da sincronização, detecção de arquivos de builds diferentes e diagnóstico ampliado de HTML, JavaScript e service worker.",
-  "label": "Beta 1.0 Build 137"
+  "notes": "Identidade visível atualizada para Tâmo On, carregamento com wordmark textual resiliente e mensagem Ficando ON, sem dependência de imagem. Diagnóstico mantém Banco 136; a revisão 136-r1 é uma correção interna e não altera o número da build do banco.",
+  "label": "Tâmo On Beta 1.0 Build 138"
 }

@@ -1,8 +1,8 @@
 {
   "id": "/",
-  "name": "Resenha FC Beta",
-  "short_name": "Resenha FC",
-  "description": "Organize peladas: membros, presença, times equilibrados, caixa, churrasco, avisos e notificações.",
+  "name": "Tâmo On Beta",
+  "short_name": "Tâmo On",
+  "description": "Organize grupos esportivos, eventos, presença, times, caixa, churrasco, avisos e notificações.",
   "lang": "pt-BR",
   "dir": "ltr",
   "start_url": "/",

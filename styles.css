@@ -646,15 +646,23 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 @media(max-width:560px){.batch-charge-layout{min-height:calc(92vh - 100px);max-height:calc(92vh - 100px)}.batch-charge-top{padding-right:34px}.batch-member-row{padding:8px 9px}.batch-member-avatar{width:38px;height:38px}}
 
 
-/* Build 137 — inicialização progressiva sem bloquear carregamentos rápidos. */
+/* Build 138 — inicialização progressiva sem bloquear carregamentos rápidos. */
 .boot-loader[hidden]{display:none!important}
 .boot-loader{position:fixed;inset:0;z-index:10050;display:grid;place-items:center;padding:24px;background:rgba(2,11,18,.93);backdrop-filter:blur(8px);opacity:0;transition:opacity .16s ease;pointer-events:none}
 .boot-loader.is-visible{opacity:1;pointer-events:auto}
 .boot-loader-card{width:min(260px,82vw);display:grid;justify-items:center;gap:8px;padding:22px 20px;border:1px solid rgba(30,209,122,.22);border-radius:22px;background:linear-gradient(160deg,rgba(9,31,42,.98),rgba(3,18,27,.98));box-shadow:0 22px 60px rgba(0,0,0,.38);text-align:center}
-.boot-loader-card img{width:64px;height:64px;object-fit:contain;filter:drop-shadow(0 10px 18px rgba(0,0,0,.32))}
 .boot-loader-card strong{font-size:1rem;letter-spacing:.01em}
 .boot-loader-card small{min-height:1.3em;color:var(--muted);font-size:.78rem;line-height:1.35}
 .boot-loader-spinner{width:22px;height:22px;margin:2px 0 3px;border:2px solid rgba(255,255,255,.16);border-top-color:var(--primary);border-radius:50%;animation:boot-loader-spin .72s linear infinite}
 .boot-loader.is-slow .boot-loader-card{border-color:rgba(255,189,89,.32)}
 @keyframes boot-loader-spin{to{transform:rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){.boot-loader,.boot-loader-spinner{transition:none;animation:none}.boot-loader-spinner{border-top-color:rgba(255,255,255,.7)}}
+
+/* Tâmo On Build 138 — wordmark textual resiliente, sem dependência de imagem no carregamento. */
+.brand-wordmark{display:inline-flex;align-items:center;justify-content:center;gap:.28em;color:#f4fbf7;font-weight:800;letter-spacing:-.035em;line-height:1;white-space:nowrap}
+.brand-wordmark-name{font-weight:800}
+.brand-wordmark-on{display:inline-flex;align-items:center;justify-content:center;padding:.22em .38em;border-radius:.42em;background:#1ed17a;color:#062317;font-size:.72em;letter-spacing:.02em;box-shadow:0 8px 22px rgba(30,209,122,.24)}
+.boot-loader-brand{font-size:1.72rem;margin-bottom:2px;filter:drop-shadow(0 10px 18px rgba(0,0,0,.28))}
+.auth-brand-wordmark{font-size:2.15rem;margin:4px auto 18px}
+.auth-stadium .auth-brand-wordmark{position:relative;z-index:2;font-size:2.5rem;margin:0 0 8px;filter:drop-shadow(0 12px 18px rgba(0,0,0,.38))}
+.simple-auth .auth-brand-wordmark{font-size:2.15rem;margin-bottom:18px}
