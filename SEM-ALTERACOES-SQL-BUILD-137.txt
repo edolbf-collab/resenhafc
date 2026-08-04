@@ -1,0 +1,9 @@
+RESENHA FC — BETA 1.0 BUILD 137
+
+Esta build não altera o banco de dados.
+Não execute migração SQL.
+Banco esperado: Build 136 r1.
+
+Esta build não altera Edge Functions.
+publish-announcement esperada: Build 108.
+delete-beta-user esperada: Build 105.

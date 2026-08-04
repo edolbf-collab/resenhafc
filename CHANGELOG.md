@@ -209,3 +209,14 @@ Reconstrução do carregamento do Supabase com base na Build 115, mantendo a ins
 - botão para copiar o e-mail e solicitar autorização;
 - verificação de liberação diretamente na tela, sem reinstalar ou refazer o login;
 - mensagens distintas para acesso pendente, liberado e indisponibilidade de conexão.
+
+
+## Beta 1.0 Build 137
+
+- elimina o estado global nulo durante a inicialização;
+- adiciona tela de carregamento progressiva, exibida apenas após 240 ms;
+- impede ações antes do carregamento de sessão, perfil e grupos;
+- aguarda a inicialização antes de processar rotas abertas por push;
+- detecta divergência entre as builds do HTML e do JavaScript;
+- identifica a build ativa do service worker;
+- amplia o contexto dos erros de frontend para facilitar auditoria no beta.

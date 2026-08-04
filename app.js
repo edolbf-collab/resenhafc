@@ -1,7 +1,27 @@
 (() => {
   "use strict";
 
-  const APP_RELEASE = Object.freeze({ channel: "beta", version: "Beta 1.0", build: 136, database: 136, edge: 108 });
+  const APP_RELEASE = Object.freeze({ channel: "beta", version: "Beta 1.0", build: 137, database: 136, edge: 108 });
+  const APP_ASSET_TOKEN = "beta137r1";
+  const createEmptyState = () => ({
+    profile: null,
+    groups: [],
+    currentGroupId: null,
+    members: [],
+    players: [],
+    matches: [],
+    attendance: [],
+    assignments: [],
+    charges: [],
+    payments: [],
+    expenses: [],
+    member_ratings: [],
+    match_events: [],
+    announcements: [],
+    push_subscriptions: [],
+    is_platform_admin: false,
+    beta_access: null
+  });
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
   const uid = () => crypto.randomUUID?.() || "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
@@ -38,7 +58,7 @@
   const avatarKey = value => /^badge-(0[1-9]|1[0-9]|20)$/.test(String(value || "")) ? String(value) : "badge-01";
   const groupAvatarUrl = key => {
     const normalized = avatarKey(key);
-    return window.RESENHA_GROUP_AVATARS?.[normalized] || assetUrl(`assets/group-avatars/${normalized}.png?v=beta136r1`);
+    return window.RESENHA_GROUP_AVATARS?.[normalized] || assetUrl(`assets/group-avatars/${normalized}.png?v=beta137r1`);
   };
   const positionOptions = ["Goleiro", "Zagueiro", "Lateral", "Volante", "Meia", "Atacante", "Coringa"];
   const isPrimaryGoalkeeper = player => String(player?.primary_position || "") === "Goleiro";
@@ -109,25 +129,7 @@
       this.client = window.supabase.createClient(config.supabaseUrl, config.supabasePublishableKey, {
         auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
       });
-      this.state = {
-        profile: null,
-        groups: [],
-        currentGroupId: null,
-        members: [],
-        players: [],
-        matches: [],
-        attendance: [],
-        assignments: [],
-        charges: [],
-        payments: [],
-        expenses: [],
-        member_ratings: [],
-        match_events: [],
-        announcements: [],
-        push_subscriptions: [],
-        is_platform_admin: false,
-        beta_access: null
-      };
+      this.state = createEmptyState();
       this.channel = null;
       this.subscribedGroupId = null;
       this.reloadTimer = null;
@@ -854,7 +856,11 @@
   const App = {
     route: "home",
     repo: null,
-    state: null,
+    state: createEmptyState(),
+    ready: false,
+    bootStartedAt: 0,
+    bootLoaderTimer: null,
+    bootSlowTimer: null,
     pendingInvite: "",
     launchAction: "",
     launchGroupId: "",
@@ -867,22 +873,111 @@
     lastSyncAt: null,
     accessCheckTimer: null,
 
+    htmlBuild() {
+      return Number(document.querySelector('meta[name="app-build"]')?.content || 0);
+    },
+
+    startBootFeedback() {
+      this.bootStartedAt = performance.now();
+      this.ready = false;
+      $("#app")?.setAttribute("aria-busy", "true");
+      clearTimeout(this.bootLoaderTimer);
+      clearTimeout(this.bootSlowTimer);
+      const loader = $("#bootLoader");
+      if (!loader) return;
+      loader.hidden = true;
+      loader.classList.remove("is-visible", "is-slow");
+      this.bootLoaderTimer = setTimeout(() => {
+        if (this.ready) return;
+        loader.hidden = false;
+        requestAnimationFrame(() => loader.classList.add("is-visible"));
+      }, 240);
+      this.bootSlowTimer = setTimeout(() => {
+        if (this.ready) return;
+        loader.classList.add("is-slow");
+        const text = $("[data-boot-message]", loader);
+        if (text) text.textContent = navigator.onLine ? "Sincronizando os dados do grupo…" : "Aguardando conexão com a internet…";
+      }, 4500);
+    },
+
+    finishBootFeedback() {
+      this.ready = true;
+      $("#app")?.setAttribute("aria-busy", "false");
+      clearTimeout(this.bootLoaderTimer);
+      clearTimeout(this.bootSlowTimer);
+      const loader = $("#bootLoader");
+      if (!loader) return;
+      loader.classList.remove("is-visible", "is-slow");
+      setTimeout(() => { loader.hidden = true; }, 170);
+    },
+
+    cancelBootFeedback() {
+      this.ready = false;
+      $("#app")?.setAttribute("aria-busy", "false");
+      clearTimeout(this.bootLoaderTimer);
+      clearTimeout(this.bootSlowTimer);
+      const loader = $("#bootLoader");
+      if (loader) {
+        loader.classList.remove("is-visible", "is-slow");
+        loader.hidden = true;
+      }
+    },
+
+    ensureReady() {
+      if (this.ready) return true;
+      return false;
+    },
+
+    detectBuildMismatch() {
+      const htmlBuild = this.htmlBuild();
+      if (!htmlBuild || htmlBuild === APP_RELEASE.build) return false;
+      const key = `resenha-build-reload-${htmlBuild}-${APP_RELEASE.build}`;
+      if (!sessionStorage.getItem(key)) {
+        sessionStorage.setItem(key, "1");
+        const url = new URL(location.href);
+        url.searchParams.set("app_update", Date.now().toString());
+        location.replace(url.href);
+        return true;
+      }
+      this.updateAvailable = { build: Math.max(htmlBuild, APP_RELEASE.build), version: "Arquivos em atualização" };
+      return false;
+    },
+
     async init() {
       this.bindGlobal();
       this.captureInviteIntent();
+      this.startBootFeedback();
+      if (this.detectBuildMismatch()) return;
       const config = window.RESENHA_CONFIG || {};
-      if (!(config.supabaseUrl && config.supabasePublishableKey)) return this.renderConfigurationError();
-      if (!window.supabase) return this.renderBackendError(window.RESENHA_CLOUD_LOAD_ERROR || new Error("Não foi possível carregar o cliente Supabase."));
+      if (!(config.supabaseUrl && config.supabasePublishableKey)) {
+        this.cancelBootFeedback();
+        return this.renderConfigurationError();
+      }
+      if (!window.supabase) {
+        this.cancelBootFeedback();
+        return this.renderBackendError(window.RESENHA_CLOUD_LOAD_ERROR || new Error("Não foi possível carregar o cliente Supabase."));
+      }
 
       this.repo = new SupabaseRepository(config);
       try {
-        this.state = await this.repo.init(this.launchGroupId || localStorage.getItem("resenha-current-group") || null);
-        if (!this.state) return this.renderAuth();
+        const loadedState = await this.repo.init(this.launchGroupId || localStorage.getItem("resenha-current-group") || null);
+        if (!loadedState) {
+          this.cancelBootFeedback();
+          return this.renderAuth();
+        }
+        this.state = loadedState || createEmptyState();
         this.lastSyncAt = nowIso();
+        this.finishBootFeedback();
         this.render();
         this.startAccessMonitor();
         await this.registerServiceWorker();
-        this.repo.logEvent("app_open", { groups: this.state.groups.length });
+        this.repo.logEvent("app_open", {
+          groups: Array.isArray(this.state?.groups) ? this.state.groups.length : 0,
+          htmlBuild: this.htmlBuild(),
+          jsBuild: APP_RELEASE.build,
+          assetToken: APP_ASSET_TOKEN,
+          swBuild: window.resenhaPwa?.getState?.().swBuild || null
+        });
         this.checkForUpdates();
         navigator.clearAppBadge?.().catch?.(() => {});
         if (this.pendingInvite) setTimeout(() => this.openJoinGroupModal(this.pendingInvite), 80);
@@ -891,6 +986,7 @@
         else if (this.launchMatchId) setTimeout(() => this.openMatchDetails(this.launchMatchId), 120);
         setTimeout(() => this.maybeShowNotificationOnboarding(), 650);
       } catch (error) {
+        this.cancelBootFeedback();
         console.error(error);
         if (error?.betaAccessDenied || /beta fechado|acesso ao beta|não está autorizado|acesso.*bloqueado/i.test(error?.message || "")) {
           return this.renderBetaAccessDenied(error);
@@ -934,6 +1030,12 @@
     bindGlobal() {
       document.addEventListener("click", event => {
         const nav = event.target.closest("[data-route]");
+        const action = event.target.closest("[data-action]");
+        const appControl = nav || action || event.target.closest("#groupButton, #groupAvatarButton, #notificationButton, #profileButton");
+        if (appControl && !this.ensureReady()) {
+          event.preventDefault();
+          return;
+        }
         if (nav) {
           const targetRoute = nav.dataset.route;
           if (targetRoute === "teams") {
@@ -944,7 +1046,6 @@
           this.render();
           window.scrollTo({ top: 0, behavior: "smooth" });
         }
-        const action = event.target.closest("[data-action]");
         if (action) this.handleAction(action.dataset.action, action.dataset);
       });
       document.addEventListener("keydown", event => {
@@ -967,19 +1068,41 @@
       window.addEventListener("focus", () => this.verifyBetaAccess());
       window.addEventListener("error", event => {
         if (!this.repo || !event.error) return;
-        this.repo.logEvent("frontend_error", { message: event.message, source: event.filename?.split("/").pop() || "", line: event.lineno || 0 }, "error");
+        this.repo.logEvent("frontend_error", {
+          message: event.message,
+          source: event.filename?.split("/").pop() || "",
+          line: event.lineno || 0,
+          column: event.colno || 0,
+          route: this.route,
+          ready: this.ready,
+          hasState: Boolean(this.state),
+          groupsLoaded: Array.isArray(this.state?.groups),
+          groupCount: Array.isArray(this.state?.groups) ? this.state.groups.length : 0,
+          htmlBuild: this.htmlBuild(),
+          jsBuild: APP_RELEASE.build,
+          assetToken: APP_ASSET_TOKEN,
+          swBuild: window.resenhaPwa?.getState?.().swBuild || null
+        }, "error");
       });
       window.addEventListener("unhandledrejection", event => {
         if (!this.repo) return;
         const reason = event.reason;
-        this.repo.logEvent("unhandled_rejection", { message: reason?.message || String(reason || "Erro assíncrono") }, "error");
+        this.repo.logEvent("unhandled_rejection", {
+          message: reason?.message || String(reason || "Erro assíncrono"),
+          route: this.route,
+          ready: this.ready,
+          htmlBuild: this.htmlBuild(),
+          jsBuild: APP_RELEASE.build,
+          assetToken: APP_ASSET_TOKEN,
+          swBuild: window.resenhaPwa?.getState?.().swBuild || null
+        }, "error");
       });
       document.addEventListener("error", event => {
         const image = event.target;
         if (!(image instanceof HTMLImageElement) || !image.matches("[data-group-avatar]")) return;
         if (image.dataset.fallbackApplied === "true") return;
         image.dataset.fallbackApplied = "true";
-        image.src = window.RESENHA_GROUP_AVATARS?.["badge-01"] || assetUrl("assets/group-avatars/badge-01.png?v=beta136r1");
+        image.src = window.RESENHA_GROUP_AVATARS?.["badge-01"] || assetUrl("assets/group-avatars/badge-01.png?v=beta137r1");
       }, true);
     },
 
@@ -1052,7 +1175,7 @@
     },
 
     currentGroup() {
-      return this.state?.groups.find(group => group.id === this.state.currentGroupId) || this.state?.groups[0] || null;
+      return (this.state?.groups || []).find(group => group.id === this.state.currentGroupId) || (this.state?.groups || [])[0] || null;
     },
     currentRole() {
       const role = this.currentGroup()?.role || "member";
@@ -1066,13 +1189,13 @@
     guestPlayers() { return (this.state?.players || []).filter(player => player.active !== false && Boolean(player.guest_match_id)); },
     matchPlayers(matchId) { return (this.state?.players || []).filter(player => player.active !== false && (!player.guest_match_id || player.guest_match_id === matchId)); },
     isGuest(player) { return Boolean(player?.guest_match_id); },
-    player(id) { return this.state?.players.find(player => player.id === id); },
-    memberPlayer(member) { return this.player(member?.player_id) || this.state?.players.find(player => player.user_id === member?.user_id); },
+    player(id) { return (this.state?.players || []).find(player => player.id === id); },
+    memberPlayer(member) { return this.player(member?.player_id) || (this.state?.players || []).find(player => player.user_id === member?.user_id); },
     myPlayer() {
       const group = this.currentGroup();
-      return this.player(group?.player_id) || this.state?.players.find(player => player.user_id === this.state?.profile?.id) || null;
+      return this.player(group?.player_id) || (this.state?.players || []).find(player => player.user_id === this.state?.profile?.id) || null;
     },
-    adminMember() { return this.state?.members.find(member => ["admin", "owner"].includes(member.role)) || null; },
+    adminMember() { return (this.state?.members || []).find(member => ["admin", "owner"].includes(member.role)) || null; },
     attendanceFor(matchId) { return this.state?.attendance.filter(item => item.match_id === matchId) || []; },
     confirmedFor(matchId) { return this.attendanceFor(matchId).filter(item => item.status === "confirmed"); },
     waitlistFor(matchId) {
@@ -1112,7 +1235,7 @@
     },
 
     render() {
-      if (!this.state) return;
+      if (!this.ready || !this.state) return;
       const group = this.currentGroup();
       const groupImg = $("#groupAvatar");
       if (groupImg) {
@@ -1161,7 +1284,7 @@
       const confirmed = attendance.filter(item => item.status === "confirmed");
       const waitlist = attendance.filter(item => item.status === "waitlist");
       const overflow = Math.max(0, confirmed.length - Number(match?.max_players || 0));
-      const notice = [...this.state.announcements].sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0];
+      const notice = [...(this.state?.announcements || [])].sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0];
       const administrator = this.memberPlayer(this.adminMember());
       const player = this.myPlayer();
       const myAttendance = match && player
@@ -1209,7 +1332,7 @@
     },
 
     teamsPage() {
-      const explicitlySelected = this.state.matches.find(item => item.id === this.selectedTeamMatchId) || null;
+      const explicitlySelected = (this.state?.matches || []).find(item => item.id === this.selectedTeamMatchId) || null;
       const historicalMatch = this.selectedTeamMatchHistoryMode && this.isHistoricalMatch(explicitlySelected)
         ? explicitlySelected
         : null;
@@ -1259,7 +1382,7 @@
     },
 
     membersPage() {
-      const sortedMembers = [...this.state.members].sort((a, b) => {
+      const sortedMembers = [...(this.state?.members || [])].sort((a, b) => {
         const weight = { owner: 0, admin: 0, organizer: 1, treasurer: 2, member: 3 };
         return (weight[a.role] - weight[b.role]) || String(this.memberPlayer(a)?.name).localeCompare(String(this.memberPlayer(b)?.name));
       });
@@ -1492,7 +1615,7 @@
     },
 
     openGroupModal(prefillCode = "") {
-      const groups = this.state.groups || [];
+      const groups = Array.isArray(this.state?.groups) ? this.state.groups : [];
       const current = this.currentGroup();
       const list = groups.length
         ? `<div class="list group-list">${groups.map(group => {
@@ -2562,7 +2685,7 @@ As confirmações, o sorteio da espera e a quantidade configurada de times serã
       try { await this.repo.session(); } catch { dbStatus = "Falha"; }
       const sync = this.lastSyncAt ? shortDate(this.lastSyncAt) : "Não registrada";
       const updateText = this.updateAvailable ? "Atualização pendente" : "Sem atualização detectada";
-      this.modal("Sobre e diagnóstico", `<div class="diagnostic-grid"><div class="diagnostic-item ${online ? "ok" : "bad"}"><span></span><div><small>Internet</small><strong>${online ? "Conectado" : "Offline"}</strong></div></div><div class="diagnostic-item ${dbStatus === "Disponível" ? "ok" : "bad"}"><span></span><div><small>Banco e sessão</small><strong>${dbStatus}</strong></div></div><div class="diagnostic-item ${subscription ? "ok" : "warn"}"><span></span><div><small>Push deste aparelho</small><strong>${escapeHtml(subscription ? "Vinculado" : push)}</strong></div></div><div class="diagnostic-item ${this.updateAvailable ? "warn" : "ok"}"><span></span><div><small>Atualização</small><strong>${escapeHtml(updateText)}</strong></div></div></div><div class="system-info-card"><div><span>Aplicativo</span><strong>${APP_RELEASE.version}</strong></div><div><span>Build</span><strong>${APP_RELEASE.build}</strong></div><div><span>Banco esperado</span><strong>${APP_RELEASE.database}</strong></div><div><span>Última sincronização</span><strong>${escapeHtml(sync)}</strong></div><div><span>Modo</span><strong>${isStandalone() ? "Instalado" : "Navegador"}</strong></div><div><span>Dispositivo</span><strong>${escapeHtml(deviceLabel())}</strong></div></div><button class="btn btn-secondary btn-block" data-action="check-update">Verificar atualização</button><button class="btn btn-primary btn-block" data-action="report-problem">Reportar problema</button>`, () => {});
+      this.modal("Sobre e diagnóstico", `<div class="diagnostic-grid"><div class="diagnostic-item ${online ? "ok" : "bad"}"><span></span><div><small>Internet</small><strong>${online ? "Conectado" : "Offline"}</strong></div></div><div class="diagnostic-item ${dbStatus === "Disponível" ? "ok" : "bad"}"><span></span><div><small>Banco e sessão</small><strong>${dbStatus}</strong></div></div><div class="diagnostic-item ${subscription ? "ok" : "warn"}"><span></span><div><small>Push deste aparelho</small><strong>${escapeHtml(subscription ? "Vinculado" : push)}</strong></div></div><div class="diagnostic-item ${this.updateAvailable ? "warn" : "ok"}"><span></span><div><small>Atualização</small><strong>${escapeHtml(updateText)}</strong></div></div></div><div class="system-info-card"><div><span>Aplicativo</span><strong>${APP_RELEASE.version}</strong></div><div><span>Build do aplicativo</span><strong>${APP_RELEASE.build}</strong></div><div><span>Build do HTML</span><strong>${this.htmlBuild() || "—"}</strong></div><div><span>Service worker</span><strong>${escapeHtml(String(window.resenhaPwa?.getState?.().swBuild || "verificando"))}</strong></div><div><span>Banco esperado</span><strong>${APP_RELEASE.database}</strong></div><div><span>Última sincronização</span><strong>${escapeHtml(sync)}</strong></div><div><span>Modo</span><strong>${isStandalone() ? "Instalado" : "Navegador"}</strong></div><div><span>Dispositivo</span><strong>${escapeHtml(deviceLabel())}</strong></div></div><button class="btn btn-secondary btn-block" data-action="check-update">Verificar atualização</button><button class="btn btn-primary btn-block" data-action="report-problem">Reportar problema</button>`, () => {});
     },
 
     async openPlatformAdmin() {
@@ -2728,7 +2851,7 @@ As confirmações, o sorteio da espera e a quantidade configurada de times serã
           const duration = row.duration_ms != null ? ` · ${Number(row.duration_ms)} ms` : "";
           const context = [row.group_name, row.device_label, row.event_type].filter(Boolean).join(" · ");
           return `<article class="push-attempt-row ${sent ? "is-sent" : "is-failed"}"><div class="push-attempt-head"><span>${sent ? "✓" : "!"}</span><div><strong>${sent ? "Entregue ao serviço de push" : "Falha no envio"}</strong><small>${escapeHtml(shortDate(row.created_at))}${escapeHtml(code)}${escapeHtml(duration)}</small></div></div><div class="push-attempt-meta">${escapeHtml(context || "Notificação")}${row.event_id ? `<br><span>Referência: ${escapeHtml(row.event_id)}</span>` : ""}</div>${row.failure_reason ? `<p>${escapeHtml(row.failure_reason)}</p>` : ""}</article>`;
-        }).join("") || '<div class="card empty"><strong>Nenhuma tentativa registrada</strong><span>O aparelho ainda não recebeu um envio após a instalação da Build 136.</span></div>';
+        }).join("") || '<div class="card empty"><strong>Nenhuma tentativa registrada</strong><span>O aparelho ainda não recebeu um envio desde a ativação das métricas detalhadas.</span></div>';
         const lastFailure = item.last_failure_at ? shortDate(item.last_failure_at) : "Nenhuma";
         this.modal("Tentativas de notificação", `<div class="push-detail-user"><strong>${escapeHtml(item.user_name || item.email)}</strong><small>${escapeHtml(item.email)}</small></div><div class="admin-stats compact">${`<div class="admin-stat"><small>Tentativas</small><strong>${rows.length}</strong></div>`}${`<div class="admin-stat"><small>Entregues</small><strong>${successCount}</strong></div>`}${`<div class="admin-stat ${failureCount ? "danger" : ""}"><small>Falhas</small><strong>${failureCount}</strong></div>`}${`<div class="admin-stat"><small>Falhas consecutivas</small><strong>${Number(item.consecutive_failures_max || 0)}</strong></div>`}</div><div class="notice"><strong>Última falha</strong><br>${escapeHtml(lastFailure)}${item.last_failure_status ? ` · código ${escapeHtml(String(item.last_failure_status))}` : ""}${item.last_failure_reason ? `<br>${escapeHtml(item.last_failure_reason)}` : ""}</div><div class="push-attempt-list">${attempts}</div><button type="button" class="btn btn-secondary btn-block" id="backToPlatformPanel">Voltar ao Painel Beta</button>`, (root, close) => {
           $("#backToPlatformPanel", root)?.addEventListener("click", () => { close(); this.openPlatformAdmin(); });

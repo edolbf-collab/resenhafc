@@ -1,3 +1,27 @@
+# Resenha FC — Beta 1.0 Build 137
+
+Linha de base construída sobre a Build 136 r1. Consulte `ATUALIZACAO-BETA-1.0-BUILD-137.md`.
+
+## Versões
+- Frontend: 137
+- Banco: 136 r1
+- Edge Function `publish-announcement`: 108
+
+## Destaques
+- inicialização com estado seguro, sem objeto global nulo;
+- carregamento progressivo exibido somente quando necessário;
+- ações bloqueadas até a conclusão da sincronização essencial;
+- detecção de divergência entre HTML, JavaScript e service worker;
+- diagnóstico ampliado de erros de inicialização.
+
+## Implantação
+1. Publique os arquivos incrementais.
+2. Preserve `supabase-config.js`.
+3. Não execute SQL e não republique Edge Functions.
+4. Feche o PWA e abra novamente após o deploy.
+
+---
+
 # Resenha FC — Beta 1.0 Build 136
 
 Linha de base construída sobre a Build 135. Consulte `ATUALIZACAO-BETA-1.0-BUILD-136.md`.

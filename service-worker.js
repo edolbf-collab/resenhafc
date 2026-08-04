@@ -1,32 +1,33 @@
-const CACHE = "resenha-fc-beta-1.0-build-136-r1";
+const SW_BUILD = 137;
+const CACHE = "resenha-fc-beta-1.0-build-137-r1";
 const ASSETS = [
   "/",
   "/index.html",
-  "/styles.css?v=beta136r1",
-  "/app.js?v=beta136r1",
-  "/pwa-bootstrap.js?v=beta136r1",
+  "/styles.css?v=beta137r1",
+  "/app.js?v=beta137r1",
+  "/pwa-bootstrap.js?v=beta137r1",
   "/supabase-config.js?v=0.3.3",
-  "/group-avatars-data.js?v=beta136r1",
-  "/assets/group-avatars-build-127/badge-01.png?v=beta136r1",
-  "/assets/group-avatars-build-127/badge-02.png?v=beta136r1",
-  "/assets/group-avatars-build-127/badge-03.png?v=beta136r1",
-  "/assets/group-avatars-build-127/badge-04.png?v=beta136r1",
-  "/assets/group-avatars-build-127/badge-05.png?v=beta136r1",
-  "/assets/group-avatars-build-127/badge-06.png?v=beta136r1",
-  "/assets/group-avatars-build-127/badge-07.png?v=beta136r1",
-  "/assets/group-avatars-build-127/badge-08.png?v=beta136r1",
-  "/assets/group-avatars-build-127/badge-09.png?v=beta136r1",
-  "/assets/group-avatars-build-127/badge-10.png?v=beta136r1",
-  "/assets/group-avatars-build-127/badge-11.png?v=beta136r1",
-  "/assets/group-avatars-build-127/badge-12.png?v=beta136r1",
-  "/assets/group-avatars-build-127/badge-13.png?v=beta136r1",
-  "/assets/group-avatars-build-127/badge-14.png?v=beta136r1",
-  "/assets/group-avatars-build-127/badge-15.png?v=beta136r1",
-  "/assets/group-avatars-build-127/badge-16.png?v=beta136r1",
-  "/assets/group-avatars-build-127/badge-17.png?v=beta136r1",
-  "/assets/group-avatars-build-127/badge-18.png?v=beta136r1",
-  "/assets/group-avatars-build-127/badge-19.png?v=beta136r1",
-  "/assets/group-avatars-build-127/badge-20.png?v=beta136r1",
+  "/group-avatars-data.js?v=beta137r1",
+  "/assets/group-avatars-build-127/badge-01.png?v=beta137r1",
+  "/assets/group-avatars-build-127/badge-02.png?v=beta137r1",
+  "/assets/group-avatars-build-127/badge-03.png?v=beta137r1",
+  "/assets/group-avatars-build-127/badge-04.png?v=beta137r1",
+  "/assets/group-avatars-build-127/badge-05.png?v=beta137r1",
+  "/assets/group-avatars-build-127/badge-06.png?v=beta137r1",
+  "/assets/group-avatars-build-127/badge-07.png?v=beta137r1",
+  "/assets/group-avatars-build-127/badge-08.png?v=beta137r1",
+  "/assets/group-avatars-build-127/badge-09.png?v=beta137r1",
+  "/assets/group-avatars-build-127/badge-10.png?v=beta137r1",
+  "/assets/group-avatars-build-127/badge-11.png?v=beta137r1",
+  "/assets/group-avatars-build-127/badge-12.png?v=beta137r1",
+  "/assets/group-avatars-build-127/badge-13.png?v=beta137r1",
+  "/assets/group-avatars-build-127/badge-14.png?v=beta137r1",
+  "/assets/group-avatars-build-127/badge-15.png?v=beta137r1",
+  "/assets/group-avatars-build-127/badge-16.png?v=beta137r1",
+  "/assets/group-avatars-build-127/badge-17.png?v=beta137r1",
+  "/assets/group-avatars-build-127/badge-18.png?v=beta137r1",
+  "/assets/group-avatars-build-127/badge-19.png?v=beta137r1",
+  "/assets/group-avatars-build-127/badge-20.png?v=beta137r1",
   "/manifest.json",
   "/offline.html",
   "/version.json",
@@ -117,4 +118,7 @@ self.addEventListener("notificationclick", event => {
 
 self.addEventListener("message", event => {
   if (event.data?.type === "SKIP_WAITING") self.skipWaiting();
+  if (event.data?.type === "GET_VERSION") {
+    event.source?.postMessage?.({ type: "RESENHA_SW_VERSION", build: SW_BUILD, cache: CACHE });
+  }
 });
