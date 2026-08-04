@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const APP_RELEASE = Object.freeze({ channel: "beta", version: "Beta 1.0", build: 134, database: 134, edge: 106 });
+  const APP_RELEASE = Object.freeze({ channel: "beta", version: "Beta 1.0", build: 135, database: 135, edge: 107 });
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
   const uid = () => crypto.randomUUID?.() || "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
@@ -38,7 +38,7 @@
   const avatarKey = value => /^badge-(0[1-9]|1[0-9]|20)$/.test(String(value || "")) ? String(value) : "badge-01";
   const groupAvatarUrl = key => {
     const normalized = avatarKey(key);
-    return window.RESENHA_GROUP_AVATARS?.[normalized] || assetUrl(`assets/group-avatars/${normalized}.png?v=beta134r1`);
+    return window.RESENHA_GROUP_AVATARS?.[normalized] || assetUrl(`assets/group-avatars/${normalized}.png?v=beta135r1`);
   };
   const positionOptions = ["Goleiro", "Zagueiro", "Lateral", "Volante", "Meia", "Atacante", "Coringa"];
   const isPrimaryGoalkeeper = player => String(player?.primary_position || "") === "Goleiro";
@@ -221,7 +221,7 @@
         this.state[stateKey] = result.data || [];
       });
 
-      const subscriptions = await this.client.from("push_subscriptions").select("id,endpoint,device_label,enabled,created_at,updated_at").eq("user_id", this.state.profile.id);
+      const subscriptions = await this.client.from("push_subscriptions").select("id,endpoint,device_label,enabled,created_at,updated_at,last_attempt_at,last_success_at,last_failure_at,last_failure_status,last_failure_reason,consecutive_failures,invalidated_at,last_test_at").eq("user_id", this.state.profile.id);
       if (subscriptions.error) throw subscriptions.error;
       this.state.push_subscriptions = subscriptions.data || [];
 
@@ -561,7 +561,7 @@
 
       const verification = await this.client
         .from("push_subscriptions")
-        .select("id,endpoint,device_label,enabled,created_at,updated_at")
+        .select("id,endpoint,device_label,enabled,created_at,updated_at,last_attempt_at,last_success_at,last_failure_at,last_failure_status,last_failure_reason,consecutive_failures,invalidated_at,last_test_at")
         .eq("user_id", this.state.profile.id)
         .eq("endpoint", endpoint)
         .eq("enabled", true)
@@ -670,6 +670,27 @@
       });
     }
 
+    async testPushNotification(groupId, endpoint) {
+      return this.invokeNotification({
+        action: "test-push",
+        groupId,
+        endpoint
+      });
+    }
+
+    async createBatchCharges(groupId, playerIds, description, amount, dueDate) {
+      const { data, error } = await this.client.rpc("create_batch_charges", {
+        p_group_id: groupId,
+        p_player_ids: playerIds,
+        p_description: description,
+        p_amount: Number(amount),
+        p_due_date: dueDate
+      });
+      if (error) throw error;
+      await this.loadGroup(groupId, { subscribe: false });
+      return data || {};
+    }
+
     async deleteFinanceEntry(groupId, entryType, entryId) {
       const { error } = await this.client.rpc("delete_finance_entry", {
         p_group_id: groupId,
@@ -730,7 +751,7 @@
         this.client.rpc("platform_error_groups", { p_hours: 24, p_limit: 40 }),
         this.client.rpc("platform_beta_access_list", { p_limit: 300 }),
         this.client.rpc("platform_security_summary"),
-        this.client.rpc("platform_push_status_list", { p_limit: 500 })
+        this.client.rpc("platform_push_health_list", { p_limit: 500 })
       ]);
       for (const result of [summary, reports, logs, errorGroups, accessList, security, pushStatus]) if (result.error) throw result.error;
       return {
@@ -804,6 +825,22 @@
       const { data, error } = await this.client.rpc("platform_operational_export", { p_days: days, p_log_limit: logLimit });
       if (error) throw error;
       return data || {};
+    }
+
+    async platformGroupExport(groupId) {
+      const { data, error } = await this.client.rpc("platform_group_export", { p_group_id: groupId });
+      if (error) throw error;
+      return data || {};
+    }
+
+    async platformPushDeliveryAttempts(userId = null, days = 30, limit = 500) {
+      const { data, error } = await this.client.rpc("platform_push_delivery_attempts", {
+        p_user_id: userId || null,
+        p_days: days,
+        p_limit: limit
+      });
+      if (error) throw error;
+      return data || [];
     }
 
     async appRelease() {
@@ -942,7 +979,7 @@
         if (!(image instanceof HTMLImageElement) || !image.matches("[data-group-avatar]")) return;
         if (image.dataset.fallbackApplied === "true") return;
         image.dataset.fallbackApplied = "true";
-        image.src = window.RESENHA_GROUP_AVATARS?.["badge-01"] || assetUrl("assets/group-avatars/badge-01.png?v=beta134r1");
+        image.src = window.RESENHA_GROUP_AVATARS?.["badge-01"] || assetUrl("assets/group-avatars/badge-01.png?v=beta135r1");
       }, true);
     },
 
@@ -1293,15 +1330,15 @@
           : "";
         return `<div class="card list-row finance-charge-row">${this.personAvatar(player)}<div class="list-main"><strong>${escapeHtml(player.name)}</strong><small>${escapeHtml(charge.description)} · Total: ${money(charge.amount)}</small>${paymentDetails}</div><span class="status-pill ${statusClass}">${statusLabel}</span>${canDelete ? `<button class="row-delete-button" data-action="delete-finance" data-type="charge" data-id="${charge.id}" aria-label="Excluir cobrança">×</button>` : ""}</div>`;
       }).join("");
-      return `<div class="page-head"><div><span class="page-kicker">FINANCEIRO</span><h1>Caixa</h1><p>Mensalidades, quadra, materiais e churrasco.</p></div>${canDelete ? '<button class="btn btn-primary btn-small" data-action="new-finance">+ Lançar</button>' : ""}</div><div class="content-stack">${!canDelete ? '<div class="notice"><strong>Acesso de consulta</strong><br>Somente administrador e tesoureiro podem alterar lançamentos.</div>' : '<div class="notice notice-success"><strong>Acesso autorizado</strong><br>Você pode registrar e excluir cobranças, pagamentos e despesas.</div>'}<section class="card balance-card"><small>Saldo atual</small><h2>${money(income - out)}</h2><div class="balance-grid"><div><small>Entradas</small><strong>${money(income)}</strong></div><div><small>Saídas</small><strong>${money(out)}</strong></div></div><div class="balance-track"><span style="width:${pct}%"></span></div><p>${paid} paga(s) · ${partial} parcial(is) · ${pct}% do valor cobrado recebido</p></section></div><div class="section-title"><h2>Movimentações</h2></div><div class="list">${movements.map(item => `<div class="card finance-row"><div class="finance-icon ${item.type === "income" ? "finance-income" : "finance-expense"}">${item.type === "income" ? "+" : "−"}</div><div class="list-main"><strong>${escapeHtml(item.description)}</strong><small>${escapeHtml(shortDate(item.date))}</small></div><strong class="money ${item.type === "income" ? "positive" : "negative"}">${item.type === "income" ? "+" : "−"}${money(item.amount)}</strong>${canDelete ? `<button class="row-delete-button" data-action="delete-finance" data-type="${item.entryType}" data-id="${item.id}" aria-label="Excluir lançamento">×</button>` : ""}</div>`).join("") || '<div class="card empty">Sem movimentações.</div>'}</div><div class="section-title"><h2>Cobranças</h2></div><div class="list">${chargeRows || '<div class="card empty">Nenhuma cobrança.</div>'}</div>`;
+      return `<div class="page-head"><div><span class="page-kicker">FINANCEIRO</span><h1>Caixa</h1><p>Mensalidades, quadra, materiais e churrasco.</p></div>${canDelete ? '<div class="page-head-actions"><button class="btn btn-secondary btn-small" data-action="batch-charge">Cobrança em lote</button><button class="btn btn-primary btn-small" data-action="new-finance">+ Lançar</button></div>' : ""}</div><div class="content-stack">${!canDelete ? '<div class="notice"><strong>Acesso de consulta</strong><br>Somente administrador e tesoureiro podem alterar lançamentos.</div>' : '<div class="notice notice-success"><strong>Acesso autorizado</strong><br>Você pode registrar e excluir cobranças, pagamentos e despesas.</div>'}<section class="card balance-card"><small>Saldo atual</small><h2>${money(income - out)}</h2><div class="balance-grid"><div><small>Entradas</small><strong>${money(income)}</strong></div><div><small>Saídas</small><strong>${money(out)}</strong></div></div><div class="balance-track"><span style="width:${pct}%"></span></div><p>${paid} paga(s) · ${partial} parcial(is) · ${pct}% do valor cobrado recebido</p></section></div><div class="section-title"><h2>Movimentações</h2></div><div class="list">${movements.map(item => `<div class="card finance-row"><div class="finance-icon ${item.type === "income" ? "finance-income" : "finance-expense"}">${item.type === "income" ? "+" : "−"}</div><div class="list-main"><strong>${escapeHtml(item.description)}</strong><small>${escapeHtml(shortDate(item.date))}</small></div><strong class="money ${item.type === "income" ? "positive" : "negative"}">${item.type === "income" ? "+" : "−"}${money(item.amount)}</strong>${canDelete ? `<button class="row-delete-button" data-action="delete-finance" data-type="${item.entryType}" data-id="${item.id}" aria-label="Excluir lançamento">×</button>` : ""}</div>`).join("") || '<div class="card empty">Sem movimentações.</div>'}</div><div class="section-title"><h2>Cobranças</h2></div><div class="list">${chargeRows || '<div class="card empty">Nenhuma cobrança.</div>'}</div>`;
     },
 
     morePage() {
       const group = this.currentGroup();
       const pushConfigured = Boolean(String(window.RESENHA_CONFIG?.vapidPublicKey || "").trim());
       const pushText = !pushSupported() ? "Este navegador não oferece notificações push." : !pushConfigured ? "Conclua a configuração VAPID." : "Receba avisos mesmo com o aplicativo fechado.";
-      const adminTools = this.state.is_platform_admin ? '<div class="section-title"><h2>Operação do beta</h2><small>Acesso exclusivo da plataforma.</small></div><button class="card menu-row admin-menu-row" data-action="platform-admin"><span class="menu-icon">◉</span><div class="list-main"><strong>Painel Beta</strong><small>Saúde, métricas, feedbacks e logs.</small></div><strong>›</strong></button>' : "";
-      return `<div class="page-head"><div><span class="page-kicker">CONFIGURAÇÕES</span><h1>Mais</h1><p>Administração, suporte e dados da conta.</p></div></div><div class="list"><button class="card menu-row" data-action="profile"><span class="menu-icon">⚽</span><div class="list-main"><strong>Meu perfil de jogador</strong><small>Nome, apelido e posição.</small></div><strong>›</strong></button><button class="card menu-row" data-action="notification-settings"><span class="menu-icon">🔔</span><div class="list-main"><strong>Notificações no celular</strong><small>${escapeHtml(pushText)}</small></div><strong>›</strong></button><button class="card menu-row" data-action="announcement-center"><span class="menu-icon">📣</span><div class="list-main"><strong>Central de avisos</strong><small>Consulte os comunicados do grupo.</small></div><strong>›</strong></button><button class="card menu-row" data-action="invite"><span class="menu-icon">↗</span><div class="list-main"><strong>Convidar pelo WhatsApp</strong><small>Código ${escapeHtml(group.invite_code)}</small></div><strong>›</strong></button>${this.canManageGroup() ? '<button class="card menu-row" data-action="group-settings"><span class="menu-icon">🛡</span><div class="list-main"><strong>Personalizar grupo</strong><small>Nome, escudo e administração.</small></div><strong>›</strong></button><button class="card menu-row" data-action="manage-roles"><span class="menu-icon">♟</span><div class="list-main"><strong>Gerenciar funções</strong><small>Administrador, organizador e tesoureiro.</small></div><strong>›</strong></button>' : ""}${this.canManageMatches() ? '<button class="card menu-row" data-action="announcement"><span class="menu-icon">!</span><div class="list-main"><strong>Publicar aviso</strong><small>Enviar comunicado e notificação ao elenco.</small></div><strong>›</strong></button><button class="card menu-row" data-action="players"><span class="menu-icon">+</span><div class="list-main"><strong>Jogadores sem acesso</strong><small>Cadastrar convidado eventual.</small></div><strong>›</strong></button>' : ""}<div class="section-title"><h2>Suporte do beta</h2></div><button class="card menu-row feedback-row" data-action="report-problem"><span class="menu-icon">⚑</span><div class="list-main"><strong>Reportar problema</strong><small>Envie o relato com diagnóstico automático.</small></div><strong>›</strong></button><button class="card menu-row" data-action="about-diagnostics"><span class="menu-icon">i</span><div class="list-main"><strong>Sobre e diagnóstico</strong><small>Versão, sincronização, push e atualização.</small></div><strong>›</strong></button>${adminTools}<button class="card menu-row" data-action="export"><span class="menu-icon">⇩</span><div class="list-main"><strong>Exportar dados do grupo</strong><small>Backup local em arquivo JSON.</small></div><strong>›</strong></button><button class="card menu-row danger-row" data-action="sign-out"><span class="menu-icon danger-avatar">↪</span><div class="list-main"><strong>Sair da conta</strong><small>Desconectar e escolher outra conta Google.</small></div><strong>›</strong></button></div><div class="version-card">Resenha FC ${APP_RELEASE.version} · Build ${APP_RELEASE.build} · Beta fechado</div>`;
+      const adminTools = this.state.is_platform_admin ? '<div class="section-title"><h2>Operação do beta</h2><small>Acesso exclusivo da plataforma.</small></div><button class="card menu-row admin-menu-row" data-action="platform-admin"><span class="menu-icon">◉</span><div class="list-main"><strong>Painel Beta</strong><small>Saúde, métricas, feedbacks e logs.</small></div><strong>›</strong></button><button class="card menu-row admin-menu-row" data-action="export"><span class="menu-icon">⇩</span><div class="list-main"><strong>Exportar backup integral do grupo</strong><small>Arquivo JSON restrito à administração da plataforma.</small></div><strong>›</strong></button>' : "";
+      return `<div class="page-head"><div><span class="page-kicker">CONFIGURAÇÕES</span><h1>Mais</h1><p>Administração, suporte e dados da conta.</p></div></div><div class="list"><button class="card menu-row" data-action="profile"><span class="menu-icon">⚽</span><div class="list-main"><strong>Meu perfil de jogador</strong><small>Nome, apelido e posição.</small></div><strong>›</strong></button><button class="card menu-row" data-action="notification-settings"><span class="menu-icon">🔔</span><div class="list-main"><strong>Notificações no celular</strong><small>${escapeHtml(pushText)}</small></div><strong>›</strong></button><button class="card menu-row" data-action="announcement-center"><span class="menu-icon">📣</span><div class="list-main"><strong>Central de avisos</strong><small>Consulte os comunicados do grupo.</small></div><strong>›</strong></button><button class="card menu-row" data-action="invite"><span class="menu-icon">↗</span><div class="list-main"><strong>Convidar pelo WhatsApp</strong><small>Código ${escapeHtml(group.invite_code)}</small></div><strong>›</strong></button>${this.canManageGroup() ? '<button class="card menu-row" data-action="group-settings"><span class="menu-icon">🛡</span><div class="list-main"><strong>Personalizar grupo</strong><small>Nome, escudo e administração.</small></div><strong>›</strong></button><button class="card menu-row" data-action="manage-roles"><span class="menu-icon">♟</span><div class="list-main"><strong>Gerenciar funções</strong><small>Administrador, organizador e tesoureiro.</small></div><strong>›</strong></button>' : ""}${this.canManageMatches() ? '<button class="card menu-row" data-action="announcement"><span class="menu-icon">!</span><div class="list-main"><strong>Publicar aviso</strong><small>Enviar comunicado e notificação ao elenco.</small></div><strong>›</strong></button><button class="card menu-row" data-action="players"><span class="menu-icon">+</span><div class="list-main"><strong>Jogadores sem acesso</strong><small>Cadastrar convidado eventual.</small></div><strong>›</strong></button>' : ""}<div class="section-title"><h2>Suporte do beta</h2></div><button class="card menu-row feedback-row" data-action="report-problem"><span class="menu-icon">⚑</span><div class="list-main"><strong>Reportar problema</strong><small>Envie o relato com diagnóstico automático.</small></div><strong>›</strong></button><button class="card menu-row" data-action="about-diagnostics"><span class="menu-icon">i</span><div class="list-main"><strong>Sobre e diagnóstico</strong><small>Versão, sincronização, push e atualização.</small></div><strong>›</strong></button>${adminTools}<button class="card menu-row danger-row" data-action="sign-out"><span class="menu-icon danger-avatar">↪</span><div class="list-main"><strong>Sair da conta</strong><small>Desconectar e escolher outra conta Google.</small></div><strong>›</strong></button></div><div class="version-card">Resenha FC ${APP_RELEASE.version} · Build ${APP_RELEASE.build} · Beta fechado</div>`;
     },
 
     async handleAction(action, data) {
@@ -1316,6 +1353,7 @@
           "configure-teams": () => this.drawTeams(data.id, Number($("#teamCountSelect")?.value || 2)),
           "clear-teams": () => this.undoTeamSeparation(data.id),
           "new-finance": () => this.openFinanceForm(),
+          "batch-charge": () => this.openBatchChargeForm(),
           "delete-finance": () => this.deleteFinanceEntry(data.type, data.id),
           "rate-members": () => this.openMemberRatings(),
           players: () => this.openPlayers(),
@@ -1339,7 +1377,7 @@
           "sign-out": () => this.logout(),
           reload: () => location.reload()
         };
-        if (["new-match", "rsvp", "new-finance", "create-group", "join-group", "announcement", "report-problem"].includes(action)) this.repo?.logEvent("ui_action", { action });
+        if (["new-match", "rsvp", "new-finance", "batch-charge", "create-group", "join-group", "announcement", "report-problem"].includes(action)) this.repo?.logEvent("ui_action", { action });
         if (actions[action]) await actions[action]();
       } catch (error) {
         console.error(error);
@@ -2317,6 +2355,80 @@ As confirmações, o sorteio da espera e a quantidade configurada de times serã
       });
     },
 
+    openBatchChargeForm() {
+      if (!this.canManageFinance()) return this.toast("Somente administrador e tesoureiro podem criar cobranças em lote.", true);
+      const players = this.activePlayers()
+        .filter(player => player.user_id)
+        .sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), "pt-BR"));
+      if (!players.length) return this.toast("Não há membros ativos com acesso ao grupo.", true);
+
+      const today = new Date().toISOString().slice(0, 10);
+      const memberRows = players.map(player => `<label class="batch-member-row"><input class="batch-member-checkbox" type="checkbox" name="player_ids" value="${player.id}"><span class="batch-member-avatar">${this.personAvatar(player)}</span><span><strong>${escapeHtml(player.name)}</strong><small>${escapeHtml(player.nickname || player.primary_position || "Membro")}</small></span></label>`).join("");
+
+      this.modal("Cobrança em lote", `<form id="batchChargeForm" class="form-grid"><div class="notice notice-success"><strong>Uma cobrança para vários membros</strong><br>Será criada uma cobrança individual com o mesmo valor, descrição e vencimento para cada pessoa selecionada. O push continuará sendo enviado separadamente somente ao respectivo membro.</div><div class="field"><label>Descrição</label><input name="description" required minlength="2" maxlength="200" placeholder="Ex.: Mensalidade de agosto"></div><div class="form-grid two-columns"><div class="field"><label>Valor por membro</label><input name="amount" type="number" min="0.01" step="0.01" required inputmode="decimal"></div><div class="field"><label>Vencimento</label><input name="due_date" type="date" value="${today}" required></div></div><div class="batch-selection-head"><div><strong>Selecionar membros</strong><small id="batchSelectedCount">0 selecionado(s)</small></div><div><button type="button" class="text-action" id="batchSelectAll">Selecionar todos</button><button type="button" class="text-action" id="batchClearAll">Limpar</button></div></div><div class="batch-member-list">${memberRows}</div><button id="batchChargeSubmit" class="btn btn-primary btn-block" type="submit" disabled>Criar cobranças</button></form>`, (root, close) => {
+        const form = $("#batchChargeForm", root);
+        const checkboxes = $$(".batch-member-checkbox", root);
+        const counter = $("#batchSelectedCount", root);
+        const submit = $("#batchChargeSubmit", root);
+        const updateSelection = () => {
+          const selected = checkboxes.filter(item => item.checked).length;
+          counter.textContent = `${selected} selecionado(s)`;
+          submit.disabled = selected === 0;
+        };
+        checkboxes.forEach(item => item.addEventListener("change", updateSelection));
+        $("#batchSelectAll", root)?.addEventListener("click", () => { checkboxes.forEach(item => { item.checked = true; }); updateSelection(); });
+        $("#batchClearAll", root)?.addEventListener("click", () => { checkboxes.forEach(item => { item.checked = false; }); updateSelection(); });
+
+        form.addEventListener("submit", async event => {
+          event.preventDefault();
+          const data = new FormData(form);
+          const playerIds = data.getAll("player_ids").map(String).filter(Boolean);
+          const description = String(data.get("description") || "").trim();
+          const amount = Number(data.get("amount"));
+          const dueDate = String(data.get("due_date") || today);
+          if (!playerIds.length) return this.toast("Selecione ao menos um membro.", true);
+          if (description.length < 2) return this.toast("Informe uma descrição válida.", true);
+          if (!Number.isFinite(amount) || amount <= 0) return this.toast("Informe um valor válido.", true);
+          if (!confirm(`Criar ${playerIds.length} cobrança(s) de ${money(amount)} cada, com a descrição “${description}”?`)) return;
+
+          submit.disabled = true;
+          submit.textContent = "Criando cobranças…";
+          try {
+            const result = await this.repo.createBatchCharges(this.state.currentGroupId, playerIds, description, amount, dueDate);
+            const charges = Array.isArray(result.charges) ? result.charges : [];
+            let notifiedMembers = 0;
+            let withoutPush = 0;
+            let pushFailures = 0;
+
+            submit.textContent = "Enviando avisos individuais…";
+            for (const charge of charges) {
+              try {
+                const pushResult = await this.repo.notifyChargeCreated(this.state.currentGroupId, charge.id);
+                if (Number(pushResult?.sent || 0) > 0) notifiedMembers += 1;
+                else withoutPush += 1;
+              } catch (pushError) {
+                pushFailures += 1;
+                console.warn("Falha no push individual da cobrança em lote.", { chargeId: charge.id, pushError });
+              }
+            }
+
+            this.state = this.repo.state;
+            close();
+            this.render();
+            const created = Number(result.created_count || charges.length || playerIds.length);
+            const details = [`${created} cobrança(s) criada(s)`, `${notifiedMembers} membro(s) notificado(s)`];
+            if (withoutPush) details.push(`${withoutPush} sem aparelho ativo`);
+            if (pushFailures) details.push(`${pushFailures} falha(s) no envio`);
+            this.toast(details.join(" · "), pushFailures > 0);
+          } catch (error) {
+            submit.disabled = false;
+            submit.textContent = "Criar cobranças";
+            this.toast(error.message || "Não foi possível criar as cobranças em lote.", true);
+          }
+        });
+      });
+    },
+
     async deleteFinanceEntry(entryType, entryId) {
       if (!this.canManageFinance()) return this.toast("Somente administrador e tesoureiro podem excluir lançamentos.", true);
       const labels = { payment: "pagamento", expense: "despesa", charge: "cobrança" };
@@ -2459,7 +2571,7 @@ As confirmações, o sorteio da espera e a quantidade configurada de times serã
         const errorGroups = data.errorGroups || [];
         const accessList = data.accessList || [];
         const pushStatus = data.pushStatus || [];
-        const usersWithoutPush = pushStatus.filter(item => Number(item.active_push_devices || 0) === 0);
+        const pushIssues = pushStatus.filter(item => String(item.health_status || "") !== "healthy");
         document.querySelector(".modal-layer")?.remove();
 
         const stat = (label, value, tone = "") => `<div class="admin-stat ${tone}"><small>${escapeHtml(label)}</small><strong>${escapeHtml(String(value ?? 0))}</strong></div>`;
@@ -2476,10 +2588,21 @@ As confirmações, o sorteio da espera e a quantidade configurada de times serã
           return `<article class="beta-access-row"><div class="beta-access-main"><div><strong>${escapeHtml(item.user_name || item.email)}</strong><small>${escapeHtml(item.email)} · ${escapeHtml(lastSeen)}</small></div><span class="beta-access-status ${escapeHtml(status)}">${escapeHtml(statusLabel(status))}</span></div><div class="beta-access-meta"><span>${Number(item.groups_count || 0)} grupo(s)</span>${item.notes ? `<span>${escapeHtml(item.notes)}</span>` : ""}</div>${actionButtons}</article>`;
         }).join("") || '<div class="card empty">Nenhum e-mail cadastrado.</div>';
 
-        const pushRows = usersWithoutPush.map(item => {
+        const pushRows = pushIssues.map((item, index) => {
           const lastSeen = item.last_seen_at ? shortDate(item.last_seen_at) : "Ainda não acessou";
-          return `<article class="push-status-row"><div class="push-status-main"><span class="push-status-icon">🔕</span><div><strong>${escapeHtml(item.user_name || item.email)}</strong><small>${escapeHtml(item.email)} · ${escapeHtml(lastSeen)}</small></div><span class="push-status-badge">Sem push</span></div><div class="push-status-meta"><span>${Number(item.groups_count || 0)} grupo(s)</span><span>Nenhum aparelho vinculado</span></div></article>`;
-        }).join("") || '<div class="card empty"><strong>Todos os usuários ativos possuem push</strong><span>Não há usuários ativos sem uma assinatura vinculada.</span></div>';
+          const health = String(item.health_status || "unknown");
+          const presentation = {
+            no_device: ["🔕", "Sem push", "Nenhum aparelho ativo vinculado"],
+            invalid: ["⚠", "Expirada", `${Number(item.invalid_push_devices || 0)} assinatura(s) invalidada(s)`],
+            failing: ["!", "Falha recente", `${Number(item.failing_push_devices || 0)} aparelho(s) com falha`],
+            untested: ["?", "Não testada", `${Number(item.untested_push_devices || 0)} aparelho(s) sem entrega registrada`],
+            unknown: ["?", "Indefinida", "Estado da assinatura não identificado"]
+          }[health] || ["?", "Atenção", "Verificar métricas"];
+          const failure = item.last_failure_at
+            ? `Última falha: ${shortDate(item.last_failure_at)}${item.last_failure_status ? ` · código ${item.last_failure_status}` : ""}`
+            : presentation[2];
+          return `<article class="push-status-row push-health-${escapeHtml(health)}"><div class="push-status-main"><span class="push-status-icon">${presentation[0]}</span><div><strong>${escapeHtml(item.user_name || item.email)}</strong><small>${escapeHtml(item.email)} · ${escapeHtml(lastSeen)}</small></div><span class="push-status-badge">${escapeHtml(presentation[1])}</span></div><div class="push-status-meta"><span>${Number(item.active_push_devices || 0)} ativo(s) · ${Number(item.total_push_devices || 0)} total</span><span>${escapeHtml(failure)}</span></div>${item.last_failure_reason ? `<p class="push-health-reason">${escapeHtml(item.last_failure_reason)}</p>` : ""}<button type="button" class="btn btn-secondary btn-small" data-push-health-index="${index}">Ver tentativas</button></article>`;
+        }).join("") || '<div class="card empty"><strong>Todos os usuários estão saudáveis</strong><span>As assinaturas ativas possuem entrega confirmada e nenhuma falha consecutiva.</span></div>';
 
         const errorRows = errorGroups.map((item, index) => {
           const build = item.build ? `Build ${item.build}` : "Build não informada";
@@ -2494,11 +2617,11 @@ As confirmações, o sorteio da espera e a quantidade configurada de times serã
         const systemStatus = Number(s.errors_24h || 0) ? "Sistema requer análise" : "Sistema operacional";
         const errorSubtitle = `${Number(s.errors_24h || 0)} registro(s) distribuído(s) em ${Number(s.error_groups_24h || 0)} erro(s) distinto(s)`;
 
-        this.modal("Painel Beta", `<div class="health-strip ${Number(s.errors_24h || 0) ? "warn" : "ok"}"><span></span><div><strong>${systemStatus}</strong><small>${escapeHtml(errorSubtitle)}</small></div></div><div class="admin-toolbar"><button id="sendSystemNotification" class="btn btn-primary">Enviar notificação</button><button id="refreshPlatformPanel" class="btn btn-secondary">Atualizar painel</button></div><div class="admin-stats">${stat("Usuários", s.users_total)}${stat("Acessos ativos", s.beta_active)}${stat("Push ativo", s.push_users_active)}${stat("Sem notificações", s.push_users_without_active, Number(s.push_users_without_active || 0) ? "warning" : "")}${stat("Convites pendentes", s.beta_invited, Number(s.beta_invited || 0) ? "warning" : "")}${stat("Bloqueados", s.beta_blocked, Number(s.beta_blocked || 0) ? "danger" : "")}${stat("Grupos", s.groups_total)}${stat("Peladas futuras", s.matches_upcoming)}${stat("Relatos abertos", s.feedback_open, Number(s.feedback_open || 0) ? "warning" : "")}${stat("Erros 24h", s.errors_24h, Number(s.errors_24h || 0) ? "danger" : "")}</div>
+        this.modal("Painel Beta", `<div class="health-strip ${Number(s.errors_24h || 0) ? "warn" : "ok"}"><span></span><div><strong>${systemStatus}</strong><small>${escapeHtml(errorSubtitle)}</small></div></div><div class="admin-toolbar"><button id="sendSystemNotification" class="btn btn-primary">Enviar notificação</button><button id="refreshPlatformPanel" class="btn btn-secondary">Atualizar painel</button></div><div class="admin-stats">${stat("Usuários", s.users_total)}${stat("Acessos ativos", s.beta_active)}${stat("Push ativo", s.push_users_active)}${stat("Push saudável", s.push_devices_healthy)}${stat("Falhas de push", s.push_devices_failing, Number(s.push_devices_failing || 0) ? "danger" : "")}${stat("Assinaturas expiradas", s.push_devices_invalid, Number(s.push_devices_invalid || 0) ? "warning" : "")}${stat("Sem notificações", s.push_users_without_active, Number(s.push_users_without_active || 0) ? "warning" : "")}${stat("Convites pendentes", s.beta_invited, Number(s.beta_invited || 0) ? "warning" : "")}${stat("Bloqueados", s.beta_blocked, Number(s.beta_blocked || 0) ? "danger" : "")}${stat("Grupos", s.groups_total)}${stat("Peladas futuras", s.matches_upcoming)}${stat("Relatos abertos", s.feedback_open, Number(s.feedback_open || 0) ? "warning" : "")}${stat("Erros 24h", s.errors_24h, Number(s.errors_24h || 0) ? "danger" : "")}</div>
 
         <details class="admin-section-card" open><summary><div><strong>Acessos do beta</strong><small>Autorize, bloqueie ou exclua permanentemente.</small></div><span>${accessList.length}</span></summary><form id="betaAccessForm" class="beta-access-form"><div class="field"><label>E-mail da conta Google</label><input type="email" name="email" required autocomplete="off" placeholder="membro@gmail.com"></div><div class="field"><label>Observação <span class="optional-label">opcional</span></label><input name="notes" maxlength="500" placeholder="Grupo ou responsável pelo convite"></div><button type="submit" class="btn btn-primary btn-block">Autorizar e-mail</button></form><div class="beta-access-list">${accessRows}</div></details>
 
-        <details class="admin-section-card" open><summary><div><strong>Notificações dos usuários</strong><small>Usuários ativos que ainda não vincularam nenhum aparelho.</small></div><span class="push-summary-count ${usersWithoutPush.length ? "warn" : "ok"}">${usersWithoutPush.length}</span></summary><div class="push-status-summary"><strong>${Number(s.push_users_active || 0)} com push ativo</strong><small>${usersWithoutPush.length} usuário(s) ativo(s) sem notificações.</small></div><div class="push-status-list">${pushRows}</div></details>
+        <details class="admin-section-card" open><summary><div><strong>Saúde das notificações</strong><small>Assinaturas sem aparelho, não testadas, com falha ou expiradas.</small></div><span class="push-summary-count ${pushIssues.length ? "warn" : "ok"}">${pushIssues.length}</span></summary><div class="push-status-summary"><strong>${Number(s.push_devices_healthy || 0)} aparelho(s) saudável(is)</strong><small>${Number(s.push_attempts_30d || 0)} tentativa(s) em 30 dias · ${Number(s.push_failures_30d || 0)} falha(s).</small></div><div class="push-status-list">${pushRows}</div></details>
 
         <details class="admin-section-card" open><summary><div><strong>Erros agrupados — 24 horas</strong><small>Analise causas distintas, não apenas o contador bruto.</small></div><span>${errorGroups.length}</span></summary><div class="admin-error-list">${errorRows}</div></details>
 
@@ -2553,6 +2676,12 @@ As confirmações, o sorteio da espera e a quantidade configurada de times serã
             const group = errorGroups[Number(button.dataset.errorIndex)];
             if (group) this.openPlatformErrorDetails(group);
           }));
+          $$('[data-push-health-index]', root).forEach(button => button.addEventListener("click", () => {
+            const item = pushIssues[Number(button.dataset.pushHealthIndex)];
+            if (!item) return;
+            close();
+            setTimeout(() => this.openPushDeliveryDetails(item), 0);
+          }));
           $("#exportOperationalSnapshot", root)?.addEventListener("click", async event => {
             const button = event.currentTarget;
             button.disabled = true;
@@ -2577,6 +2706,31 @@ As confirmações, o sorteio da espera e a quantidade configurada de times serã
       } catch (error) {
         document.querySelector(".modal-layer")?.remove();
         this.toast(error.message || "Não foi possível carregar o painel.", true);
+      }
+    },
+
+    async openPushDeliveryDetails(item) {
+      if (!this.state.is_platform_admin) return this.toast("Acesso restrito à administração da plataforma.", true);
+      this.modal("Tentativas de notificação", `<div class="admin-loading">Carregando entregas dos últimos 30 dias…</div>`, () => {});
+      try {
+        const rows = await this.repo.platformPushDeliveryAttempts(item.user_id, 30, 1000);
+        document.querySelector(".modal-layer")?.remove();
+        const successCount = rows.filter(row => row.status === "sent").length;
+        const failureCount = rows.filter(row => row.status === "failed").length;
+        const attempts = rows.map(row => {
+          const sent = row.status === "sent";
+          const code = row.status_code ? ` · código ${row.status_code}` : "";
+          const duration = row.duration_ms != null ? ` · ${Number(row.duration_ms)} ms` : "";
+          const context = [row.group_name, row.device_label, row.event_type].filter(Boolean).join(" · ");
+          return `<article class="push-attempt-row ${sent ? "is-sent" : "is-failed"}"><div class="push-attempt-head"><span>${sent ? "✓" : "!"}</span><div><strong>${sent ? "Entregue ao serviço de push" : "Falha no envio"}</strong><small>${escapeHtml(shortDate(row.created_at))}${escapeHtml(code)}${escapeHtml(duration)}</small></div></div><div class="push-attempt-meta">${escapeHtml(context || "Notificação")}${row.event_id ? `<br><span>Referência: ${escapeHtml(row.event_id)}</span>` : ""}</div>${row.failure_reason ? `<p>${escapeHtml(row.failure_reason)}</p>` : ""}</article>`;
+        }).join("") || '<div class="card empty"><strong>Nenhuma tentativa registrada</strong><span>O aparelho ainda não recebeu um envio após a instalação da Build 135.</span></div>';
+        const lastFailure = item.last_failure_at ? shortDate(item.last_failure_at) : "Nenhuma";
+        this.modal("Tentativas de notificação", `<div class="push-detail-user"><strong>${escapeHtml(item.user_name || item.email)}</strong><small>${escapeHtml(item.email)}</small></div><div class="admin-stats compact">${`<div class="admin-stat"><small>Tentativas</small><strong>${rows.length}</strong></div>`}${`<div class="admin-stat"><small>Entregues</small><strong>${successCount}</strong></div>`}${`<div class="admin-stat ${failureCount ? "danger" : ""}"><small>Falhas</small><strong>${failureCount}</strong></div>`}${`<div class="admin-stat"><small>Falhas consecutivas</small><strong>${Number(item.consecutive_failures_max || 0)}</strong></div>`}</div><div class="notice"><strong>Última falha</strong><br>${escapeHtml(lastFailure)}${item.last_failure_status ? ` · código ${escapeHtml(String(item.last_failure_status))}` : ""}${item.last_failure_reason ? `<br>${escapeHtml(item.last_failure_reason)}` : ""}</div><div class="push-attempt-list">${attempts}</div><button type="button" class="btn btn-secondary btn-block" id="backToPlatformPanel">Voltar ao Painel Beta</button>`, (root, close) => {
+          $("#backToPlatformPanel", root)?.addEventListener("click", () => { close(); this.openPlatformAdmin(); });
+        });
+      } catch (error) {
+        document.querySelector(".modal-layer")?.remove();
+        this.toast(error.message || "Não foi possível carregar as tentativas de push.", true);
       }
     },
 
@@ -2805,18 +2959,84 @@ As confirmações, o sorteio da espera e a quantidade configurada de times serã
       const configured = Boolean(String(window.RESENHA_CONFIG?.vapidPublicKey || "").trim());
       const subscription = supported ? await this.currentPushSubscription() : null;
       const endpoint = subscription?.endpoint || "";
-      const linked = Boolean(endpoint && (this.state.push_subscriptions || []).some(item => item.endpoint === endpoint && item.enabled));
+      const dbSubscription = endpoint ? (this.state.push_subscriptions || []).find(item => item.endpoint === endpoint) : null;
+      const linked = Boolean(dbSubscription?.enabled);
       const permission = supported ? Notification.permission : "unsupported";
       const iosInstallRequired = isIos() && !isStandalone();
       const active = Boolean(subscription && linked);
-      const status = active ? "Ativas neste aparelho" : subscription && !linked ? "Aguardando vinculação" : permission === "denied" ? "Bloqueadas nos ajustes" : "Desativadas neste aparelho";
-      const explanation = !supported ? "O navegador deste aparelho não oferece a tecnologia necessária." : !configured ? "A chave pública VAPID precisa ser adicionada ao supabase-config.js." : iosInstallRequired ? "No iPhone, notificações funcionam quando o site é adicionado à Tela de Início e aberto pelo ícone." : subscription && !linked ? "A permissão existe no aparelho, mas a assinatura ainda não está registrada no grupo. Toque em Vincular novamente." : "Você receberá os avisos publicados pelo administrador ou organizador, mesmo com o aplicativo fechado.";
-      const action = active ? '<button class="btn btn-danger btn-block" id="disablePush">Desativar neste aparelho</button>' : `<button class="btn btn-primary btn-block" id="enablePush">${subscription ? "Vincular novamente" : "Ativar notificações"}</button>`;
-      this.modal("Notificações no celular", `<div class="notification-status-card ${active ? "is-active" : ""}"><span>🔔</span><div><strong>${escapeHtml(status)}</strong><p>${escapeHtml(explanation)}</p></div></div>${configured && supported && !iosInstallRequired ? action : ""}<div class="notice"><strong>Privacidade</strong><br>A ativação vale somente para este aparelho. Você pode desativar a qualquer momento.</div>`, (root, close) => {
+      const failures = Number(dbSubscription?.consecutive_failures || 0);
+      const lastFailure = dbSubscription?.last_failure_at ? shortDate(dbSubscription.last_failure_at) : "";
+      const lastSuccess = dbSubscription?.last_success_at ? shortDate(dbSubscription.last_success_at) : "";
+      const failureCode = Number(dbSubscription?.last_failure_status || 0);
+      const failureReason = String(dbSubscription?.last_failure_reason || "").trim();
+
+      let status = "Desativadas neste aparelho";
+      let explanation = "Ative para receber avisos mesmo com o aplicativo fechado.";
+      let tone = "";
+      if (!supported) {
+        status = "Não suportadas";
+        explanation = "O navegador deste aparelho não oferece a tecnologia necessária.";
+      } else if (!configured) {
+        status = "Configuração pendente";
+        explanation = "A chave pública VAPID precisa ser adicionada ao supabase-config.js.";
+      } else if (iosInstallRequired) {
+        status = "Instalação necessária";
+        explanation = "No iPhone, notificações funcionam quando o site é adicionado à Tela de Início e aberto pelo ícone.";
+      } else if (permission === "denied") {
+        status = "Bloqueadas nos ajustes";
+        explanation = "O navegador bloqueou as notificações. Libere a permissão nos ajustes do aparelho e vincule novamente.";
+        tone = "is-warning";
+      } else if (active && failures > 0) {
+        status = "Ativas, com falha recente";
+        explanation = `O aparelho permanece vinculado, mas houve ${failures} falha(s) consecutiva(s)${lastFailure ? `; última em ${lastFailure}` : ""}${failureCode ? `, código ${failureCode}` : ""}${failureReason ? `: ${failureReason}` : "."}`;
+        tone = "is-warning";
+      } else if (active && lastSuccess) {
+        status = "Ativas e validadas";
+        explanation = `Última entrega confirmada em ${lastSuccess}. Você pode enviar um novo teste a qualquer momento.`;
+        tone = "is-active";
+      } else if (active) {
+        status = "Ativas, aguardando validação";
+        explanation = "A assinatura está vinculada, mas ainda não existe uma entrega registrada. Use o teste abaixo.";
+        tone = "is-warning";
+      } else if (dbSubscription?.invalidated_at) {
+        status = "Assinatura expirada";
+        explanation = `${failureCode ? `O serviço respondeu com o código ${failureCode}. ` : ""}Vincule novamente para gerar uma assinatura válida neste aparelho.`;
+        tone = "is-warning";
+      } else if (subscription && !linked) {
+        status = "Aguardando vinculação";
+        explanation = "A permissão existe no aparelho, mas a assinatura não está ativa no banco. Toque em Vincular novamente.";
+        tone = "is-warning";
+      }
+
+      const enableAction = `<button class="btn btn-primary btn-block" id="enablePush">${subscription ? "Vincular novamente" : "Ativar notificações"}</button>`;
+      const activeActions = '<button class="btn btn-primary btn-block" id="testPush">Enviar notificação de teste</button><button class="btn btn-danger btn-block" id="disablePush">Desativar neste aparelho</button>';
+      const actions = active ? activeActions : enableAction;
+      this.modal("Notificações no celular", `<div class="notification-status-card ${tone}"><span>🔔</span><div><strong>${escapeHtml(status)}</strong><p>${escapeHtml(explanation)}</p></div></div>${configured && supported && !iosInstallRequired ? actions : ""}<div class="notice"><strong>Validação deste aparelho</strong><br>Cada tentativa de entrega passa a registrar sucesso, falha, código e horário para análise do beta. Nenhum conteúdo privado da notificação é exibido nas métricas.</div><div class="notice"><strong>Privacidade</strong><br>A ativação vale somente para este aparelho. Você pode desativar a qualquer momento.</div>`, (root, close) => {
         $("#enablePush", root)?.addEventListener("click", async event => {
           const button = event.currentTarget; button.disabled = true; button.textContent = "Ativando…";
           try { await this.enablePushNotifications(); close(); this.toast("Notificações ativadas e vinculadas neste aparelho."); }
           catch (error) { button.disabled = false; button.textContent = subscription ? "Vincular novamente" : "Ativar notificações"; this.toast(error.message, true); }
+        });
+        $("#testPush", root)?.addEventListener("click", async event => {
+          const button = event.currentTarget; button.disabled = true; button.textContent = "Enviando teste…";
+          try {
+            const result = await this.repo.testPushNotification(this.state.currentGroupId, endpoint);
+            await this.repo.loadGroup(this.state.currentGroupId, { subscribe: false });
+            this.state = this.repo.state;
+            if (Number(result.sent || 0) > 0) {
+              close();
+              this.toast("Notificação de teste enviada. Confirme o recebimento neste aparelho.");
+            } else {
+              button.disabled = false;
+              button.textContent = "Enviar notificação de teste";
+              const reason = String(result.failureReason || "").trim();
+              this.toast(`O teste não foi entregue${result.failureStatus ? ` (código ${result.failureStatus})` : ""}${reason ? `: ${reason}` : "."}`, true);
+            }
+          } catch (error) {
+            button.disabled = false;
+            button.textContent = "Enviar notificação de teste";
+            this.toast(error.message || "Não foi possível testar a notificação.", true);
+          }
         });
         $("#disablePush", root)?.addEventListener("click", async event => {
           const button = event.currentTarget; button.disabled = true; button.textContent = "Desativando…";
@@ -2881,16 +3101,24 @@ As confirmações, o sorteio da espera e a quantidade configurada de times serã
       window.location.replace(appBaseUrl());
     },
 
-    exportData() {
-      const exportState = { ...this.state, member_ratings: this.canSeeRatings() ? this.state.member_ratings : this.state.member_ratings.filter(item => item.rater_user_id === this.state.profile.id) };
-      const blob = new Blob([JSON.stringify(exportState, null, 2)], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `resenha-fc-${new Date().toISOString().slice(0, 10)}.json`;
-      link.click();
-      URL.revokeObjectURL(url);
-      this.toast("Arquivo de dados gerado.");
+    async exportData() {
+      if (!this.state.is_platform_admin) return this.toast("A exportação integral é exclusiva da administração da plataforma.", true);
+      const group = this.currentGroup();
+      if (!group?.id) return this.toast("Selecione um grupo antes de exportar.", true);
+      try {
+        const exported = await this.repo.platformGroupExport(group.id);
+        const blob = new Blob([JSON.stringify({ release: APP_RELEASE, currentGroupId: group.id, ...exported }, null, 2)], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        const safeName = String(group.name || "grupo").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase() || "grupo";
+        link.href = url;
+        link.download = `resenha-fc-backup-${safeName}-${new Date().toISOString().slice(0, 10)}.json`;
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(url), 0);
+        this.toast("Backup integral do grupo gerado.");
+      } catch (error) {
+        this.toast(error.message || "Não foi possível exportar o grupo.", true);
+      }
     },
 
     toast(message, error = false) {

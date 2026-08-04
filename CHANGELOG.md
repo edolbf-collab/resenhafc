@@ -1,4 +1,14 @@
-# Resenha FC — Changelog
+# Changelog
+
+## Beta 1.0 Build 135
+
+- registra saúde persistente e tentativas individuais de push;
+- adiciona teste de notificação por aparelho;
+- exibe falhas, códigos, motivos e assinaturas expiradas no Painel Beta;
+- restringe o backup integral do grupo ao administrador da plataforma;
+- adiciona cobranças em lote com push individual por destinatário;
+- atualiza Frontend e Banco para 135 e Edge Functions para 107.
+
 
 ## Beta 1.0 Build 134
 
