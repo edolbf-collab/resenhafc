@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const APP_RELEASE = Object.freeze({ channel: "beta", version: "Beta 1.0", build: 135, database: 135, edge: 107 });
+  const APP_RELEASE = Object.freeze({ channel: "beta", version: "Beta 1.0", build: 136, database: 136, edge: 108 });
   const $ = (selector, root = document) => root.querySelector(selector);
   const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
   const uid = () => crypto.randomUUID?.() || "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
@@ -38,7 +38,7 @@
   const avatarKey = value => /^badge-(0[1-9]|1[0-9]|20)$/.test(String(value || "")) ? String(value) : "badge-01";
   const groupAvatarUrl = key => {
     const normalized = avatarKey(key);
-    return window.RESENHA_GROUP_AVATARS?.[normalized] || assetUrl(`assets/group-avatars/${normalized}.png?v=beta135r1`);
+    return window.RESENHA_GROUP_AVATARS?.[normalized] || assetUrl(`assets/group-avatars/${normalized}.png?v=beta136r1`);
   };
   const positionOptions = ["Goleiro", "Zagueiro", "Lateral", "Volante", "Meia", "Atacante", "Coringa"];
   const isPrimaryGoalkeeper = player => String(player?.primary_position || "") === "Goleiro";
@@ -979,7 +979,7 @@
         if (!(image instanceof HTMLImageElement) || !image.matches("[data-group-avatar]")) return;
         if (image.dataset.fallbackApplied === "true") return;
         image.dataset.fallbackApplied = "true";
-        image.src = window.RESENHA_GROUP_AVATARS?.["badge-01"] || assetUrl("assets/group-avatars/badge-01.png?v=beta135r1");
+        image.src = window.RESENHA_GROUP_AVATARS?.["badge-01"] || assetUrl("assets/group-avatars/badge-01.png?v=beta136r1");
       }, true);
     },
 
@@ -2365,14 +2365,18 @@ As confirmações, o sorteio da espera e a quantidade configurada de times serã
       const today = new Date().toISOString().slice(0, 10);
       const memberRows = players.map(player => `<label class="batch-member-row"><input class="batch-member-checkbox" type="checkbox" name="player_ids" value="${player.id}"><span class="batch-member-avatar">${this.personAvatar(player)}</span><span><strong>${escapeHtml(player.name)}</strong><small>${escapeHtml(player.nickname || player.primary_position || "Membro")}</small></span></label>`).join("");
 
-      this.modal("Cobrança em lote", `<form id="batchChargeForm" class="form-grid"><div class="notice notice-success"><strong>Uma cobrança para vários membros</strong><br>Será criada uma cobrança individual com o mesmo valor, descrição e vencimento para cada pessoa selecionada. O push continuará sendo enviado separadamente somente ao respectivo membro.</div><div class="field"><label>Descrição</label><input name="description" required minlength="2" maxlength="200" placeholder="Ex.: Mensalidade de agosto"></div><div class="form-grid two-columns"><div class="field"><label>Valor por membro</label><input name="amount" type="number" min="0.01" step="0.01" required inputmode="decimal"></div><div class="field"><label>Vencimento</label><input name="due_date" type="date" value="${today}" required></div></div><div class="batch-selection-head"><div><strong>Selecionar membros</strong><small id="batchSelectedCount">0 selecionado(s)</small></div><div><button type="button" class="text-action" id="batchSelectAll">Selecionar todos</button><button type="button" class="text-action" id="batchClearAll">Limpar</button></div></div><div class="batch-member-list">${memberRows}</div><button id="batchChargeSubmit" class="btn btn-primary btn-block" type="submit" disabled>Criar cobranças</button></form>`, (root, close) => {
+      this.modal("Cobrança em lote", `<form id="batchChargeForm" class="batch-charge-layout"><div class="batch-charge-top"><button type="button" class="batch-info-button" id="batchChargeInfo" aria-label="Informações sobre cobrança em lote">!</button><div class="field"><label>Descrição</label><input name="description" required minlength="2" maxlength="200" placeholder="Ex.: Mensalidade de agosto"></div><div class="form-grid two-columns"><div class="field"><label>Valor por membro</label><input name="amount" type="number" min="0.01" step="0.01" required inputmode="decimal"></div><div class="field"><label>Vencimento</label><input name="due_date" type="date" value="${today}" required></div></div><div class="batch-selection-head"><div><strong>Selecionar membros</strong><small id="batchSelectedCount">0 selecionado(s)</small></div><div><button type="button" class="text-action" id="batchSelectAll">Selecionar todos</button><button type="button" class="text-action" id="batchClearAll">Limpar</button></div></div></div><div class="batch-member-list">${memberRows}</div><div class="batch-charge-footer"><strong id="batchFooterCount">0 membros selecionados</strong><button id="batchChargeSubmit" class="btn btn-primary btn-block" type="submit" disabled>Criar cobranças</button></div></form>`, (root, close) => {
         const form = $("#batchChargeForm", root);
         const checkboxes = $$(".batch-member-checkbox", root);
         const counter = $("#batchSelectedCount", root);
         const submit = $("#batchChargeSubmit", root);
+        const footerCount = $("#batchFooterCount", root);
+        $("#batchChargeInfo", root)?.addEventListener("click", () => alert("Será criada uma cobrança individual para cada membro selecionado, usando a mesma descrição, valor e vencimento. Cada notificação será enviada somente ao respectivo membro."));
         const updateSelection = () => {
           const selected = checkboxes.filter(item => item.checked).length;
           counter.textContent = `${selected} selecionado(s)`;
+          footerCount.textContent = `${selected} membro${selected === 1 ? "" : "s"} selecionado${selected === 1 ? "" : "s"}`;
+          submit.textContent = selected ? `Criar ${selected} cobrança${selected === 1 ? "" : "s"}` : "Criar cobranças";
           submit.disabled = selected === 0;
         };
         checkboxes.forEach(item => item.addEventListener("change", updateSelection));
@@ -2594,6 +2598,7 @@ As confirmações, o sorteio da espera e a quantidade configurada de times serã
           const presentation = {
             no_device: ["🔕", "Sem push", "Nenhum aparelho ativo vinculado"],
             invalid: ["⚠", "Expirada", `${Number(item.invalid_push_devices || 0)} assinatura(s) invalidada(s)`],
+            partial: ["◐", "Parcial", `${Number(item.healthy_push_devices || 0)} saudável(is) · ${Number(item.failing_push_devices || 0)} com falha`],
             failing: ["!", "Falha recente", `${Number(item.failing_push_devices || 0)} aparelho(s) com falha`],
             untested: ["?", "Não testada", `${Number(item.untested_push_devices || 0)} aparelho(s) sem entrega registrada`],
             unknown: ["?", "Indefinida", "Estado da assinatura não identificado"]
@@ -2723,7 +2728,7 @@ As confirmações, o sorteio da espera e a quantidade configurada de times serã
           const duration = row.duration_ms != null ? ` · ${Number(row.duration_ms)} ms` : "";
           const context = [row.group_name, row.device_label, row.event_type].filter(Boolean).join(" · ");
           return `<article class="push-attempt-row ${sent ? "is-sent" : "is-failed"}"><div class="push-attempt-head"><span>${sent ? "✓" : "!"}</span><div><strong>${sent ? "Entregue ao serviço de push" : "Falha no envio"}</strong><small>${escapeHtml(shortDate(row.created_at))}${escapeHtml(code)}${escapeHtml(duration)}</small></div></div><div class="push-attempt-meta">${escapeHtml(context || "Notificação")}${row.event_id ? `<br><span>Referência: ${escapeHtml(row.event_id)}</span>` : ""}</div>${row.failure_reason ? `<p>${escapeHtml(row.failure_reason)}</p>` : ""}</article>`;
-        }).join("") || '<div class="card empty"><strong>Nenhuma tentativa registrada</strong><span>O aparelho ainda não recebeu um envio após a instalação da Build 135.</span></div>';
+        }).join("") || '<div class="card empty"><strong>Nenhuma tentativa registrada</strong><span>O aparelho ainda não recebeu um envio após a instalação da Build 136.</span></div>';
         const lastFailure = item.last_failure_at ? shortDate(item.last_failure_at) : "Nenhuma";
         this.modal("Tentativas de notificação", `<div class="push-detail-user"><strong>${escapeHtml(item.user_name || item.email)}</strong><small>${escapeHtml(item.email)}</small></div><div class="admin-stats compact">${`<div class="admin-stat"><small>Tentativas</small><strong>${rows.length}</strong></div>`}${`<div class="admin-stat"><small>Entregues</small><strong>${successCount}</strong></div>`}${`<div class="admin-stat ${failureCount ? "danger" : ""}"><small>Falhas</small><strong>${failureCount}</strong></div>`}${`<div class="admin-stat"><small>Falhas consecutivas</small><strong>${Number(item.consecutive_failures_max || 0)}</strong></div>`}</div><div class="notice"><strong>Última falha</strong><br>${escapeHtml(lastFailure)}${item.last_failure_status ? ` · código ${escapeHtml(String(item.last_failure_status))}` : ""}${item.last_failure_reason ? `<br>${escapeHtml(item.last_failure_reason)}` : ""}</div><div class="push-attempt-list">${attempts}</div><button type="button" class="btn btn-secondary btn-block" id="backToPlatformPanel">Voltar ao Painel Beta</button>`, (root, close) => {
           $("#backToPlatformPanel", root)?.addEventListener("click", () => { close(); this.openPlatformAdmin(); });

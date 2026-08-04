@@ -633,3 +633,14 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .push-attempt-head{display:flex;align-items:center;gap:9px}.push-attempt-head>span{width:30px;height:30px;display:grid;place-items:center;border-radius:10px;font-weight:900;background:rgba(92,210,61,.12);color:#9af48a}.push-attempt-row.is-failed .push-attempt-head>span{background:rgba(255,93,93,.12);color:#ff9b9b}
 .push-attempt-head>div{display:grid;min-width:0;gap:2px}.push-attempt-head small,.push-attempt-meta{color:var(--muted);font-size:.68rem;line-height:1.4}.push-attempt-meta{margin-top:8px}.push-attempt-row p{margin:8px 0 0;color:#ffb5b5;font-size:.68rem;line-height:1.45;overflow-wrap:anywhere}
 @media(max-width:560px){.page-head-actions{width:100%;justify-content:stretch}.page-head-actions .btn{flex:1}.form-grid.two-columns{grid-template-columns:1fr}.batch-selection-head{align-items:flex-start;flex-direction:column}.batch-selection-head>div:last-child{justify-content:flex-start}.admin-stats.compact{grid-template-columns:1fr 1fr}}
+
+
+/* Beta 1.0 Build 136 — métricas refinadas e cobrança em lote compacta */
+.batch-charge-layout{display:grid;grid-template-rows:auto minmax(140px,1fr) auto;gap:10px;min-height:min(72vh,680px);max-height:calc(92vh - 94px)}
+.batch-charge-top{position:relative;display:grid;gap:10px;padding-right:38px}
+.batch-info-button{position:absolute;right:0;top:0;width:30px;height:30px;border-radius:50%;border:1px solid rgba(53,183,255,.34);background:rgba(53,183,255,.1);color:#9edfff;font-weight:950;cursor:pointer}
+.batch-member-list{min-height:0;max-height:none;overflow-y:auto;padding:2px 4px 84px;scrollbar-gutter:stable}
+.batch-charge-footer{position:sticky;bottom:0;z-index:4;display:grid;gap:7px;padding:10px 0 max(2px,var(--safe-bottom));border-top:1px solid var(--line);background:linear-gradient(180deg,rgba(7,24,34,.88),#071822 25%);backdrop-filter:blur(12px)}
+.batch-charge-footer>strong{font-size:.74rem;color:var(--muted);text-align:center}
+.push-status-row.push-health-partial{border-color:rgba(244,189,62,.34);background:rgba(244,189,62,.045)}
+@media(max-width:560px){.batch-charge-layout{min-height:calc(92vh - 100px);max-height:calc(92vh - 100px)}.batch-charge-top{padding-right:34px}.batch-member-row{padding:8px 9px}.batch-member-avatar{width:38px;height:38px}}

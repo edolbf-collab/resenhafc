@@ -1,3 +1,20 @@
+# Resenha FC — Beta 1.0 Build 136
+
+Linha de base construída sobre a Build 135. Consulte `ATUALIZACAO-BETA-1.0-BUILD-136.md`.
+
+## Versões
+- Frontend: 136
+- Banco: 136
+- Edge Function `publish-announcement`: 108
+
+## Implantação
+1. Execute a migração 136.
+2. Execute o healthcheck 136.
+3. Publique a Edge Function 108.
+4. Publique os arquivos incrementais, preservando `supabase-config.js`.
+
+---
+
 # Resenha FC — Beta 1.0 Build 135
 
 ## Destaques

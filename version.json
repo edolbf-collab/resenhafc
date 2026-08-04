@@ -1,10 +1,10 @@
 {
   "channel": "beta",
   "version": "Beta 1.0",
-  "build": 135,
-  "database": 135,
-  "edge": 107,
+  "build": 136,
+  "database": 136,
+  "edge": 108,
   "mandatory": false,
-  "notes": "Saúde persistente das notificações push, histórico de tentativas e falhas, teste por aparelho, exportação integral restrita ao administrador da plataforma e cobranças em lote com push individual.",
-  "label": "Beta 1.0 Build 135"
+  "notes": "Métricas de push por aparelho com status parcial, diagnóstico por plataforma e tentativas sanitizadas; retry para falhas transitórias Apple; cobrança em lote compacta com lista rolável e rodapé fixo.",
+  "label": "Beta 1.0 Build 136"
 }
