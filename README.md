@@ -1,33 +1,47 @@
-# Tâmo On — Beta 1.0 Build 138
+# Tâmo On — Beta 1.0 Build 139
 
-## Build 138 — identidade e carregamento
+## Build 139 — telemetria precisa das notificações
 
-- nome visível atualizado para **Tâmo On**;
-- carregamento com wordmark textual e mensagem **Ficando ON…**;
-- sem dependência de imagem externa na tela inicial;
-- Frontend 138, Banco 136, Edge 108;
-- identificadores técnicos legados são preservados por compatibilidade.
+A Build 139 amplia o diagnóstico do Web Push para o período de beta aberto:
 
-
-Linha de base construída sobre a Build 136 r1. Consulte `ATUALIZACAO-BETA-1.0-BUILD-137.md`.
+- cada repetição interna da Edge Function é registrada separadamente;
+- cada envio recebe um `delivery_id`, permitindo distinguir notificações de tentativas técnicas;
+- o painel identifica envios aceitos, falhas finais e recuperações após reenvio;
+- estados operacionais: **Saudável**, **Recuperado**, **Instável**, **Atenção**, **Reativação recomendada**, **Parcial**, **Expirada** e **Falha de configuração**;
+- uma falha temporária intermediária não altera o estado da assinatura enquanto o reenvio está em andamento;
+- endpoints, IPv6 e portas deixam de aparecer no painel e nos backups;
+- o identificador do aparelho é representado apenas por hash sanitizado;
+- a Edge Function 109 mantém até três tentativas para falhas temporárias.
 
 ## Versões
-- Frontend: 137
-- Banco: 136 r1
-- Edge Function `publish-announcement`: 108
 
-## Destaques
-- inicialização com estado seguro, sem objeto global nulo;
-- carregamento progressivo exibido somente quando necessário;
-- ações bloqueadas até a conclusão da sincronização essencial;
-- detecção de divergência entre HTML, JavaScript e service worker;
-- diagnóstico ampliado de erros de inicialização.
+- Frontend: 139
+- Banco: 139
+- Edge Function `publish-announcement`: 109
+- Edge Function `delete-beta-user`: sem alteração
 
 ## Implantação
-1. Publique os arquivos incrementais.
-2. Preserve `supabase-config.js`.
-3. Não execute SQL e não republique Edge Functions.
-4. Feche o PWA e abra novamente após o deploy.
+
+1. Execute `backend/backend-migration-beta-1.0-build-139.sql`.
+2. Execute `backend/backend-healthcheck-beta-1.0-build-139.sql`.
+3. Publique a Edge Function `publish-announcement` usando `publish-announcement-edge-build-109.ts`.
+4. Publique os arquivos do pacote incremental no GitHub.
+5. Preserve `supabase-config.js`.
+6. Feche completamente o PWA e abra novamente após o deploy.
+
+## Arquivos principais
+
+- `app.js`
+- `styles.css`
+- `index.html`
+- `service-worker.js`
+- `version.json`
+- `supabase/functions/publish-announcement/index.ts`
+- `publish-announcement-edge-build-109.ts`
+- `backend/backend-migration-beta-1.0-build-139.sql`
+- `backend/backend-healthcheck-beta-1.0-build-139.sql`
+- `backend/backend-auditoria-push-beta-1.0-build-139.sql`
+- `docs/PLANEJAMENTO-MESTRE-TAMO-ON.md`
 
 ---
 

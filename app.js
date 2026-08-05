@@ -1,8 +1,8 @@
 (() => {
   "use strict";
 
-  const APP_RELEASE = Object.freeze({ channel: "beta", version: "Beta 1.0", build: 138, database: 136, edge: 108 });
-  const APP_ASSET_TOKEN = "beta138r1";
+  const APP_RELEASE = Object.freeze({ channel: "beta", version: "Beta 1.0", build: 139, database: 139, edge: 109 });
+  const APP_ASSET_TOKEN = "beta139r1";
   const createEmptyState = () => ({
     profile: null,
     groups: [],
@@ -58,7 +58,7 @@
   const avatarKey = value => /^badge-(0[1-9]|1[0-9]|20)$/.test(String(value || "")) ? String(value) : "badge-01";
   const groupAvatarUrl = key => {
     const normalized = avatarKey(key);
-    return window.RESENHA_GROUP_AVATARS?.[normalized] || assetUrl(`assets/group-avatars/${normalized}.png?v=beta138r1`);
+    return window.RESENHA_GROUP_AVATARS?.[normalized] || assetUrl(`assets/group-avatars/${normalized}.png?v=beta139r1`);
   };
   const positionOptions = ["Goleiro", "Zagueiro", "Lateral", "Volante", "Meia", "Atacante", "Coringa"];
   const isPrimaryGoalkeeper = player => String(player?.primary_position || "") === "Goleiro";
@@ -122,6 +122,18 @@
   const isStandalone = () => window.matchMedia?.("(display-mode: standalone)").matches || window.navigator.standalone === true;
   const pushSupported = () => "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
   const deviceLabel = () => isIos() ? "iPhone/iPad" : /android/i.test(navigator.userAgent) ? "Android" : "Navegador";
+  const pushFailureSummary = (statusCode = 0, reason = "", label = "") => {
+    const text = String(reason || "").toLowerCase();
+    const provider = /iphone|ipad/i.test(label) || text.includes("web.push.apple.com") ? "Apple Web Push" : /android/i.test(label) ? "Google Push" : "serviço de push";
+    if ([404, 410].includes(Number(statusCode))) return "A assinatura expirou ou deixou de ser reconhecida. Vincule as notificações novamente.";
+    if ([401, 403].includes(Number(statusCode))) return "Houve uma falha de autenticação da plataforma com o serviço de push.";
+    if (Number(statusCode) === 400) return "A mensagem foi rejeitada pelo serviço de push.";
+    if (Number(statusCode) === 408 || text.includes("timeout") || text.includes("timed out")) return `O tempo limite de conexão com ${provider} foi excedido.`;
+    if (Number(statusCode) === 429) return `O ${provider} aplicou um limite temporário de solicitações.`;
+    if (Number(statusCode) >= 500) return `O ${provider} ficou temporariamente indisponível.`;
+    if (!Number(statusCode) || text.includes("error sending request") || text.includes("connection") || text.includes("network")) return `Houve uma falha temporária de conexão com ${provider}.`;
+    return Number(statusCode) ? `Falha no serviço de push. Código ${Number(statusCode)}.` : "Falha não identificada no serviço de push.";
+  };
 
   class SupabaseRepository {
     constructor(config) {
@@ -223,7 +235,7 @@
         this.state[stateKey] = result.data || [];
       });
 
-      const subscriptions = await this.client.from("push_subscriptions").select("id,endpoint,device_label,enabled,created_at,updated_at,last_attempt_at,last_success_at,last_failure_at,last_failure_status,last_failure_reason,consecutive_failures,invalidated_at,last_test_at").eq("user_id", this.state.profile.id);
+      const subscriptions = await this.client.from("push_subscriptions").select("id,endpoint,device_label,enabled,created_at,updated_at,last_attempt_at,last_success_at,last_failure_at,last_failure_status,last_failure_reason,consecutive_failures,invalidated_at,last_test_at,last_recovered_at,last_delivery_attempts,last_error_category,last_provider").eq("user_id", this.state.profile.id);
       if (subscriptions.error) throw subscriptions.error;
       this.state.push_subscriptions = subscriptions.data || [];
 
@@ -563,7 +575,7 @@
 
       const verification = await this.client
         .from("push_subscriptions")
-        .select("id,endpoint,device_label,enabled,created_at,updated_at,last_attempt_at,last_success_at,last_failure_at,last_failure_status,last_failure_reason,consecutive_failures,invalidated_at,last_test_at")
+        .select("id,endpoint,device_label,enabled,created_at,updated_at,last_attempt_at,last_success_at,last_failure_at,last_failure_status,last_failure_reason,consecutive_failures,invalidated_at,last_test_at,last_recovered_at,last_delivery_attempts,last_error_category,last_provider")
         .eq("user_id", this.state.profile.id)
         .eq("endpoint", endpoint)
         .eq("enabled", true)
@@ -753,7 +765,7 @@
         this.client.rpc("platform_error_groups", { p_hours: 24, p_limit: 40 }),
         this.client.rpc("platform_beta_access_list", { p_limit: 300 }),
         this.client.rpc("platform_security_summary"),
-        this.client.rpc("platform_push_health_list", { p_limit: 500 })
+        this.client.rpc("platform_push_health_list_v2", { p_limit: 500 })
       ]);
       for (const result of [summary, reports, logs, errorGroups, accessList, security, pushStatus]) if (result.error) throw result.error;
       return {
@@ -836,7 +848,7 @@
     }
 
     async platformPushDeliveryAttempts(userId = null, days = 30, limit = 500) {
-      const { data, error } = await this.client.rpc("platform_push_delivery_attempts", {
+      const { data, error } = await this.client.rpc("platform_push_delivery_attempts_v2", {
         p_user_id: userId || null,
         p_days: days,
         p_limit: limit
@@ -1102,7 +1114,7 @@
         if (!(image instanceof HTMLImageElement) || !image.matches("[data-group-avatar]")) return;
         if (image.dataset.fallbackApplied === "true") return;
         image.dataset.fallbackApplied = "true";
-        image.src = window.RESENHA_GROUP_AVATARS?.["badge-01"] || assetUrl("assets/group-avatars/badge-01.png?v=beta138r1");
+        image.src = window.RESENHA_GROUP_AVATARS?.["badge-01"] || assetUrl("assets/group-avatars/badge-01.png?v=beta139r1");
       }, true);
     },
 
@@ -2705,7 +2717,7 @@ As confirmações, o sorteio da espera e a quantidade configurada de times serã
         const errorGroups = data.errorGroups || [];
         const accessList = data.accessList || [];
         const pushStatus = data.pushStatus || [];
-        const pushIssues = pushStatus.filter(item => String(item.health_status || "") !== "healthy");
+        const pushReview = pushStatus.filter(item => String(item.health_status || "") !== "healthy");
         document.querySelector(".modal-layer")?.remove();
 
         const stat = (label, value, tone = "") => `<div class="admin-stat ${tone}"><small>${escapeHtml(label)}</small><strong>${escapeHtml(String(value ?? 0))}</strong></div>`;
@@ -2722,22 +2734,28 @@ As confirmações, o sorteio da espera e a quantidade configurada de times serã
           return `<article class="beta-access-row"><div class="beta-access-main"><div><strong>${escapeHtml(item.user_name || item.email)}</strong><small>${escapeHtml(item.email)} · ${escapeHtml(lastSeen)}</small></div><span class="beta-access-status ${escapeHtml(status)}">${escapeHtml(statusLabel(status))}</span></div><div class="beta-access-meta"><span>${Number(item.groups_count || 0)} grupo(s)</span>${item.notes ? `<span>${escapeHtml(item.notes)}</span>` : ""}</div>${actionButtons}</article>`;
         }).join("") || '<div class="card empty">Nenhum e-mail cadastrado.</div>';
 
-        const pushRows = pushIssues.map((item, index) => {
+        const pushRows = pushReview.map((item, index) => {
           const lastSeen = item.last_seen_at ? shortDate(item.last_seen_at) : "Ainda não acessou";
           const health = String(item.health_status || "unknown");
           const presentation = {
             no_device: ["🔕", "Sem push", "Nenhum aparelho ativo vinculado"],
-            invalid: ["⚠", "Expirada", `${Number(item.invalid_push_devices || 0)} assinatura(s) invalidada(s)`],
-            partial: ["◐", "Parcial", `${Number(item.healthy_push_devices || 0)} saudável(is) · ${Number(item.failing_push_devices || 0)} com falha`],
-            failing: ["!", "Falha recente", `${Number(item.failing_push_devices || 0)} aparelho(s) com falha`],
+            invalid: ["×", "Expirada", `${Number(item.invalid_push_devices || 0)} assinatura(s) invalidada(s)`],
+            partial: ["◐", "Parcial", `${Number(item.healthy_push_devices || 0)} saudável(is) e ${Number(item.active_push_devices || 0) - Number(item.healthy_push_devices || 0)} em análise`],
+            recovered: ["↻", "Recuperado", `${Number(item.recovered_30d || 0)} envio(s) recuperado(s) após repetição`],
+            unstable: ["~", "Instável", "Uma falha final consecutiva; assinatura permanece ativa"],
+            attention: ["!", "Atenção", "Duas falhas finais consecutivas"],
+            reactivation: ["↻", "Reativar", "Três ou mais falhas finais consecutivas"],
+            configuration_error: ["⚙", "Configuração", "Falha de autenticação com o serviço de push"],
             untested: ["?", "Não testada", `${Number(item.untested_push_devices || 0)} aparelho(s) sem entrega registrada`],
             unknown: ["?", "Indefinida", "Estado da assinatura não identificado"]
           }[health] || ["?", "Atenção", "Verificar métricas"];
-          const failure = item.last_failure_at
+          const lastFailure = item.last_failure_at
             ? `Última falha: ${shortDate(item.last_failure_at)}${item.last_failure_status ? ` · código ${item.last_failure_status}` : ""}`
             : presentation[2];
-          return `<article class="push-status-row push-health-${escapeHtml(health)}"><div class="push-status-main"><span class="push-status-icon">${presentation[0]}</span><div><strong>${escapeHtml(item.user_name || item.email)}</strong><small>${escapeHtml(item.email)} · ${escapeHtml(lastSeen)}</small></div><span class="push-status-badge">${escapeHtml(presentation[1])}</span></div><div class="push-status-meta"><span>${Number(item.active_push_devices || 0)} ativo(s) · ${Number(item.total_push_devices || 0)} total</span><span>${escapeHtml(failure)}</span></div>${item.last_failure_reason ? `<p class="push-health-reason">${escapeHtml(item.last_failure_reason)}</p>` : ""}<button type="button" class="btn btn-secondary btn-small" data-push-health-index="${index}">Ver tentativas</button></article>`;
-        }).join("") || '<div class="card empty"><strong>Todos os usuários estão saudáveis</strong><span>As assinaturas ativas possuem entrega confirmada e nenhuma falha consecutiva.</span></div>';
+          const history = `${Number(item.notifications_30d || 0)} envio(s) · ${Number(item.technical_attempts_30d || 0)} tentativa(s) técnica(s)`;
+          const outcomes = `${Number(item.recovered_30d || 0)} recuperado(s) · ${Number(item.final_failures_30d || 0)} falha(s) final(is)`;
+          return `<article class="push-status-row push-health-${escapeHtml(health)}"><div class="push-status-main"><span class="push-status-icon">${presentation[0]}</span><div><strong>${escapeHtml(item.user_name || item.email)}</strong><small>${escapeHtml(item.email)} · ${escapeHtml(lastSeen)}</small></div><span class="push-status-badge">${escapeHtml(presentation[1])}</span></div><div class="push-status-meta"><span>${Number(item.active_push_devices || 0)} ativo(s) · ${Number(item.total_push_devices || 0)} total</span><span>${escapeHtml(lastFailure)}</span><span>${escapeHtml(history)}</span><span>${escapeHtml(outcomes)}</span></div>${item.last_failure_summary ? `<p class="push-health-reason">${escapeHtml(item.last_failure_summary)}</p>` : ""}<button type="button" class="btn btn-secondary btn-small" data-push-health-index="${index}">Ver tentativas</button></article>`;
+        }).join("") || '<div class="card empty"><strong>Todos os usuários estão saudáveis</strong><span>As assinaturas ativas possuem entrega confirmada e nenhuma falha final consecutiva.</span></div>';
 
         const errorRows = errorGroups.map((item, index) => {
           const build = item.build ? `Build ${item.build}` : "Build não informada";
@@ -2752,11 +2770,11 @@ As confirmações, o sorteio da espera e a quantidade configurada de times serã
         const systemStatus = Number(s.errors_24h || 0) ? "Sistema requer análise" : "Sistema operacional";
         const errorSubtitle = `${Number(s.errors_24h || 0)} registro(s) distribuído(s) em ${Number(s.error_groups_24h || 0)} erro(s) distinto(s)`;
 
-        this.modal("Painel Beta", `<div class="health-strip ${Number(s.errors_24h || 0) ? "warn" : "ok"}"><span></span><div><strong>${systemStatus}</strong><small>${escapeHtml(errorSubtitle)}</small></div></div><div class="admin-toolbar"><button id="sendSystemNotification" class="btn btn-primary">Enviar notificação</button><button id="refreshPlatformPanel" class="btn btn-secondary">Atualizar painel</button></div><div class="admin-stats">${stat("Usuários", s.users_total)}${stat("Acessos ativos", s.beta_active)}${stat("Push ativo", s.push_users_active)}${stat("Push saudável", s.push_devices_healthy)}${stat("Falhas de push", s.push_devices_failing, Number(s.push_devices_failing || 0) ? "danger" : "")}${stat("Assinaturas expiradas", s.push_devices_invalid, Number(s.push_devices_invalid || 0) ? "warning" : "")}${stat("Sem notificações", s.push_users_without_active, Number(s.push_users_without_active || 0) ? "warning" : "")}${stat("Convites pendentes", s.beta_invited, Number(s.beta_invited || 0) ? "warning" : "")}${stat("Bloqueados", s.beta_blocked, Number(s.beta_blocked || 0) ? "danger" : "")}${stat("Grupos", s.groups_total)}${stat("Peladas futuras", s.matches_upcoming)}${stat("Relatos abertos", s.feedback_open, Number(s.feedback_open || 0) ? "warning" : "")}${stat("Erros 24h", s.errors_24h, Number(s.errors_24h || 0) ? "danger" : "")}</div>
+        this.modal("Painel Beta", `<div class="health-strip ${Number(s.errors_24h || 0) ? "warn" : "ok"}"><span></span><div><strong>${systemStatus}</strong><small>${escapeHtml(errorSubtitle)}</small></div></div><div class="admin-toolbar"><button id="sendSystemNotification" class="btn btn-primary">Enviar notificação</button><button id="refreshPlatformPanel" class="btn btn-secondary">Atualizar painel</button></div><div class="admin-stats">${stat("Usuários", s.users_total)}${stat("Acessos ativos", s.beta_active)}${stat("Push ativo", s.push_users_active)}${stat("Push saudável", s.push_devices_healthy)}${stat("Instáveis", s.push_devices_unstable, Number(s.push_devices_unstable || 0) ? "warning" : "")}${stat("Atenção", s.push_devices_attention, Number(s.push_devices_attention || 0) ? "warning" : "")}${stat("Reativar", s.push_devices_reactivation, Number(s.push_devices_reactivation || 0) ? "danger" : "")}${stat("Configuração", s.push_devices_configuration_error, Number(s.push_devices_configuration_error || 0) ? "danger" : "")}${stat("Recuperados 30d", s.push_recovered_30d)}${stat("Falhas finais 30d", s.push_final_failures_30d, Number(s.push_final_failures_30d || 0) ? "danger" : "")}${stat("Tentativas técnicas", s.push_attempts_30d)}${stat("Assinaturas expiradas", s.push_devices_invalid, Number(s.push_devices_invalid || 0) ? "warning" : "")}${stat("Sem notificações", s.push_users_without_active, Number(s.push_users_without_active || 0) ? "warning" : "")}${stat("Convites pendentes", s.beta_invited, Number(s.beta_invited || 0) ? "warning" : "")}${stat("Bloqueados", s.beta_blocked, Number(s.beta_blocked || 0) ? "danger" : "")}${stat("Grupos", s.groups_total)}${stat("Peladas futuras", s.matches_upcoming)}${stat("Relatos abertos", s.feedback_open, Number(s.feedback_open || 0) ? "warning" : "")}${stat("Erros 24h", s.errors_24h, Number(s.errors_24h || 0) ? "danger" : "")}</div>
 
         <details class="admin-section-card" open><summary><div><strong>Acessos do beta</strong><small>Autorize, bloqueie ou exclua permanentemente.</small></div><span>${accessList.length}</span></summary><form id="betaAccessForm" class="beta-access-form"><div class="field"><label>E-mail da conta Google</label><input type="email" name="email" required autocomplete="off" placeholder="membro@gmail.com"></div><div class="field"><label>Observação <span class="optional-label">opcional</span></label><input name="notes" maxlength="500" placeholder="Grupo ou responsável pelo convite"></div><button type="submit" class="btn btn-primary btn-block">Autorizar e-mail</button></form><div class="beta-access-list">${accessRows}</div></details>
 
-        <details class="admin-section-card" open><summary><div><strong>Saúde das notificações</strong><small>Assinaturas sem aparelho, não testadas, com falha ou expiradas.</small></div><span class="push-summary-count ${pushIssues.length ? "warn" : "ok"}">${pushIssues.length}</span></summary><div class="push-status-summary"><strong>${Number(s.push_devices_healthy || 0)} aparelho(s) saudável(is)</strong><small>${Number(s.push_attempts_30d || 0)} tentativa(s) em 30 dias · ${Number(s.push_failures_30d || 0)} falha(s).</small></div><div class="push-status-list">${pushRows}</div></details>
+        <details class="admin-section-card" open><summary><div><strong>Saúde das notificações</strong><small>Estado atual, repetições automáticas, recuperações e falhas finais.</small></div><span class="push-summary-count ${pushReview.length ? "warn" : "ok"}">${pushReview.length}</span></summary><div class="push-status-summary"><strong>${Number(s.push_devices_healthy || 0)} aparelho(s) saudável(is)</strong><small>${Number(s.push_notifications_30d || 0)} envio(s) · ${Number(s.push_attempts_30d || 0)} tentativa(s) técnica(s) · ${Number(s.push_recovered_30d || 0)} recuperado(s) · ${Number(s.push_final_failures_30d || 0)} falha(s) final(is), nos últimos 30 dias.</small></div><div class="push-status-list">${pushRows}</div></details>
 
         <details class="admin-section-card" open><summary><div><strong>Erros agrupados — 24 horas</strong><small>Analise causas distintas, não apenas o contador bruto.</small></div><span>${errorGroups.length}</span></summary><div class="admin-error-list">${errorRows}</div></details>
 
@@ -2812,7 +2830,7 @@ As confirmações, o sorteio da espera e a quantidade configurada de times serã
             if (group) this.openPlatformErrorDetails(group);
           }));
           $$('[data-push-health-index]', root).forEach(button => button.addEventListener("click", () => {
-            const item = pushIssues[Number(button.dataset.pushHealthIndex)];
+            const item = pushReview[Number(button.dataset.pushHealthIndex)];
             if (!item) return;
             close();
             setTimeout(() => this.openPushDeliveryDetails(item), 0);
@@ -2846,21 +2864,74 @@ As confirmações, o sorteio da espera e a quantidade configurada de times serã
 
     async openPushDeliveryDetails(item) {
       if (!this.state.is_platform_admin) return this.toast("Acesso restrito à administração da plataforma.", true);
-      this.modal("Tentativas de notificação", `<div class="admin-loading">Carregando entregas dos últimos 30 dias…</div>`, () => {});
+      this.modal("Tentativas de notificação", `<div class="admin-loading">Carregando telemetria dos últimos 30 dias…</div>`, () => {});
       try {
-        const rows = await this.repo.platformPushDeliveryAttempts(item.user_id, 30, 1000);
+        const rows = await this.repo.platformPushDeliveryAttempts(item.user_id, 30, 5000);
         document.querySelector(".modal-layer")?.remove();
-        const successCount = rows.filter(row => row.status === "sent").length;
-        const failureCount = rows.filter(row => row.status === "failed").length;
-        const attempts = rows.map(row => {
-          const sent = row.status === "sent";
-          const code = row.status_code ? ` · código ${row.status_code}` : "";
-          const duration = row.duration_ms != null ? ` · ${Number(row.duration_ms)} ms` : "";
-          const context = [row.group_name, row.device_label, row.event_type].filter(Boolean).join(" · ");
-          return `<article class="push-attempt-row ${sent ? "is-sent" : "is-failed"}"><div class="push-attempt-head"><span>${sent ? "✓" : "!"}</span><div><strong>${sent ? "Entregue ao serviço de push" : "Falha no envio"}</strong><small>${escapeHtml(shortDate(row.created_at))}${escapeHtml(code)}${escapeHtml(duration)}</small></div></div><div class="push-attempt-meta">${escapeHtml(context || "Notificação")}${row.event_id ? `<br><span>Referência: ${escapeHtml(row.event_id)}</span>` : ""}</div>${row.failure_reason ? `<p>${escapeHtml(row.failure_reason)}</p>` : ""}</article>`;
+
+        const deliveries = new Map();
+        for (const row of rows) {
+          const key = String(row.delivery_id || `${row.created_at}-${row.event_id || "push"}`);
+          if (!deliveries.has(key)) deliveries.set(key, []);
+          deliveries.get(key).push(row);
+        }
+
+        const grouped = [...deliveries.entries()].map(([deliveryId, deliveryRows]) => {
+          deliveryRows.sort((a, b) => Number(a.attempt_number || 1) - Number(b.attempt_number || 1));
+          const finalRow = [...deliveryRows].reverse().find(row => row.is_final) || deliveryRows[deliveryRows.length - 1];
+          return { deliveryId, rows: deliveryRows, finalRow };
+        }).sort((a, b) => new Date(b.finalRow?.created_at || 0) - new Date(a.finalRow?.created_at || 0));
+
+        const acceptedCount = grouped.filter(group => group.finalRow?.status === "sent").length;
+        const finalFailureCount = grouped.filter(group => group.finalRow?.status === "failed").length;
+        const recoveredCount = grouped.filter(group => group.finalRow?.status === "sent" && Number(group.finalRow?.attempt_number || 1) > 1).length;
+        const technicalFailures = rows.filter(row => row.status === "failed").length;
+
+        const providerLabel = provider => ({ apple: "Apple Web Push", google: "Google Push", mozilla: "Mozilla Push", webpush: "Web Push" }[provider] || "Web Push");
+        const categoryLabel = category => ({
+          transport: "falha temporária de conexão",
+          timeout: "tempo limite excedido",
+          rate_limited: "limite temporário",
+          provider_unavailable: "serviço indisponível",
+          invalid_subscription: "assinatura expirada",
+          authentication: "falha de autenticação",
+          invalid_payload: "mensagem rejeitada",
+          unknown: "falha não identificada"
+        }[category] || "falha técnica");
+
+        const deliveryCards = grouped.map(group => {
+          const finalRow = group.finalRow || {};
+          const sent = finalRow.status === "sent";
+          const recovered = sent && Number(finalRow.attempt_number || 1) > 1;
+          const totalDuration = group.rows.reduce((sum, row) => sum + Number(row.duration_ms || 0), 0);
+          const code = finalRow.status_code ? ` · código ${finalRow.status_code}` : "";
+          const context = [finalRow.group_name, finalRow.device_label, providerLabel(finalRow.provider), finalRow.event_type].filter(Boolean).join(" · ");
+          const shortHash = finalRow.endpoint_hash ? `${String(finalRow.endpoint_hash).slice(0, 8)}…${String(finalRow.endpoint_hash).slice(-6)}` : "não disponível";
+          const timeline = group.rows.map(row => {
+            const attemptSent = row.status === "sent";
+            const attemptCode = row.status_code ? ` · código ${row.status_code}` : "";
+            const category = attemptSent ? "aceita" : categoryLabel(row.error_category);
+            return `<div class="push-retry-step ${attemptSent ? "is-sent" : "is-failed"}"><span>${attemptSent ? "✓" : "!"}</span><div><strong>Tentativa ${Number(row.attempt_number || 1)}/${Number(row.max_attempts || 1)}</strong><small>${escapeHtml(category)}${escapeHtml(attemptCode)} · ${Number(row.duration_ms || 0)} ms${row.is_final ? " · resultado final" : " · nova tentativa agendada"}</small>${row.failure_summary ? `<p>${escapeHtml(row.failure_summary)}</p>` : ""}</div></div>`;
+          }).join("");
+          const title = recovered ? "Entregue após reenvio" : sent ? "Entregue ao serviço de push" : "Não entregue após as tentativas";
+          return `<details class="push-delivery-group ${sent ? "is-sent" : "is-failed"}" ${grouped.length <= 3 ? "open" : ""}><summary><div class="push-attempt-head"><span>${sent ? "✓" : "!"}</span><div><strong>${escapeHtml(title)}</strong><small>${escapeHtml(shortDate(finalRow.created_at))}${escapeHtml(code)} · ${group.rows.length} tentativa(s) · ${totalDuration} ms</small></div></div></summary><div class="push-attempt-meta">${escapeHtml(context || "Notificação")}${finalRow.event_id ? `<br><span>Referência: ${escapeHtml(finalRow.event_id)}</span>` : ""}<br><span>Dispositivo: ${escapeHtml(shortHash)}</span></div>${finalRow.failure_summary ? `<p class="push-delivery-summary">${escapeHtml(finalRow.failure_summary)}</p>` : ""}<div class="push-retry-timeline">${timeline}</div></details>`;
         }).join("") || '<div class="card empty"><strong>Nenhuma tentativa registrada</strong><span>O aparelho ainda não recebeu um envio desde a ativação das métricas detalhadas.</span></div>';
+
+        const currentStatus = {
+          healthy: "Saudável",
+          recovered: "Saudável — último envio recuperado",
+          partial: "Parcial",
+          unstable: "Instável — uma falha final consecutiva",
+          attention: "Atenção — duas falhas finais consecutivas",
+          reactivation: "Reativação recomendada",
+          configuration_error: "Falha de configuração",
+          invalid: "Assinatura expirada",
+          untested: "Ainda não testada",
+          no_device: "Sem aparelho ativo"
+        }[String(item.health_status || "")] || "Estado indefinido";
         const lastFailure = item.last_failure_at ? shortDate(item.last_failure_at) : "Nenhuma";
-        this.modal("Tentativas de notificação", `<div class="push-detail-user"><strong>${escapeHtml(item.user_name || item.email)}</strong><small>${escapeHtml(item.email)}</small></div><div class="admin-stats compact">${`<div class="admin-stat"><small>Tentativas</small><strong>${rows.length}</strong></div>`}${`<div class="admin-stat"><small>Entregues</small><strong>${successCount}</strong></div>`}${`<div class="admin-stat ${failureCount ? "danger" : ""}"><small>Falhas</small><strong>${failureCount}</strong></div>`}${`<div class="admin-stat"><small>Falhas consecutivas</small><strong>${Number(item.consecutive_failures_max || 0)}</strong></div>`}</div><div class="notice"><strong>Última falha</strong><br>${escapeHtml(lastFailure)}${item.last_failure_status ? ` · código ${escapeHtml(String(item.last_failure_status))}` : ""}${item.last_failure_reason ? `<br>${escapeHtml(item.last_failure_reason)}` : ""}</div><div class="push-attempt-list">${attempts}</div><button type="button" class="btn btn-secondary btn-block" id="backToPlatformPanel">Voltar ao Painel Beta</button>`, (root, close) => {
+
+        this.modal("Tentativas de notificação", `<div class="push-detail-user"><strong>${escapeHtml(item.user_name || item.email)}</strong><small>${escapeHtml(item.email)} · ${escapeHtml(currentStatus)}</small></div><div class="admin-stats compact push-metrics-grid"><div class="admin-stat"><small>Envios</small><strong>${grouped.length}</strong></div><div class="admin-stat"><small>Aceitos</small><strong>${acceptedCount}</strong></div><div class="admin-stat ${finalFailureCount ? "danger" : ""}"><small>Falhas finais</small><strong>${finalFailureCount}</strong></div><div class="admin-stat"><small>Recuperados</small><strong>${recoveredCount}</strong></div><div class="admin-stat"><small>Tentativas técnicas</small><strong>${rows.length}</strong></div><div class="admin-stat ${technicalFailures ? "warning" : ""}"><small>Falhas técnicas</small><strong>${technicalFailures}</strong></div></div><div class="notice push-current-state"><strong>Última falha registrada</strong><br>${escapeHtml(lastFailure)}${item.last_failure_status ? ` · código ${escapeHtml(String(item.last_failure_status))}` : ""}${item.last_failure_summary ? `<br>${escapeHtml(item.last_failure_summary)}` : ""}<br><small>O endpoint completo e o endereço da infraestrutura não são exibidos. A identificação utiliza apenas hash sanitizado.</small></div><div class="push-attempt-list">${deliveryCards}</div><button type="button" class="btn btn-secondary btn-block" id="backToPlatformPanel">Voltar ao Painel Beta</button>`, (root, close) => {
           $("#backToPlatformPanel", root)?.addEventListener("click", () => { close(); this.openPlatformAdmin(); });
         });
       } catch (error) {
@@ -3103,7 +3174,7 @@ As confirmações, o sorteio da espera e a quantidade configurada de times serã
       const lastFailure = dbSubscription?.last_failure_at ? shortDate(dbSubscription.last_failure_at) : "";
       const lastSuccess = dbSubscription?.last_success_at ? shortDate(dbSubscription.last_success_at) : "";
       const failureCode = Number(dbSubscription?.last_failure_status || 0);
-      const failureReason = String(dbSubscription?.last_failure_reason || "").trim();
+      const failureReason = pushFailureSummary(failureCode, dbSubscription?.last_failure_reason || "", dbSubscription?.device_label || deviceLabel());
 
       let status = "Desativadas neste aparelho";
       let explanation = "Ative para receber avisos mesmo com o aplicativo fechado.";

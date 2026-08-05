@@ -220,3 +220,12 @@ Reconstrução do carregamento do Supabase com base na Build 115, mantendo a ins
 - detecta divergência entre as builds do HTML e do JavaScript;
 - identifica a build ativa do service worker;
 - amplia o contexto dos erros de frontend para facilitar auditoria no beta.
+
+
+## Beta 1.0 Build 139 — 05/08/2026
+- telemetria por tentativa interna de push;
+- agrupamento por `delivery_id`;
+- estados Instável, Atenção, Reativação recomendada e Recuperado;
+- métricas separadas entre envios, tentativas técnicas, falhas finais e recuperações;
+- endpoints e endereços de infraestrutura ocultos do painel e dos backups;
+- Edge Function `publish-announcement` Build 109.
